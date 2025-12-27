@@ -884,23 +884,32 @@ export default function DocumentPage() {
                   </div>
                 )}
 
-                <div className="flex gap-4">
+                <div className="space-y-4">
+                  <div className="flex gap-4">
+                    <button
+                      onClick={handleGlobalEvaluate}
+                      className="flex-1 px-6 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-bold text-lg shadow-md"
+                    >
+                      Global Evaluate
+                    </button>
+                    <button
+                      onClick={handleSubmit}
+                      disabled={isSubmitted || !canSubmit}
+                      className={`flex-1 px-6 py-4 rounded-lg transition-colors font-bold text-lg shadow-md ${
+                        isSubmitted || !canSubmit
+                          ? 'bg-slate-400 text-slate-200 cursor-not-allowed'
+                          : 'bg-green-600 text-white hover:bg-green-700'
+                      }`}
+                    >
+                      Submit
+                    </button>
+                  </div>
+                  
                   <button
-                    onClick={handleGlobalEvaluate}
-                    className="flex-1 px-6 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-bold text-lg shadow-md"
+                    onClick={() => setShowAgentDashboard(true)}
+                    className="w-full px-6 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors font-semibold shadow-md"
                   >
-                    Global Evaluate
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitted || !canSubmit}
-                    className={`flex-1 px-6 py-4 rounded-lg transition-colors font-bold text-lg shadow-md ${
-                      isSubmitted || !canSubmit
-                        ? 'bg-slate-400 text-slate-200 cursor-not-allowed'
-                        : 'bg-green-600 text-white hover:bg-green-700'
-                    }`}
-                  >
-                    Submit
+                    📊 Agent Dashboard
                   </button>
                 </div>
                 {!canSubmit && !isSubmitted && (
