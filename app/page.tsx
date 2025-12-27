@@ -73,6 +73,49 @@ export default function ChatEntryPage() {
     }
   }, [transcript]);
 
+  // Check if message asks for confirmation (anything else to add)
+  const isConfirmationQuestion = (content: string): boolean => {
+    const confirmationPatterns = [
+      /Is there anything else you.*add/i,
+      /anything else.*add/i,
+      /还有.*要补充/i,
+      /还有.*要添加/i,
+      /还有其他.*吗/i,
+      /Haben Sie noch etwas hinzuzufügen/i,
+      /Möchten Sie noch etwas hinzufügen/i,
+      /Avez-vous autre chose à ajouter/i,
+      /Voulez-vous ajouter autre chose/i,
+      /他に追加.*ありますか/i,
+      /追加.*ことはありますか/i
+    ];
+    
+    return confirmationPatterns.some(pattern => pattern.test(content));
+  };
+
+  // Handle quick reply for confirmation
+  const handleQuickReply = (reply: 'no' | 'yes') => {
+    if (isProcessing) return;
+    
+    const replyText = reply === 'no' 
+      ? (detectedLanguage === 'chinese' ? '没有了' :
+         detectedLanguage === 'german' ? 'Nein, das ist alles' :
+         detectedLanguage === 'french' ? 'Non, c\'est tout' :
+         detectedLanguage === 'japanese' ? 'いいえ、以上です' :
+         'No, that\'s all')
+      : (detectedLanguage === 'chinese' ? '是的，我想添加更多' :
+         detectedLanguage === 'german' ? 'Ja, ich möchte mehr hinzufügen' :
+         detectedLanguage === 'french' ? 'Oui, je voudrais ajouter plus' :
+         detectedLanguage === 'japanese' ? 'はい、もっと追加したいです' :
+         'Yes, I\'d like to add more');
+    
+    // Set input value and trigger send
+    setInputValue(replyText);
+    // Use setTimeout to ensure state is updated before sending
+    setTimeout(() => {
+      handleSendMessage();
+    }, 50);
+  };
+
   // Detect language from user input
   const detectLanguage = (text: string): string => {
     // Simple heuristic: check for Chinese characters
@@ -680,6 +723,56 @@ export default function ChatEntryPage() {
                       <p className="text-slate-700 whitespace-pre-line leading-relaxed text-sm">
                         {msg.content}
                       </p>
+                      
+                      {/* Quick Reply Buttons for Confirmation Questions */}
+                      {msg.role === 'system' && isConfirmationQuestion(msg.content) && (
+                        <div className="flex gap-2 mt-3 pt-3 border-t border-slate-200">
+                          <button
+                            onClick={() => handleQuickReply('no')}
+                            disabled={isProcessing}
+                            className={`flex-1 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                              isProcessing
+                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-slate-600 text-white hover:bg-slate-700 shadow-sm'
+                            }`}
+                          >
+                            <div className="flex items-center justify-center gap-2">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                              </svg>
+                              <span>
+                                {detectedLanguage === 'chinese' ? '没有了，继续' :
+                                 detectedLanguage === 'german' ? 'Nein, weiter' :
+                                 detectedLanguage === 'french' ? 'Non, continuer' :
+                                 detectedLanguage === 'japanese' ? 'いいえ、続ける' :
+                                 'No, continue'}
+                              </span>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => handleQuickReply('yes')}
+                            disabled={isProcessing}
+                            className={`flex-1 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                              isProcessing
+                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-white border-2 border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
+                            }`}
+                          >
+                            <div className="flex items-center justify-center gap-2">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/>
+                              </svg>
+                              <span>
+                                {detectedLanguage === 'chinese' ? '添加更多' :
+                                 detectedLanguage === 'german' ? 'Mehr hinzufügen' :
+                                 detectedLanguage === 'french' ? 'Ajouter plus' :
+                                 detectedLanguage === 'japanese' ? 'もっと追加' :
+                                 'Add more'}
+                              </span>
+                            </div>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
