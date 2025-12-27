@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AgentDashboard from '../components/AgentDashboard';
+import { useSpeech } from '../hooks/useSpeech';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 
 type SectionStatus = 'unevaluated' | 'pass' | 'fail';
 
@@ -61,6 +63,15 @@ const FAKE_SECTIONS = [
 
 export default function DocumentPage() {
   const router = useRouter();
+  const { speak, stop, isSpeaking, isSupported } = useSpeech();
+  const { 
+    isListening, 
+    transcript, 
+    isSupported: isRecognitionSupported, 
+    startListening, 
+    stopListening 
+  } = useSpeechRecognition('english');
+  const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
   const [sections, setSections] = useState<Section[]>(FAKE_SECTIONS);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -233,6 +244,20 @@ export default function DocumentPage() {
     }
     // Otherwise, use default fake sections (already set in initial state)
   }, []);
+
+  // Cleanup speech on unmount
+  useEffect(() => {
+    return () => {
+      stop();
+    };
+  }, [stop]);
+
+  // Update input value when speech recognition provides transcript
+  useEffect(() => {
+    if (transcript) {
+      setInputValue(transcript);
+    }
+  }, [transcript]);
 
   const [inputValue, setInputValue] = useState('');
   const [globalStatus, setGlobalStatus] = useState<'none' | 'ok' | 'nok'>('none');
@@ -944,10 +969,51 @@ export default function DocumentPage() {
                       }`}
                     >
                       {msg.agent && (
-                        <div className={`font-bold text-sm mb-1 ${
-                          msg.agent === 'Compliance Agent' ? 'text-red-800' : 'text-slate-700'
-                        }`}>
-                          [{msg.agent}]
+                        <div className="flex items-center justify-between mb-1">
+                          <div className={`font-bold text-sm ${
+                            msg.agent === 'Compliance Agent' ? 'text-red-800' : 'text-slate-700'
+                          }`}>
+                            [{msg.agent}]
+                          </div>
+                          
+                          {/* Voice Button - Only show for agent messages if speech is supported */}
+                          {msg.role === 'agent' && isSupported && (
+                            <button
+                              onClick={() => {
+                                if (speakingMessageIndex === idx && isSpeaking) {
+                                  stop();
+                                  setSpeakingMessageIndex(null);
+                                } else {
+                                  stop(); // Stop any current speech
+                                  speak(msg.content, 'english'); // Document page uses English by default
+                                  setSpeakingMessageIndex(idx);
+                                }
+                              }}
+                              className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-all ${
+                                speakingMessageIndex === idx && isSpeaking
+                                  ? 'bg-red-200 text-red-800 hover:bg-red-300'
+                                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                              }`}
+                              aria-label={speakingMessageIndex === idx && isSpeaking ? 'Stop speaking' : 'Play audio'}
+                            >
+                              {speakingMessageIndex === idx && isSpeaking ? (
+                                <>
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                    <rect x="6" y="4" width="4" height="16" rx="1"/>
+                                    <rect x="14" y="4" width="4" height="16" rx="1"/>
+                                  </svg>
+                                  <span>Stop</span>
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"/>
+                                  </svg>
+                                  <span>Listen</span>
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
                       )}
                       <p className={`text-sm ${
@@ -958,20 +1024,63 @@ export default function DocumentPage() {
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && !isAIProcessing && handleSendMessage()}
-                    placeholder="Type your message..."
-                    disabled={isAIProcessing}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && !isAIProcessing && !isListening && handleSendMessage()}
+                      placeholder={isListening ? "Listening..." : "Type your message..."}
+                      disabled={isAIProcessing || isListening}
+                      className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-slate-100"
+                    />
+                    
+                    {/* Talk Button */}
+                    {isRecognitionSupported && (
+                      <button
+                        onClick={() => {
+                          if (isListening) {
+                            stopListening();
+                          } else {
+                            startListening();
+                          }
+                        }}
+                        disabled={isAIProcessing}
+                        className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                          isListening
+                            ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                            : isAIProcessing
+                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                            : 'bg-slate-600 text-white hover:bg-slate-700'
+                        }`}
+                        title={isListening ? 'Stop listening' : 'Start voice input'}
+                      >
+                        {isListening ? (
+                          <div className="flex items-center gap-1.5">
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <rect x="6" y="4" width="4" height="16" rx="1"/>
+                              <rect x="14" y="4" width="4" height="16" rx="1"/>
+                            </svg>
+                            <span>Stop</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3z"/>
+                              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                            </svg>
+                            <span>Talk</span>
+                          </div>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  
                   <button
                     onClick={handleSendMessage}
-                    disabled={isAIProcessing}
+                    disabled={isAIProcessing || isListening}
                     className={`w-full px-4 py-2 rounded-lg transition-colors font-semibold ${
-                      isAIProcessing
+                      isAIProcessing || isListening
                         ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                         : 'bg-slate-700 text-white hover:bg-slate-800'
                     }`}
