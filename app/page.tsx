@@ -530,9 +530,35 @@ export default function ChatEntryPage() {
             {/* Header */}
             <div className="border-b border-slate-200 p-6 sm:p-8">
               <div className="flex items-center gap-4 mb-3">
-                <div className="w-12 h-12 bg-slate-100 rounded flex items-center justify-center">
-                  <svg className="w-6 h-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                {/* UBS Logo */}
+                <div className="w-16 h-16 flex-shrink-0">
+                  <svg viewBox="0 0 120 120" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                    {/* Red Square Background */}
+                    <rect width="120" height="120" fill="#E60000"/>
+                    
+                    {/* Three Keys Symbol (Simplified) */}
+                    <g stroke="#FFFFFF" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      {/* Left Key */}
+                      <circle cx="30" cy="35" r="5"/>
+                      <line x1="30" y1="40" x2="30" y2="65"/>
+                      <line x1="26" y1="50" x2="34" y2="50"/>
+                      <line x1="26" y1="56" x2="34" y2="56"/>
+                      
+                      {/* Middle Key */}
+                      <circle cx="60" cy="35" r="5"/>
+                      <line x1="60" y1="40" x2="60" y2="65"/>
+                      <line x1="56" y1="50" x2="64" y2="50"/>
+                      <line x1="56" y1="56" x2="64" y2="56"/>
+                      
+                      {/* Right Key */}
+                      <circle cx="90" cy="35" r="5"/>
+                      <line x1="90" y1="40" x2="90" y2="65"/>
+                      <line x1="86" y1="50" x2="94" y2="50"/>
+                      <line x1="86" y1="56" x2="94" y2="56"/>
+                    </g>
+                    
+                    {/* UBS Text */}
+                    <text x="60" y="95" fontSize="28" fontWeight="bold" fill="#FFFFFF" textAnchor="middle" fontFamily="Arial, Helvetica, sans-serif">UBS</text>
                   </svg>
                 </div>
                 <div>
