@@ -1,0 +1,380 @@
+'use client';
+
+import { useState, useRef, MouseEvent } from 'react';
+import { useRouter } from 'next/navigation';
+
+interface Rectangle {
+  id: number;
+  startX: number;
+  startY: number;
+  width: number;
+  height: number;
+  confirmed: boolean;
+}
+
+interface Section {
+  id: number;
+  title: string;
+  content: string;
+  isEditingTitle?: boolean;
+}
+
+const FULL_DOCUMENT_TEXT = `Investment Background and Portfolio Analysis
+
+This comprehensive section outlines the investor's financial history, current portfolio composition, and primary investment objectives. The analysis takes into account the client's existing asset allocation across multiple investment vehicles including equities, fixed income securities, and alternative investments. Key considerations include risk tolerance assessment based on investment horizon, liquidity requirements for planned expenditures, and tax optimization strategies. The investor's previous investment experience and comfort level with market volatility have been evaluated to establish appropriate risk parameters.
+
+Risk Assessment and Management Framework
+
+Comprehensive analysis of market risks, portfolio volatility, concentration risks, and external macroeconomic factors that may impact investment performance. This evaluation considers both systematic risks inherent to market movements and unsystematic risks specific to individual holdings or sectors. The assessment incorporates stress testing scenarios, correlation analysis between asset classes, and downside protection mechanisms. Currency exposure, interest rate sensitivity, and geopolitical considerations are analyzed to ensure robust risk management. Regular portfolio rebalancing protocols are established to maintain target allocation ranges.
+
+Technical Strategy and Implementation Plan
+
+Detailed methodology for strategic asset allocation, tactical rebalancing frequency, and implementation of investment adjustments based on market conditions. The framework includes specific technical indicators used for entry and exit decisions, position sizing algorithms, and risk management protocols including stop-loss parameters. The strategy incorporates both quantitative metrics such as moving averages and relative strength indicators, as well as qualitative factors including sector rotation dynamics and macroeconomic cycle positioning. Execution protocols ensure optimal trade timing and minimize market impact costs.`;
+
+const PREDEFINED_SECTIONS: Section[] = [
+  {
+    id: 1,
+    title: 'Investment Background',
+    content: 'I am a mid-career professional with a stable income and a growing interest in long-term investing. Over the past several years, I have gradually built exposure to financial markets through mutual funds and employer-sponsored retirement plans. My investment knowledge is largely self-taught, relying on online resources, market news, and informal discussions with peers. I do not follow a strict investment philosophy, but I value diversification and consistency. My primary motivation is to preserve and grow capital over time rather than pursue speculative opportunities or short-term trading gains.'
+  },
+  {
+    id: 2,
+    title: 'Risk Assessment',
+    content: 'I consider myself to have a moderate tolerance for risk, balancing growth potential with capital preservation. While I understand that market volatility is inevitable, I prefer to avoid extreme drawdowns that could significantly impact long-term plans. I am willing to accept moderate fluctuations if they align with a disciplined strategy. My biggest concern relates to market movements are a concern, especially during periods of rapid decline. Therefore, risk management, transparency, and clear downside expectations are important factors in investment decisions.'
+  },
+  {
+    id: 3,
+    title: 'Technical Strategy',
+    content: 'From a technical perspective, my approach is relatively simple and pragmatic. I do not engage heavily in advanced technical analysis, but I follow basic indicators such as trends, asset allocation signals, and rebalancing thresholds. Automation and rule-based processes are preferred to reduce emotional decisions. I value strategies that can be monitored and adjusted periodically rather than actively traded. Clear reporting, performance metrics, and strategy rationale are essential for maintaining confidence in the approach over time.'
+  }
+];
+
+export default function SectioningPage() {
+  const router = useRouter();
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  const [rectangles, setRectangles] = useState<Rectangle[]>([]);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentRect, setCurrentRect] = useState<Rectangle | null>(null);
+  const [confirmedSections, setConfirmedSections] = useState<Section[]>([]);
+  const [dragCount, setDragCount] = useState(0);
+  const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
+  const [tempTitle, setTempTitle] = useState<string>('');
+
+  const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
+    if (dragCount >= 3) return; // Max 3 sections
+    
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    const startX = e.clientX - rect.left;
+    const startY = e.clientY - rect.top;
+    
+    setIsDrawing(true);
+    setCurrentRect({
+      id: Date.now(),
+      startX,
+      startY,
+      width: 0,
+      height: 0,
+      confirmed: false
+    });
+  };
+
+  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
+    if (!isDrawing || !currentRect) return;
+    
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+    
+    const width = currentX - currentRect.startX;
+    const height = currentY - currentRect.startY;
+    
+    setCurrentRect({
+      ...currentRect,
+      width,
+      height
+    });
+  };
+
+  const handleMouseUp = () => {
+    if (!isDrawing || !currentRect) return;
+    
+    setIsDrawing(false);
+    
+    // Add the rectangle to permanent list
+    const newRect = { ...currentRect, confirmed: false };
+    setRectangles([...rectangles, newRect]);
+    setCurrentRect(null);
+  };
+
+  const handleUndo = () => {
+    if (rectangles.length > 0) {
+      const newRectangles = rectangles.slice(0, -1);
+      setRectangles(newRectangles);
+      
+      // Also remove last confirmed section if it exists
+      if (confirmedSections.length > 0) {
+        setConfirmedSections(confirmedSections.slice(0, -1));
+        setDragCount(dragCount - 1);
+      }
+    }
+  };
+
+  const handleReset = () => {
+    setRectangles([]);
+    setConfirmedSections([]);
+    setCurrentRect(null);
+    setDragCount(0);
+  };
+
+  const handleAddSection = () => {
+    if (rectangles.length === 0) return;
+    
+    const nextSectionIndex = confirmedSections.length;
+    if (nextSectionIndex < 3) {
+      // Add the predefined section
+      const newSection = PREDEFINED_SECTIONS[nextSectionIndex];
+      setConfirmedSections([...confirmedSections, newSection]);
+      setDragCount(dragCount + 1);
+      
+      // Mark the last rectangle as confirmed
+      const updatedRects = rectangles.map((r, idx) => 
+        idx === rectangles.length - 1 ? { ...r, confirmed: true } : r
+      );
+      setRectangles(updatedRects);
+    }
+  };
+
+  const handleConfirmSections = () => {
+    // Store sections with custom titles in sessionStorage
+    const sectionsToStore = confirmedSections.map(section => ({
+      id: section.id,
+      title: section.title,
+      content: section.content
+    }));
+    sessionStorage.setItem('definedSections', JSON.stringify(sectionsToStore));
+    router.push('/document');
+  };
+
+  const handleEditTitle = (sectionId: number) => {
+    const section = confirmedSections.find(s => s.id === sectionId);
+    if (section) {
+      setEditingTitleId(sectionId);
+      setTempTitle(section.title);
+    }
+  };
+
+  const handleSaveTitle = (sectionId: number) => {
+    if (tempTitle.trim()) {
+      setConfirmedSections(confirmedSections.map(s => 
+        s.id === sectionId ? { ...s, title: tempTitle.trim() } : s
+      ));
+    }
+    setEditingTitleId(null);
+    setTempTitle('');
+  };
+
+  const handleCancelEditTitle = () => {
+    setEditingTitleId(null);
+    setTempTitle('');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold text-slate-800 mb-2">Manual Document Sectioning</h1>
+        <p className="text-slate-600 mb-6">
+          Drag over the document to define sections. Each section will be evaluated independently by multiple agents.
+        </p>
+
+        {/* Top Action Buttons */}
+        <div className="flex gap-4 mb-6">
+          <button
+            onClick={handleUndo}
+            disabled={rectangles.length === 0}
+            className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+              rectangles.length === 0
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                : 'bg-yellow-600 text-white hover:bg-yellow-700'
+            }`}
+          >
+            ↶ Undo
+          </button>
+          <button
+            onClick={handleReset}
+            disabled={rectangles.length === 0}
+            className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+              rectangles.length === 0
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                : 'bg-red-600 text-white hover:bg-red-700'
+            }`}
+          >
+            ✕ Reset
+          </button>
+          <button
+            onClick={handleAddSection}
+            disabled={rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed}
+            className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+              rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            + Add Section
+          </button>
+          <div className="ml-auto text-slate-700 font-semibold">
+            Sections: {confirmedSections.length} / 3
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Side - Document View */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Full Document</h2>
+            <div
+              ref={containerRef}
+              className="relative border-2 border-slate-300 rounded-lg p-4 bg-slate-50 cursor-crosshair select-none overflow-hidden"
+              style={{ minHeight: '600px' }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            >
+              <div className="whitespace-pre-wrap text-slate-700 leading-relaxed">
+                {FULL_DOCUMENT_TEXT}
+              </div>
+
+              {/* Draw all confirmed rectangles */}
+              {rectangles.map((rect) => (
+                <div
+                  key={rect.id}
+                  className={`absolute pointer-events-none ${
+                    rect.confirmed
+                      ? 'border-4 border-green-500 bg-green-100 bg-opacity-20'
+                      : 'border-4 border-blue-500 bg-blue-100 bg-opacity-20'
+                  }`}
+                  style={{
+                    left: Math.min(rect.startX, rect.startX + rect.width),
+                    top: Math.min(rect.startY, rect.startY + rect.height),
+                    width: Math.abs(rect.width),
+                    height: Math.abs(rect.height)
+                  }}
+                />
+              ))}
+
+              {/* Draw current rectangle being created */}
+              {currentRect && isDrawing && (
+                <div
+                  className="absolute border-4 border-blue-600 bg-transparent pointer-events-none"
+                  style={{
+                    left: Math.min(currentRect.startX, currentRect.startX + currentRect.width),
+                    top: Math.min(currentRect.startY, currentRect.startY + currentRect.height),
+                    width: Math.abs(currentRect.width),
+                    height: Math.abs(currentRect.height)
+                  }}
+                />
+              )}
+            </div>
+
+            <div className="mt-4 text-sm text-slate-600">
+              <p><strong>Instructions:</strong></p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Click and drag to create a selection rectangle</li>
+                <li>Click "Add Section" to confirm the selection</li>
+                <li>Repeat for up to 3 sections</li>
+                <li>Click "Confirm Sections" when ready</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Right Side - Sections Preview */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Confirmed Sections</h2>
+            
+            {confirmedSections.length === 0 ? (
+              <div className="text-center py-20 text-slate-400">
+                <p className="text-lg">No sections defined yet</p>
+                <p className="text-sm mt-2">Drag over the document to create sections</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {confirmedSections.map((section) => (
+                  <div
+                    key={section.id}
+                    className="border-4 border-green-500 bg-green-50 rounded-xl p-4"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      {editingTitleId === section.id ? (
+                        <div className="flex-1 flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={tempTitle}
+                            onChange={(e) => setTempTitle(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') handleSaveTitle(section.id);
+                              if (e.key === 'Escape') handleCancelEditTitle();
+                            }}
+                            className="flex-1 px-3 py-1 border-2 border-blue-500 rounded font-bold text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleSaveTitle(section.id)}
+                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-semibold"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            onClick={handleCancelEditTitle}
+                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-semibold"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <h3 className="text-lg font-bold text-slate-800">
+                            Section {section.id}: {section.title}
+                          </h3>
+                          <button
+                            onClick={() => handleEditTitle(section.id)}
+                            className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
+                          >
+                            ✎ Edit Title
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-slate-700 text-sm leading-relaxed">
+                      {section.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {confirmedSections.length === 3 && (
+              <div className="mt-6">
+                <button
+                  onClick={handleConfirmSections}
+                  className="w-full px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-bold text-lg shadow-md"
+                >
+                  ✓ Confirm Sections & Continue
+                </button>
+                <p className="text-center text-sm text-slate-600 mt-2">
+                  Proceed to multi-agent evaluation workflow
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

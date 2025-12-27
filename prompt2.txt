@@ -1,0 +1,276 @@
+Project Goal
+
+Build a demo-only web application to showcase a chat-first, multi-agent document evaluation experience.
+
+This is NOT a production system.
+The goal is to visually and interaction-wise demonstrate:
+
+Chat as the primary entry point
+
+Document sectioning
+
+Per-section Evaluate / Modify actions
+
+Visible multi-agent collaboration (via UI text, not real agents)
+
+Accuracy of logic is NOT required.
+UI clarity and narrative coherence are the priority.
+
+🔒 Scope Constraints (IMPORTANT)
+
+❌ No backend logic required
+
+❌ No real file parsing
+
+❌ No real LLM / agent orchestration
+
+❌ No authentication
+
+❌ No persistence
+
+Everything can be mocked, hardcoded, or state-driven.
+
+🧱 Tech Stack Constraints
+
+Use Next.js (App Router) + React
+
+Use client-side state only
+
+Styling: simple CSS / Tailwind (choose one, minimal styling)
+
+Do NOT introduce new heavy dependencies
+
+🖼️ Figma Reference Requirement (Critical)
+
+This implementation is based on a Figma demo prototype.
+
+Therefore:
+
+Structure the UI to closely match a Figma-style demo, meaning:
+
+Clear panels
+
+Card-based sections
+
+Obvious color states (grey / green / red)
+
+Chat panel always visible
+
+You do NOT need pixel-perfect Figma matching,
+but the layout must clearly reflect a demo storyboard, not a generic app.
+
+🧩 Pages to Implement
+Page 1: Chat Entry Page (/)
+
+Purpose:
+Demonstrate chat as the system entry point.
+
+Layout
+
+Centered chat window
+
+Initial system greeting message (hardcoded):
+
+Hi, I’m your AI Investment Assistant.
+To get started, tell me about your investment goals,
+or upload a document to evaluate.
+
+
+Below the chat input, two buttons:
+
+Upload
+
+Evaluate
+
+Behavior
+
+Clicking Upload → navigate to /document
+
+Clicking Evaluate → no logic needed (can show a placeholder message)
+
+Page 2: Document Section Page (/document)
+
+This is the core demo page.
+
+Layout Structure
+
+Split screen:
+
+Left / Main Area: Document Sections
+
+Right or Bottom Panel: Chat + Agent Messages
+
+📄 Document Sections (Hardcoded)
+
+Create 3 hardcoded sections, e.g.:
+
+Section 1: “Investment Background”
+
+Section 2: “Risk Assessment”
+
+Section 3: “Technical Strategy”
+
+Each section is rendered as a card containing:
+
+Section title
+
+Short placeholder text
+
+Two buttons:
+
+Modify
+
+Evaluate
+
+Initial section state:
+
+Status: unevaluated
+
+Color: neutral / grey
+
+✅ Per-Section Evaluate Logic (Mocked)
+
+When Evaluate is clicked on a section:
+
+Change section state to:
+
+pass → green border/background
+
+or fail → red border/background
+
+The result can be:
+
+Hardcoded
+
+Or alternating (for demo clarity)
+
+At the same time, append a message in the chat panel like:
+
+[Evaluate Agent]:
+Section 2 does not meet evaluation criteria.
+
+🧠 Modify Logic (Mocked)
+
+When Modify is clicked:
+
+Do NOT change content automatically
+
+Append a chat message such as:
+
+[Optimize Agent]:
+Ready to optimize Section 3 based on user input.
+
+
+No real editing required.
+
+📊 Global Evaluate & Submit (Bottom Actions)
+
+At the bottom of the sections list:
+
+Button: Global Evaluate
+
+When clicked:
+
+If all sections are green → show green “OK”
+
+If any section is red → show red “NOK”
+
+This is purely based on UI state
+
+Also append chat message:
+
+[Evaluate Agent]:
+Overall document evaluation completed: NOK.
+
+Button: Submit
+
+Clicking Submit:
+
+Show a simple confirmation state
+
+Example text: “Document submitted successfully.”
+
+No backend call required
+
+💬 Chat & Agent Interaction Panel
+
+This panel exists to visually demonstrate multi-agent collaboration.
+
+Requirements
+
+Chat input box (user can type anything)
+
+On user message, append mock agent responses
+
+Example User Input
+
+“I think Section 2 can be shortened to 100 words.”
+
+Mock Response (Hardcoded or rule-based)
+[Optimize Agent]:
+Optimizing Section 2.
+User request: shorten to 100 words.
+
+Important
+
+Agent identity MUST be explicitly visible:
+
+[Optimize Agent]
+
+[Evaluate Agent]
+
+This is critical to demonstrate multi-agent vs single-agent
+
+🎨 Visual State Rules (Very Important)
+
+Use clear visual cues:
+
+Grey = Not evaluated
+
+Green = Pass
+
+Red = Fail
+
+Agent messages should be visually distinct from user messages.
+
+🚫 Explicit Non-Goals
+
+Do NOT:
+
+Implement real document parsing
+
+Implement real LLM calls
+
+Implement real agent frameworks (LangGraph, CrewAI, etc.)
+
+Over-engineer state management
+
+This is a demo storytelling UI, not a system build.
+
+✅ Final Deliverable Expectation
+
+At the end, the app should:
+
+Be runnable locally
+
+Allow clicking through the full demo flow
+
+Clearly demonstrate:
+
+Chat-first interaction
+
+Section-based document handling
+
+Visible multi-agent collaboration
+
+Evaluate vs Optimize separation
+
+🧭 Developer Guidance
+
+If any logic is ambiguous:
+
+Choose the simplest possible implementation
+
+Prefer hardcoded demo clarity over correctness
+
+Ask for clarification only if absolutely blocking
