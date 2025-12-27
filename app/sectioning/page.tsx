@@ -17,6 +17,7 @@ interface Section {
   title: string;
   content: string;
   isEditingTitle?: boolean;
+  selected?: boolean;
 }
 
 const FULL_DOCUMENT_TEXT = `Investment Background and Portfolio Analysis
@@ -60,6 +61,46 @@ export default function SectioningPage() {
   const [dragCount, setDragCount] = useState(0);
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [tempTitle, setTempTitle] = useState<string>('');
+  const [selectedSectionIds, setSelectedSectionIds] = useState<number[]>([]);
+  const [sectionsSource, setSectionsSource] = useState<Section[]>([]);
+
+  // Load merged content from session storage if available
+  useState(() => {
+    if (typeof window !== 'undefined') {
+      const section1Content = sessionStorage.getItem('section1_content');
+      const section1Title = sessionStorage.getItem('section1_title');
+      const section2Content = sessionStorage.getItem('section2_content');
+      const section2Title = sessionStorage.getItem('section2_title');
+      const section3Content = sessionStorage.getItem('section3_content');
+      const section3Title = sessionStorage.getItem('section3_title');
+
+      if (section1Content && section2Content && section3Content) {
+        // Use merged content from chat + document
+        setSectionsSource([
+          {
+            id: 1,
+            title: section1Title || 'Investment Background',
+            content: section1Content
+          },
+          {
+            id: 2,
+            title: section2Title || 'Risk Assessment',
+            content: section2Content
+          },
+          {
+            id: 3,
+            title: section3Title || 'Technical Strategy',
+            content: section3Content
+          }
+        ]);
+      } else {
+        // Use predefined sections
+        setSectionsSource(PREDEFINED_SECTIONS);
+      }
+    } else {
+      setSectionsSource(PREDEFINED_SECTIONS);
+    }
+  });
 
   const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
     if (dragCount >= 3) return; // Max 3 sections
@@ -138,8 +179,8 @@ export default function SectioningPage() {
     
     const nextSectionIndex = confirmedSections.length;
     if (nextSectionIndex < 3) {
-      // Add the predefined section
-      const newSection = PREDEFINED_SECTIONS[nextSectionIndex];
+      // Use the appropriate section source (merged or predefined)
+      const newSection = sectionsSource[nextSectionIndex];
       setConfirmedSections([...confirmedSections, newSection]);
       setDragCount(dragCount + 1);
       
@@ -185,6 +226,54 @@ export default function SectioningPage() {
     setTempTitle('');
   };
 
+  const handleToggleSelection = (sectionId: number) => {
+    setSelectedSectionIds(prev => {
+      if (prev.includes(sectionId)) {
+        return prev.filter(id => id !== sectionId);
+      } else {
+        return [...prev, sectionId];
+      }
+    });
+  };
+
+  const handleMergeSections = () => {
+    if (selectedSectionIds.length < 2) return;
+
+    // Sort selected IDs to maintain order
+    const sortedIds = [...selectedSectionIds].sort((a, b) => a - b);
+    
+    // Get sections to merge
+    const sectionsToMerge = sortedIds.map(id => 
+      confirmedSections.find(s => s.id === id)
+    ).filter((s): s is Section => s !== undefined);
+
+    if (sectionsToMerge.length < 2) return;
+
+    // Create merged section
+    const mergedTitle = sectionsToMerge.map(s => s.title).join(' + ');
+    const mergedContent = sectionsToMerge.map(s => s.content).join('\n\n');
+    const firstId = sectionsToMerge[0].id;
+
+    // Remove old sections and add merged one
+    const newSections = confirmedSections.filter(s => !sortedIds.includes(s.id));
+    const mergedSection: Section = {
+      id: firstId,
+      title: mergedTitle,
+      content: mergedContent,
+      selected: false
+    };
+
+    // Insert merged section at the position of the first merged section
+    const insertIndex = confirmedSections.findIndex(s => s.id === firstId);
+    newSections.splice(insertIndex, 0, mergedSection);
+
+    setConfirmedSections(newSections);
+    setSelectedSectionIds([]);
+
+    // Update drag count
+    setDragCount(newSections.length);
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 p-6">
       <div className="max-w-7xl mx-auto">
@@ -194,14 +283,14 @@ export default function SectioningPage() {
         </p>
 
         {/* Top Action Buttons */}
-        <div className="flex gap-4 mb-6">
+        <div className="flex gap-4 mb-6 items-center">
           <button
             onClick={handleUndo}
             disabled={rectangles.length === 0}
-            className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+            className={`px-6 py-2 rounded font-semibold transition-colors ${
               rectangles.length === 0
-                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                : 'bg-yellow-600 text-white hover:bg-yellow-700'
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
             }`}
           >
             ↶ Undo
@@ -209,10 +298,10 @@ export default function SectioningPage() {
           <button
             onClick={handleReset}
             disabled={rectangles.length === 0}
-            className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+            className={`px-6 py-2 rounded font-semibold transition-colors ${
               rectangles.length === 0
-                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                : 'bg-red-600 text-white hover:bg-red-700'
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
             }`}
           >
             ✕ Reset
@@ -220,16 +309,27 @@ export default function SectioningPage() {
           <button
             onClick={handleAddSection}
             disabled={rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed}
-            className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+            className={`px-6 py-2 rounded font-semibold transition-colors ${
               rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed
-                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                : 'bg-slate-700 text-white hover:bg-slate-800'
             }`}
           >
             + Add Section
           </button>
+          <button
+            onClick={handleMergeSections}
+            disabled={selectedSectionIds.length < 2}
+            className={`px-6 py-2 rounded font-semibold transition-colors ${
+              selectedSectionIds.length < 2
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            🔗 Merge Sections ({selectedSectionIds.length})
+          </button>
           <div className="ml-auto text-slate-700 font-semibold">
-            Sections: {confirmedSections.length} / 3
+            Sections: {confirmedSections.length}
           </div>
         </div>
 
@@ -307,52 +407,70 @@ export default function SectioningPage() {
                 {confirmedSections.map((section) => (
                   <div
                     key={section.id}
-                    className="border-4 border-green-500 bg-green-50 rounded-xl p-4"
+                    className={`border-4 rounded-xl p-4 transition-all ${
+                      selectedSectionIds.includes(section.id)
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-green-500 bg-green-50'
+                    }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      {editingTitleId === section.id ? (
-                        <div className="flex-1 flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={tempTitle}
-                            onChange={(e) => setTempTitle(e.target.value)}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter') handleSaveTitle(section.id);
-                              if (e.key === 'Escape') handleCancelEditTitle();
-                            }}
-                            className="flex-1 px-3 py-1 border-2 border-blue-500 rounded font-bold text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            autoFocus
-                          />
-                          <button
-                            onClick={() => handleSaveTitle(section.id)}
-                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-semibold"
-                          >
-                            ✓
-                          </button>
-                          <button
-                            onClick={handleCancelEditTitle}
-                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-semibold"
-                          >
-                            ✕
-                          </button>
+                    <div className="flex items-start gap-3">
+                      {/* Selection Checkbox */}
+                      <div className="mt-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedSectionIds.includes(section.id)}
+                          onChange={() => handleToggleSelection(section.id)}
+                          className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
+                          {editingTitleId === section.id ? (
+                            <div className="flex-1 flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={tempTitle}
+                                onChange={(e) => setTempTitle(e.target.value)}
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') handleSaveTitle(section.id);
+                                  if (e.key === 'Escape') handleCancelEditTitle();
+                                }}
+                                className="flex-1 px-3 py-1 border-2 border-blue-500 rounded font-bold text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handleSaveTitle(section.id)}
+                                className="px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-800 text-sm font-semibold"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                onClick={handleCancelEditTitle}
+                                className="px-3 py-1 bg-slate-300 text-slate-700 rounded hover:bg-slate-400 text-sm font-semibold"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <h3 className="text-lg font-bold text-slate-800">
+                                {section.title}
+                              </h3>
+                              <button
+                                onClick={() => handleEditTitle(section.id)}
+                                className="px-3 py-1 bg-white border border-slate-300 text-slate-700 rounded hover:bg-slate-50 hover:border-slate-400 text-xs font-semibold"
+                              >
+                                ✎ Edit
+                              </button>
+                            </>
+                          )}
                         </div>
-                      ) : (
-                        <>
-                          <h3 className="text-lg font-bold text-slate-800">
-                            Section {section.id}: {section.title}
-                          </h3>
-                          <button
-                            onClick={() => handleEditTitle(section.id)}
-                            className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
-                          >
-                            ✎ Edit Title
-                          </button>
-                        </>
-                      )}
+                        <p className="text-slate-700 text-sm leading-relaxed">
+                          {section.content}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-slate-700 text-sm leading-relaxed">
-                      {section.content}
-                    </p>
                   </div>
                 ))}
               </div>
@@ -362,12 +480,20 @@ export default function SectioningPage() {
               <div className="mt-6">
                 <button
                   onClick={handleConfirmSections}
-                  className="w-full px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-bold text-lg shadow-md"
+                  className="w-full px-6 py-4 bg-slate-700 text-white rounded hover:bg-slate-800 transition-colors font-bold text-lg shadow-md"
                 >
                   ✓ Confirm Sections & Continue
                 </button>
                 <p className="text-center text-sm text-slate-600 mt-2">
                   Proceed to multi-agent evaluation workflow
+                </p>
+              </div>
+            )}
+
+            {confirmedSections.length > 0 && confirmedSections.length < 3 && (
+              <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded">
+                <p className="text-sm text-slate-600 text-center">
+                  Add {3 - confirmedSections.length} more section(s) or merge existing ones to continue
                 </p>
               </div>
             )}

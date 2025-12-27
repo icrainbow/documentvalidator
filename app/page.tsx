@@ -244,37 +244,22 @@ export default function ChatEntryPage() {
     }
   };
 
-  const handleEvaluate = () => {
-    // Check if user has uploaded a file
-    if (uploadedFile) {
-      const fileName = uploadedFile.name.toLowerCase();
-      
-      // Check if it's badformat file - go to manual sectioning
-      if (fileName === 'badformat.word' || fileName.includes('badformat')) {
-        const explanationMessage = {
-          role: 'system',
-          content: '[Evaluate Agent]:\nThe uploaded document lacks reliable structural markers.\nRedirecting to manual section definition tool.'
-        };
-        setMessages(prev => [...prev, explanationMessage]);
-        
-        setTimeout(() => {
-          router.push('/sectioning');
-        }, 1500);
-      } else {
-        // Normal document - go directly to document page
-        router.push('/document');
-      }
-    } 
-    // Check if all topics have been completed
-    else if (topicCompleted.every(completed => completed)) {
-      // Store synthesized texts in sessionStorage for the document page
-      sessionStorage.setItem('investmentBackground', finalTopicTexts[0]);
-      sessionStorage.setItem('riskAssessment', finalTopicTexts[1]);
-      sessionStorage.setItem('technicalStrategy', finalTopicTexts[2]);
-      router.push('/document');
-    } 
-    // Neither uploaded nor completed all topics
-    else {
+  const handleEvaluate = async () => {
+    const hasCompletedChat = topicCompleted.every(c => c);
+    const hasUploadedFile = !!uploadedFile;
+
+    // If user has BOTH chat content and uploaded file - automatically merge
+    if (hasCompletedChat && hasUploadedFile) {
+      await handleAutomaticMerge();
+      return;
+    }
+
+    // Otherwise proceed with single source
+    if (hasUploadedFile) {
+      handleFileEvaluation();
+    } else if (hasCompletedChat) {
+      handleChatEvaluation();
+    } else {
       setMessages([...messages, {
         role: 'system',
         content: 'Please upload a document or complete all three profile sections before proceeding to evaluation.'
@@ -282,8 +267,249 @@ export default function ChatEntryPage() {
     }
   };
 
+  const handleFileEvaluation = () => {
+    if (!uploadedFile) return;
+    
+    const fileName = uploadedFile.name.toLowerCase();
+    
+    if (fileName === 'badformat.word' || fileName.includes('badformat')) {
+      const explanationMessage = {
+        role: 'system',
+        content: '[Evaluate Agent]:\nThe uploaded document lacks reliable structural markers.\nRedirecting to manual section definition tool.'
+      };
+      setMessages(prev => [...prev, explanationMessage]);
+      
+      setTimeout(() => {
+        router.push('/sectioning');
+      }, 1500);
+    } else {
+      router.push('/document');
+    }
+  };
+
+  const handleChatEvaluation = () => {
+    sessionStorage.setItem('investmentBackground', finalTopicTexts[0]);
+    sessionStorage.setItem('riskAssessment', finalTopicTexts[1]);
+    sessionStorage.setItem('technicalStrategy', finalTopicTexts[2]);
+    router.push('/document');
+  };
+
+  const handleAutomaticMerge = async () => {
+    const fileName = uploadedFile?.name.toLowerCase() || '';
+    const isBadFormat = fileName === 'badformat.word' || fileName.includes('badformat');
+
+    setMessages(prev => [...prev, {
+      role: 'system',
+      content: '🤖 Combining your conversation with the uploaded document... This may take a moment.'
+    }]);
+    setIsProcessing(true);
+
+    try {
+      const mergeResponse = await fetch('/api/merge-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatContent: {
+            investmentBackground: finalTopicTexts[0],
+            riskAssessment: finalTopicTexts[1],
+            technicalStrategy: finalTopicTexts[2]
+          },
+          documentName: uploadedFile?.name || 'uploaded document'
+        })
+      });
+
+      if (!mergeResponse.ok) {
+        throw new Error('Failed to merge content');
+      }
+
+      const result = await mergeResponse.json();
+
+      // Store merged content in session storage
+      sessionStorage.setItem('section1_title', result.section1_title || 'Investment Background');
+      sessionStorage.setItem('section1_content', result.section1_content);
+      sessionStorage.setItem('section2_title', result.section2_title || 'Risk Assessment');
+      sessionStorage.setItem('section2_content', result.section2_content);
+      sessionStorage.setItem('section3_title', result.section3_title || 'Technical Strategy');
+      sessionStorage.setItem('section3_content', result.section3_content);
+
+      setMessages(prev => [...prev, {
+        role: 'system',
+        content: '✓ Successfully combined your conversation with the document.'
+      }]);
+
+      setIsProcessing(false);
+
+      // Route based on document format
+      if (isBadFormat) {
+        setMessages(prev => [...prev, {
+          role: 'system',
+          content: '[Evaluate Agent]:\nThe uploaded document lacks reliable structural markers.\nRedirecting to manual section definition tool with your combined content.'
+        }]);
+        
+        setTimeout(() => {
+          router.push('/sectioning');
+        }, 1500);
+      } else {
+        setTimeout(() => {
+          // Store for document page
+          sessionStorage.setItem('investmentBackground', result.section1_content);
+          sessionStorage.setItem('riskAssessment', result.section2_content);
+          sessionStorage.setItem('technicalStrategy', result.section3_content);
+          router.push('/document');
+        }, 1000);
+      }
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        role: 'system',
+        content: '⚠️ Error merging content. Proceeding with document only...'
+      }]);
+      setIsProcessing(false);
+      // Fallback to document evaluation
+      setTimeout(() => {
+        handleFileEvaluation();
+      }, 1000);
+    }
+  };
+
+  const handleChoiceSelection = async (choice: 'chat' | 'document' | 'both') => {
+    setShowChoiceDialog(false);
+    
+    if (choice === 'chat') {
+      handleChatEvaluation();
+    } else if (choice === 'document') {
+      handleFileEvaluation();
+    } else if (choice === 'both') {
+      // Merge chat content with document using AI
+      setMessages(prev => [...prev, {
+        role: 'system',
+        content: '🤖 Intelligently combining your conversation and document... This may take a moment.'
+      }]);
+      setIsProcessing(true);
+
+      try {
+        const mergeResponse = await fetch('/api/merge-content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatContent: {
+              investmentBackground: finalTopicTexts[0],
+              riskAssessment: finalTopicTexts[1],
+              technicalStrategy: finalTopicTexts[2]
+            },
+            documentName: uploadedFile?.name || 'uploaded document'
+          })
+        });
+
+        if (!mergeResponse.ok) {
+          throw new Error('Failed to merge content');
+        }
+
+        const result = await mergeResponse.json();
+
+        // Create enriched sections for the sectioning page
+        const enrichedSections = [
+          {
+            id: 1,
+            title: result.section1_title || 'Investment Background',
+            content: result.section1_content
+          },
+          {
+            id: 2,
+            title: result.section2_title || 'Risk Assessment',
+            content: result.section2_content
+          },
+          {
+            id: 3,
+            title: result.section3_title || 'Technical Strategy',
+            content: result.section3_content
+          }
+        ];
+
+        // Store merged sections and go to document page
+        sessionStorage.setItem('investmentBackground', result.section1_content);
+        sessionStorage.setItem('riskAssessment', result.section2_content);
+        sessionStorage.setItem('technicalStrategy', result.section3_content);
+
+        setMessages(prev => [...prev, {
+          role: 'system',
+          content: '✓ Successfully combined your conversation insights with the document context. Proceeding to evaluation...'
+        }]);
+
+        setTimeout(() => {
+          router.push('/document');
+        }, 1000);
+      } catch (error) {
+        setMessages(prev => [...prev, {
+          role: 'system',
+          content: '⚠️ Error merging content. Please try again or choose a single source.'
+        }]);
+      } finally {
+        setIsProcessing(false);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Choice Dialog Modal */}
+      {showChoiceDialog && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 border border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">
+              Multiple Input Sources Detected
+            </h3>
+            <p className="text-sm text-slate-600 mb-6">
+              You have both chat conversation content and an uploaded document. How would you like to proceed?
+            </p>
+            
+            <div className="space-y-3">
+              <button
+                onClick={() => handleChoiceSelection('chat')}
+                className="w-full px-4 py-3 bg-white border border-slate-300 rounded hover:bg-slate-50 hover:border-slate-400 transition-all text-left"
+              >
+                <div className="font-medium text-slate-800 text-sm mb-1">
+                  Use Chat Content Only
+                </div>
+                <div className="text-xs text-slate-500">
+                  Proceed with your conversation responses
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleChoiceSelection('document')}
+                className="w-full px-4 py-3 bg-white border border-slate-300 rounded hover:bg-slate-50 hover:border-slate-400 transition-all text-left"
+              >
+                <div className="font-medium text-slate-800 text-sm mb-1">
+                  Use Uploaded Document Only
+                </div>
+                <div className="text-xs text-slate-500">
+                  Proceed with file: {uploadedFile?.name}
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleChoiceSelection('both')}
+                className="w-full px-4 py-3 bg-slate-700 text-white rounded hover:bg-slate-800 transition-all text-left"
+              >
+                <div className="font-medium text-sm mb-1">
+                  🤖 Merge Both Intelligently
+                </div>
+                <div className="text-xs text-slate-200">
+                  AI will combine conversation insights with document context
+                </div>
+              </button>
+
+              <button
+                onClick={() => setShowChoiceDialog(false)}
+                className="w-full px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       <div className="min-h-screen flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-4xl">
