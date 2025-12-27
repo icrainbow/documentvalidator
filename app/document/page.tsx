@@ -694,9 +694,9 @@ export default function DocumentPage() {
   const getSectionColor = (status: SectionStatus) => {
     switch (status) {
       case 'pass':
-        return 'border-slate-400 bg-slate-50';
+        return 'border-green-500 bg-green-50';
       case 'fail':
-        return 'border-slate-400 bg-slate-50';
+        return 'border-red-500 bg-red-50';
       default:
         return 'border-slate-300 bg-white';
     }
@@ -705,9 +705,9 @@ export default function DocumentPage() {
   const getStatusBadge = (status: SectionStatus) => {
     switch (status) {
       case 'pass':
-        return <span className="px-3 py-1 bg-slate-700 text-white text-sm font-semibold rounded-full">✓ PASS</span>;
+        return <span className="px-3 py-1 bg-green-600 text-white text-sm font-semibold rounded-full">✓ PASS</span>;
       case 'fail':
-        return <span className="px-3 py-1 bg-slate-500 text-white text-sm font-semibold rounded-full">✗ FAIL</span>;
+        return <span className="px-3 py-1 bg-red-600 text-white text-sm font-semibold rounded-full">✗ FAIL</span>;
       default:
         return <span className="px-3 py-1 bg-slate-300 text-slate-600 text-sm font-semibold rounded-full">UNEVALUATED</span>;
     }
