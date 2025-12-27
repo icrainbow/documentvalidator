@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, MouseEvent } from 'react';
+import { useState, useRef, useEffect, MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import AgentDashboard from '../components/AgentDashboard';
 
