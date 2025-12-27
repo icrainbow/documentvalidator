@@ -341,7 +341,7 @@ export default function SectioningPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-6">
+    <div className="min-h-screen bg-slate-50 pb-6">
       <div className="max-w-7xl mx-auto">
         {/* Header - Normal position */}
         <div className="pt-6 px-6 pb-4">
@@ -400,7 +400,7 @@ export default function SectioningPage() {
                 className={`px-6 py-2 rounded font-semibold transition-colors ${
                   selectedSectionIds.length < 2
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-slate-700 text-white hover:bg-slate-800'
                 }`}
               >
                 🔗 Merge Sections ({selectedSectionIds.length})
@@ -408,17 +408,17 @@ export default function SectioningPage() {
               <button
                 onClick={handleConfirmSections}
                 disabled={selectedSectionIds.length < 1}
-                className={`px-6 py-2 rounded font-semibold transition-colors shadow-lg ${
+                className={`px-6 py-2 rounded font-semibold transition-colors shadow-sm ${
                   selectedSectionIds.length < 1
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    : 'bg-green-600 text-white hover:bg-green-700'
+                    : 'bg-slate-700 text-white hover:bg-slate-800'
                 }`}
               >
                 ✓ Confirm Sections ({selectedSectionIds.length})
               </button>
               <button
                 onClick={() => setShowAgentDashboard(true)}
-                className="px-6 py-2 rounded font-semibold transition-colors bg-indigo-600 text-white hover:bg-indigo-700 shadow-md"
+                className="px-6 py-2 rounded font-semibold transition-colors bg-slate-600 text-white hover:bg-slate-700 shadow-sm"
               >
                 📊 Agent Dashboard
               </button>
@@ -431,7 +431,7 @@ export default function SectioningPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 px-6 pt-6">
           {/* Left Side - Document View */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <h2 className="text-xl font-bold text-slate-800 mb-4">Full Document</h2>
             <div
               ref={containerRef}
@@ -490,7 +490,7 @@ export default function SectioningPage() {
           </div>
 
           {/* Right Side - Sections Preview */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-slate-800">Confirmed Sections</h2>
               

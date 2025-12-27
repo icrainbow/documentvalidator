@@ -127,11 +127,11 @@ export default function AgentDashboard({
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'success':
-        return <span className="text-emerald-600 font-bold text-lg">✓</span>;
+        return <span className="text-slate-700 font-bold text-lg">✓</span>;
       case 'blocked':
-        return <span className="text-red-600 font-bold text-lg">✕</span>;
+        return <span className="text-slate-500 font-bold text-lg">✕</span>;
       case 'pending':
-        return <span className="text-slate-500 font-bold text-lg">⏳</span>;
+        return <span className="text-slate-400 font-bold text-lg">⏳</span>;
       default:
         return null;
     }
@@ -140,11 +140,11 @@ export default function AgentDashboard({
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Completed':
-        return 'text-emerald-700';
+        return 'text-slate-800';
       case 'Blocked':
-        return 'text-red-700';
+        return 'text-slate-700';
       case 'In Progress':
-        return 'text-blue-700';
+        return 'text-slate-700';
       default:
         return 'text-slate-700';
     }
@@ -158,9 +158,9 @@ export default function AgentDashboard({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-300">
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-6 py-4 flex items-center justify-between">
+        <div className="bg-slate-700 text-white px-6 py-4 flex items-center justify-between border-b border-slate-600">
           <div>
             <h2 className="text-xl font-bold">Agent Dashboard</h2>
             <div className="text-slate-300 text-sm mt-1">
@@ -189,7 +189,7 @@ export default function AgentDashboard({
             </div>
             <div>
               <span className="text-slate-600">Bottleneck:</span>{' '}
-              <span className="font-semibold text-orange-700">{bottleneckCall.agent}</span>
+              <span className="font-semibold text-slate-700">{bottleneckCall.agent}</span>
             </div>
           </div>
         </div>
@@ -209,9 +209,9 @@ export default function AgentDashboard({
                   key={index}
                   className={`border rounded-lg transition-all ${
                     isHeavy
-                      ? 'border-orange-300 bg-orange-50/30'
+                      ? 'border-slate-400 bg-slate-100'
                       : call.status === 'blocked'
-                      ? 'border-red-300 bg-red-50/30'
+                      ? 'border-slate-400 bg-slate-100'
                       : 'border-slate-200 bg-white'
                   }`}
                 >
@@ -226,11 +226,11 @@ export default function AgentDashboard({
                           <div className="font-semibold text-slate-800">{call.agent}</div>
                           <div className="flex items-center gap-3 text-sm text-slate-600 shrink-0">
                             <span>{call.tokens} tokens</span>
-                            <span className={isHeavy ? 'text-orange-700 font-semibold' : ''}>
+                            <span className={isHeavy ? 'text-slate-800 font-semibold' : ''}>
                               {call.latency_ms}ms
                             </span>
                             {call.retries > 0 && (
-                              <span className="text-orange-700 font-semibold">
+                              <span className="text-slate-700 font-semibold">
                                 {call.retries} retry
                               </span>
                             )}
@@ -242,7 +242,7 @@ export default function AgentDashboard({
                         <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                           <div
                             className={`h-full transition-all ${
-                              isHeavy ? 'bg-orange-500' : 'bg-blue-500'
+                              isHeavy ? 'bg-slate-600' : 'bg-slate-500'
                             }`}
                             style={{ width: `${(call.latency_ms / maxLatency) * 100}%` }}
                           />

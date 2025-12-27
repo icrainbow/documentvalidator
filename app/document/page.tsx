@@ -694,9 +694,9 @@ export default function DocumentPage() {
   const getSectionColor = (status: SectionStatus) => {
     switch (status) {
       case 'pass':
-        return 'border-green-500 bg-green-50';
+        return 'border-slate-400 bg-slate-50';
       case 'fail':
-        return 'border-red-500 bg-red-50';
+        return 'border-slate-400 bg-slate-50';
       default:
         return 'border-slate-300 bg-white';
     }
@@ -705,25 +705,25 @@ export default function DocumentPage() {
   const getStatusBadge = (status: SectionStatus) => {
     switch (status) {
       case 'pass':
-        return <span className="px-3 py-1 bg-green-600 text-white text-sm font-semibold rounded-full">✓ PASS</span>;
+        return <span className="px-3 py-1 bg-slate-700 text-white text-sm font-semibold rounded-full">✓ PASS</span>;
       case 'fail':
-        return <span className="px-3 py-1 bg-red-600 text-white text-sm font-semibold rounded-full">✗ FAIL</span>;
+        return <span className="px-3 py-1 bg-slate-500 text-white text-sm font-semibold rounded-full">✗ FAIL</span>;
       default:
-        return <span className="px-3 py-1 bg-slate-400 text-white text-sm font-semibold rounded-full">UNEVALUATED</span>;
+        return <span className="px-3 py-1 bg-slate-300 text-slate-600 text-sm font-semibold rounded-full">UNEVALUATED</span>;
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-6">
+    <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-slate-800 mb-6">
           {isSubmitted ? 'Document Preview' : 'Document Evaluation'}
         </h1>
         
         {isSubmitted ? (
-          <div className="bg-white rounded-xl shadow-lg p-8">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-green-700 mb-4">
+              <h2 className="text-2xl font-bold text-slate-800 mb-4">
                 ✓ Document Submitted Successfully!
               </h2>
               <p className="text-slate-600">
@@ -756,19 +756,19 @@ export default function DocumentPage() {
             <div className="flex justify-center gap-4">
               <button
                 onClick={() => router.push('/')}
-                className="px-8 py-4 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-bold text-lg shadow-md"
+                className="px-8 py-4 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-bold text-lg shadow-sm"
               >
                 ← Back to Main Page
               </button>
               <button
                 onClick={() => setShowAgentDashboard(true)}
-                className="px-8 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-bold text-lg shadow-md"
+                className="px-8 py-4 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors font-bold text-lg shadow-sm"
               >
                 📊 Agent Dashboard
               </button>
               <button
                 onClick={handleDownloadPDF}
-                className="px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold text-lg shadow-md"
+                className="px-8 py-4 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors font-bold text-lg shadow-sm"
               >
                 📥 Download
               </button>
@@ -855,7 +855,7 @@ export default function DocumentPage() {
                   <div className="flex gap-3">
                     <button
                       onClick={() => handleEvaluateSection(section.id)}
-                      className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold"
+                      className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors font-semibold"
                     >
                       Evaluate
                     </button>
@@ -863,8 +863,8 @@ export default function DocumentPage() {
                       onClick={() => handleModifySection(section.id)}
                       className={`px-6 py-2 text-white rounded-lg transition-colors font-semibold ${
                         editingSectionId === section.id
-                          ? 'bg-green-600 hover:bg-green-700'
-                          : 'bg-blue-600 hover:bg-blue-700'
+                          ? 'bg-slate-700 hover:bg-slate-800'
+                          : 'bg-slate-600 hover:bg-slate-700'
                       }`}
                     >
                       {editingSectionId === section.id ? 'Save' : 'Modify'}
@@ -895,17 +895,17 @@ export default function DocumentPage() {
                   <div className="flex gap-4">
                     <button
                       onClick={handleGlobalEvaluate}
-                      className="flex-1 px-6 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-bold text-lg shadow-md"
+                      className="flex-1 px-6 py-4 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors font-bold text-lg shadow-sm"
                     >
                       Global Evaluate
                     </button>
                     <button
                       onClick={handleSubmit}
                       disabled={isSubmitted || !canSubmit}
-                      className={`flex-1 px-6 py-4 rounded-lg transition-colors font-bold text-lg shadow-md ${
+                      className={`flex-1 px-6 py-4 rounded-lg transition-colors font-bold text-lg shadow-sm ${
                         isSubmitted || !canSubmit
-                          ? 'bg-slate-400 text-slate-200 cursor-not-allowed'
-                          : 'bg-green-600 text-white hover:bg-green-700'
+                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                          : 'bg-slate-700 text-white hover:bg-slate-800'
                       }`}
                     >
                       Submit
@@ -914,7 +914,7 @@ export default function DocumentPage() {
                   
                   <button
                     onClick={() => setShowAgentDashboard(true)}
-                    className="w-full px-6 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors font-semibold shadow-md"
+                    className="w-full px-6 py-3 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-semibold shadow-sm"
                   >
                     📊 Agent Dashboard
                   </button>
@@ -972,8 +972,8 @@ export default function DocumentPage() {
                     disabled={isAIProcessing}
                     className={`w-full px-4 py-2 rounded-lg transition-colors font-semibold ${
                       isAIProcessing
-                        ? 'bg-slate-400 text-slate-200 cursor-not-allowed'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-slate-700 text-white hover:bg-slate-800'
                     }`}
                   >
                     {isAIProcessing ? 'AI Processing...' : 'Send'}
