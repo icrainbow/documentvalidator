@@ -213,9 +213,16 @@ export default function SectioningPage() {
     if (rectangles.length === 0) return;
     
     const nextSectionIndex = confirmedSections.length;
-    if (nextSectionIndex < 3) {
-      // Use the appropriate section source (merged or predefined)
-      const newSection = sectionsSource[nextSectionIndex];
+    // Allow up to 10 sections
+    if (nextSectionIndex < 10) {
+      // Generate a new section with default title and placeholder content
+      const newSection: Section = {
+        id: Date.now(),
+        title: `Section ${nextSectionIndex + 1}`,
+        content: `Content from selected area ${nextSectionIndex + 1}. This represents the text content that would be extracted from the highlighted region in the document. In a real implementation, this would contain the actual text from the selected area.`,
+        selected: false
+      };
+      
       setConfirmedSections([...confirmedSections, newSection]);
       setDragCount(dragCount + 1);
       
@@ -385,9 +392,9 @@ export default function SectioningPage() {
               </button>
               <button
                 onClick={handleAddSection}
-                disabled={rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed}
+                disabled={rectangles.length === 0 || dragCount >= 10 || rectangles[rectangles.length - 1]?.confirmed}
                 className={`px-6 py-2 rounded font-semibold transition-colors shadow-md ${
-                  rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed
+                  rectangles.length === 0 || dragCount >= 10 || rectangles[rectangles.length - 1]?.confirmed
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     : 'bg-slate-700 text-white hover:bg-slate-800'
                 }`}
@@ -423,7 +430,7 @@ export default function SectioningPage() {
                 📊 Agent Dashboard
               </button>
               <div className="ml-auto text-slate-700 font-semibold">
-                Sections: {confirmedSections.length}
+                Sections: {confirmedSections.length} / 10
               </div>
             </div>
           </div>
@@ -432,7 +439,10 @@ export default function SectioningPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 px-6 pt-6">
           {/* Left Side - Document View */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">Full Document</h2>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Full Document</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              Drag to select text regions. You can create up to 10 sections in any order. Sections can overlap.
+            </p>
             <div
               ref={containerRef}
               className="relative border-2 border-slate-300 rounded-lg p-4 bg-slate-50 cursor-crosshair select-none overflow-hidden"
@@ -447,34 +457,55 @@ export default function SectioningPage() {
               </div>
 
               {/* Draw all confirmed rectangles */}
-              {rectangles.map((rect) => (
-                <div
-                  key={rect.id}
-                  className={`absolute pointer-events-none ${
-                    rect.confirmed
-                      ? 'border-4 border-green-500 bg-green-100 bg-opacity-20'
-                      : 'border-4 border-blue-500 bg-blue-100 bg-opacity-20'
-                  }`}
-                  style={{
-                    left: Math.min(rect.startX, rect.startX + rect.width),
-                    top: Math.min(rect.startY, rect.startY + rect.height),
-                    width: Math.abs(rect.width),
-                    height: Math.abs(rect.height)
-                  }}
-                />
-              ))}
+              {rectangles.map((rect, index) => {
+                // Find which section this rectangle corresponds to
+                const sectionIndex = confirmedSections.findIndex((_, idx) => {
+                  const confirmedRects = rectangles.filter(r => r.confirmed);
+                  return confirmedRects[idx] === rect;
+                });
+                
+                return (
+                  <div
+                    key={rect.id}
+                    className={`absolute pointer-events-none ${
+                      rect.confirmed
+                        ? 'border-4 border-slate-600 bg-slate-300 bg-opacity-30'
+                        : 'border-4 border-slate-400 bg-slate-200 bg-opacity-30'
+                    }`}
+                    style={{
+                      left: Math.min(rect.startX, rect.startX + rect.width),
+                      top: Math.min(rect.startY, rect.startY + rect.height),
+                      width: Math.abs(rect.width),
+                      height: Math.abs(rect.height),
+                      zIndex: index + 1
+                    }}
+                  >
+                    {/* Section number indicator */}
+                    {rect.confirmed && sectionIndex >= 0 && (
+                      <div className="absolute top-1 left-1 bg-slate-700 text-white text-xs px-2 py-1 rounded font-semibold">
+                        ✓ Section {sectionIndex + 1}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Draw current rectangle being created */}
               {currentRect && isDrawing && (
                 <div
-                  className="absolute border-4 border-blue-600 bg-transparent pointer-events-none"
+                  className="absolute border-4 border-slate-500 bg-slate-200 bg-opacity-40 pointer-events-none"
                   style={{
                     left: Math.min(currentRect.startX, currentRect.startX + currentRect.width),
                     top: Math.min(currentRect.startY, currentRect.startY + currentRect.height),
                     width: Math.abs(currentRect.width),
-                    height: Math.abs(currentRect.height)
+                    height: Math.abs(currentRect.height),
+                    zIndex: 1000
                   }}
-                />
+                >
+                  <div className="absolute top-1 left-1 bg-slate-700 text-white text-xs px-2 py-1 rounded font-semibold animate-pulse">
+                    Drawing...
+                  </div>
+                </div>
               )}
             </div>
 
@@ -592,7 +623,7 @@ export default function SectioningPage() {
             {confirmedSections.length > 0 && (
               <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded">
                 <p className="text-sm text-slate-700 text-center">
-                  <strong>💡 Tip:</strong> Select sections above and click "✓ Confirm Sections" in the toolbar to proceed
+                  <strong>💡 Tip:</strong> You can create up to 10 sections. Drag rectangles anywhere on the document - they can overlap or be in any order. Select sections and click "✓ Confirm Sections" to proceed.
                 </p>
               </div>
             )}
