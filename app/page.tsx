@@ -530,35 +530,56 @@ export default function ChatEntryPage() {
             {/* Header */}
             <div className="border-b border-slate-200 p-6 sm:p-8">
               <div className="flex items-center gap-4 mb-3">
-                {/* UBS Logo */}
+                {/* Document Search Icon */}
                 <div className="w-16 h-16 flex-shrink-0">
                   <svg viewBox="0 0 120 120" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-                    {/* Red Square Background */}
-                    <rect width="120" height="120" fill="#E60000"/>
+                    <defs>
+                      {/* Gradient for document */}
+                      <linearGradient id="docGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#E8705B"/>
+                        <stop offset="100%" stopColor="#D32F2F"/>
+                      </linearGradient>
+                    </defs>
                     
-                    {/* Three Keys Symbol (Simplified) */}
-                    <g stroke="#FFFFFF" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      {/* Left Key */}
-                      <circle cx="30" cy="35" r="5"/>
-                      <line x1="30" y1="40" x2="30" y2="65"/>
-                      <line x1="26" y1="50" x2="34" y2="50"/>
-                      <line x1="26" y1="56" x2="34" y2="56"/>
-                      
-                      {/* Middle Key */}
-                      <circle cx="60" cy="35" r="5"/>
-                      <line x1="60" y1="40" x2="60" y2="65"/>
-                      <line x1="56" y1="50" x2="64" y2="50"/>
-                      <line x1="56" y1="56" x2="64" y2="56"/>
-                      
-                      {/* Right Key */}
-                      <circle cx="90" cy="35" r="5"/>
-                      <line x1="90" y1="40" x2="90" y2="65"/>
-                      <line x1="86" y1="50" x2="94" y2="50"/>
-                      <line x1="86" y1="56" x2="94" y2="56"/>
+                    {/* Pixelated particles on the left */}
+                    <g fill="#E8705B" opacity="0.8">
+                      <rect x="8" y="35" width="4" height="4"/>
+                      <rect x="8" y="42" width="4" height="4"/>
+                      <rect x="15" y="28" width="5" height="5"/>
+                      <rect x="15" y="38" width="5" height="5"/>
+                      <rect x="15" y="48" width="5" height="5"/>
+                      <rect x="23" y="32" width="6" height="6"/>
+                      <rect x="23" y="44" width="6" height="6"/>
+                      <rect x="23" y="56" width="6" height="6"/>
+                      <rect x="32" y="38" width="7" height="7"/>
+                      <rect x="32" y="52" width="7" height="7"/>
                     </g>
                     
-                    {/* UBS Text */}
-                    <text x="60" y="95" fontSize="28" fontWeight="bold" fill="#FFFFFF" textAnchor="middle" fontFamily="Arial, Helvetica, sans-serif">UBS</text>
+                    {/* Main document body */}
+                    <rect x="45" y="15" width="50" height="65" rx="3" fill="url(#docGradient)"/>
+                    
+                    {/* Document folded corner */}
+                    <path d="M 95 15 L 95 30 L 80 30 Z" fill="#B71C1C"/>
+                    <path d="M 95 15 L 95 30 L 80 30 Z" fill="#FFFFFF" opacity="0.2"/>
+                    
+                    {/* Document lines */}
+                    <rect x="52" y="28" width="30" height="3" rx="1.5" fill="#FFFFFF"/>
+                    <rect x="52" y="38" width="30" height="3" rx="1.5" fill="#FFFFFF"/>
+                    <rect x="52" y="48" width="20" height="3" rx="1.5" fill="#FFFFFF"/>
+                    
+                    {/* Magnifying glass */}
+                    <g>
+                      {/* Glass rim - outer */}
+                      <circle cx="75" cy="70" r="18" fill="none" stroke="#FFFFFF" strokeWidth="5"/>
+                      {/* Glass rim - inner */}
+                      <circle cx="75" cy="70" r="15" fill="none" stroke="#E8705B" strokeWidth="3"/>
+                      {/* Glass interior highlight */}
+                      <circle cx="75" cy="70" r="12" fill="none" stroke="#FFFFFF" strokeWidth="1" opacity="0.5"/>
+                      
+                      {/* Handle */}
+                      <path d="M 87 82 L 100 95" stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round"/>
+                      <path d="M 87 82 L 100 95" stroke="#E8705B" strokeWidth="4" strokeLinecap="round"/>
+                    </g>
                   </svg>
                 </div>
                 <div>
