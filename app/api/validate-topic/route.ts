@@ -17,7 +17,7 @@ const TOPIC_CONTEXT = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { topic, userMessage, existingContent } = await request.json();
+    const { topic, userMessage, existingContent, language = 'english' } = await request.json();
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     
@@ -30,7 +30,11 @@ export async function POST(request: NextRequest) {
 
     const topicInfo = TOPIC_CONTEXT[topic as keyof typeof TOPIC_CONTEXT];
 
-    const prompt = `You are analyzing a user's response for a specific investment profile section.
+    const languageInstruction = language !== 'english' 
+      ? `\n**IMPORTANT:** The user is communicating in ${language}. You MUST respond in ${language}. All follow-up questions and examples must be in ${language}.`
+      : '';
+
+    const prompt = `You are analyzing a user's response for a specific investment profile section.${languageInstruction}
 
 **Current Section:** ${topicInfo.name}
 **Section Description:** ${topicInfo.description}
@@ -42,21 +46,22 @@ export async function POST(request: NextRequest) {
 **Your Task:**
 1. Determine if the user's message is relevant to "${topicInfo.name}"
 2. If relevant, extract the key information
-3. If not relevant, provide a guided follow-up question with 1-2 brief examples
+3. If not relevant, provide a guided follow-up question with 1-2 brief examples${language !== 'english' ? ` IN ${language.toUpperCase()}` : ''}
 
 **Response Format (JSON only):**
 {
   "is_relevant": true or false,
   "content_fragment": "Brief extracted insight if relevant, or null",
-  "follow_up_question": "Specific question if not relevant, or null",
-  "examples": ["Example 1", "Example 2"] (only if not relevant, otherwise empty array)
+  "follow_up_question": "Specific question if not relevant, or null${language !== 'english' ? ` (IN ${language.toUpperCase()})` : ''}",
+  "examples": ["Example 1", "Example 2"] (only if not relevant, otherwise empty array${language !== 'english' ? ` - IN ${language.toUpperCase()}` : ''})
 }
 
 **Guidelines:**
 - Be strict but fair about relevance
 - Follow-up questions should be calm, clear, and specific
 - Examples should be brief (one sentence each)
-- Do NOT be overly generous - if the response is vague or off-topic, mark it as not relevant`;
+- Do NOT be overly generous - if the response is vague or off-topic, mark it as not relevant
+${language !== 'english' ? `- ALL TEXT in follow_up_question and examples MUST be in ${language}` : ''}`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

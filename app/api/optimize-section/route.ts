@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { sectionContent, sectionTitle, userPrompt } = await request.json();
+    const { sectionContent, sectionTitle, userPrompt, language = 'english' } = await request.json();
 
     // Get API key from environment variable
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -13,6 +13,10 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    const languageInstruction = language !== 'english' 
+      ? `\n**CRITICAL:** The user is communicating in ${language}. You MUST respond in ${language}. The revised content MUST be entirely in ${language}.`
+      : '';
 
     // Call Claude API
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -28,7 +32,7 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'user',
-            content: `You are an AI investment document assistant. 
+            content: `You are an AI investment document assistant.${languageInstruction}
 
 Current Section: ${sectionTitle}
 Current Content:
@@ -37,7 +41,7 @@ ${sectionContent}
 User Request:
 ${userPrompt}
 
-Please revise the section content based on the user's request. Return ONLY the revised section content, without any additional explanation or meta-commentary. Keep the tone professional and appropriate for investment documentation.`
+Please revise the section content based on the user's request. Return ONLY the revised section content, without any additional explanation or meta-commentary. Keep the tone professional and appropriate for investment documentation.${language !== 'english' ? ` ALL REVISED CONTENT MUST BE IN ${language.toUpperCase()}.` : ''}`
           }
         ]
       })

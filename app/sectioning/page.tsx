@@ -2,6 +2,7 @@
 
 import { useState, useRef, MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import AgentDashboard from '../components/AgentDashboard';
 
 interface Rectangle {
   id: number;
@@ -63,8 +64,10 @@ export default function SectioningPage() {
   const [tempTitle, setTempTitle] = useState<string>('');
   const [selectedSectionIds, setSelectedSectionIds] = useState<number[]>([]);
   const [sectionsSource, setSectionsSource] = useState<Section[]>([]);
+  const [displayedDocumentText, setDisplayedDocumentText] = useState<string>(FULL_DOCUMENT_TEXT);
+  const [showAgentDashboard, setShowAgentDashboard] = useState(false);
 
-  // Load merged content from session storage if available
+  // Load merged content from session storage if available and build document display
   useState(() => {
     if (typeof window !== 'undefined') {
       const section1Content = sessionStorage.getItem('section1_content');
@@ -74,8 +77,13 @@ export default function SectioningPage() {
       const section3Content = sessionStorage.getItem('section3_content');
       const section3Title = sessionStorage.getItem('section3_title');
 
+      // Check for chat summaries (from main page)
+      const investmentBg = sessionStorage.getItem('investmentBackground');
+      const riskAssessment = sessionStorage.getItem('riskAssessment');
+      const technicalStrategy = sessionStorage.getItem('technicalStrategy');
+
+      // If we have merged content from LLM, use that for sections
       if (section1Content && section2Content && section3Content) {
-        // Use merged content from chat + document
         setSectionsSource([
           {
             id: 1,
@@ -96,6 +104,33 @@ export default function SectioningPage() {
       } else {
         // Use predefined sections
         setSectionsSource(PREDEFINED_SECTIONS);
+      }
+
+      // Build the displayed document text with user summaries appended
+      if (investmentBg || riskAssessment || technicalStrategy) {
+        let combinedText = FULL_DOCUMENT_TEXT;
+        
+        // Append a separator
+        combinedText += '\n\n' + '='.repeat(80) + '\n\n';
+        combinedText += 'USER INPUT SUMMARY (From Chat Conversation)\n\n';
+        combinedText += '='.repeat(80) + '\n\n';
+
+        if (investmentBg) {
+          combinedText += 'Investment Background (User Profile):\n\n';
+          combinedText += investmentBg + '\n\n';
+        }
+
+        if (riskAssessment) {
+          combinedText += 'Risk Assessment (User Profile):\n\n';
+          combinedText += riskAssessment + '\n\n';
+        }
+
+        if (technicalStrategy) {
+          combinedText += 'Technical Strategy (User Profile):\n\n';
+          combinedText += technicalStrategy + '\n\n';
+        }
+
+        setDisplayedDocumentText(combinedText);
       }
     } else {
       setSectionsSource(PREDEFINED_SECTIONS);
@@ -192,17 +227,6 @@ export default function SectioningPage() {
     }
   };
 
-  const handleConfirmSections = () => {
-    // Store sections with custom titles in sessionStorage
-    const sectionsToStore = confirmedSections.map(section => ({
-      id: section.id,
-      title: section.title,
-      content: section.content
-    }));
-    sessionStorage.setItem('definedSections', JSON.stringify(sectionsToStore));
-    router.push('/document');
-  };
-
   const handleEditTitle = (sectionId: number) => {
     const section = confirmedSections.find(s => s.id === sectionId);
     if (section) {
@@ -274,66 +298,138 @@ export default function SectioningPage() {
     setDragCount(newSections.length);
   };
 
-  return (
-    <div className="min-h-screen bg-slate-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-slate-800 mb-2">Manual Document Sectioning</h1>
-        <p className="text-slate-600 mb-6">
-          Drag over the document to define sections. Each section will be evaluated independently by multiple agents.
-        </p>
+  const handleSelectAll = () => {
+    if (selectedSectionIds.length === confirmedSections.length) {
+      // Deselect all
+      setSelectedSectionIds([]);
+    } else {
+      // Select all
+      setSelectedSectionIds(confirmedSections.map(s => s.id));
+    }
+  };
 
-        {/* Top Action Buttons */}
-        <div className="flex gap-4 mb-6 items-center">
-          <button
-            onClick={handleUndo}
-            disabled={rectangles.length === 0}
-            className={`px-6 py-2 rounded font-semibold transition-colors ${
-              rectangles.length === 0
-                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
-            }`}
-          >
-            ↶ Undo
-          </button>
-          <button
-            onClick={handleReset}
-            disabled={rectangles.length === 0}
-            className={`px-6 py-2 rounded font-semibold transition-colors ${
-              rectangles.length === 0
-                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
-            }`}
-          >
-            ✕ Reset
-          </button>
-          <button
-            onClick={handleAddSection}
-            disabled={rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed}
-            className={`px-6 py-2 rounded font-semibold transition-colors ${
-              rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed
-                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                : 'bg-slate-700 text-white hover:bg-slate-800'
-            }`}
-          >
-            + Add Section
-          </button>
-          <button
-            onClick={handleMergeSections}
-            disabled={selectedSectionIds.length < 2}
-            className={`px-6 py-2 rounded font-semibold transition-colors ${
-              selectedSectionIds.length < 2
-                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-          >
-            🔗 Merge Sections ({selectedSectionIds.length})
-          </button>
-          <div className="ml-auto text-slate-700 font-semibold">
-            Sections: {confirmedSections.length}
+  const handleConfirmSections = () => {
+    if (selectedSectionIds.length < 1) return;
+
+    // Get only the selected sections
+    const selectedSections = confirmedSections.filter(s => 
+      selectedSectionIds.includes(s.id)
+    );
+
+    if (selectedSections.length === 0) return;
+
+    // Store the selected sections in sessionStorage
+    selectedSections.forEach((section, index) => {
+      const sectionNum = index + 1;
+      sessionStorage.setItem(`section${sectionNum}_title`, section.title);
+      sessionStorage.setItem(`section${sectionNum}_content`, section.content);
+    });
+
+    // Also store for backward compatibility with document page
+    if (selectedSections[0]) {
+      sessionStorage.setItem('investmentBackground', selectedSections[0].content);
+    }
+    if (selectedSections[1]) {
+      sessionStorage.setItem('riskAssessment', selectedSections[1].content);
+    }
+    if (selectedSections[2]) {
+      sessionStorage.setItem('technicalStrategy', selectedSections[2].content);
+    }
+
+    // Navigate to document page
+    router.push('/document');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-100 pb-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header - Normal position */}
+        <div className="pt-6 px-6 pb-4">
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">Manual Document Sectioning</h1>
+          <p className="text-slate-600">
+            Drag over the document to define sections. Each section will be evaluated independently by multiple agents.
+          </p>
+        </div>
+
+        {/* Sticky Action Buttons Bar */}
+        <div className="sticky top-0 z-20 bg-slate-100 border-b border-slate-300 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex gap-4 items-center flex-wrap">
+              <button
+                onClick={() => router.push('/')}
+                className="px-6 py-2 bg-slate-600 text-white rounded font-semibold hover:bg-slate-700 transition-colors"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={handleUndo}
+                disabled={rectangles.length === 0}
+                className={`px-6 py-2 rounded font-semibold transition-colors ${
+                  rectangles.length === 0
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
+                }`}
+              >
+                ↶ Undo
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={rectangles.length === 0}
+                className={`px-6 py-2 rounded font-semibold transition-colors ${
+                  rectangles.length === 0
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
+                }`}
+              >
+                ✕ Reset
+              </button>
+              <button
+                onClick={handleAddSection}
+                disabled={rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed}
+                className={`px-6 py-2 rounded font-semibold transition-colors shadow-md ${
+                  rectangles.length === 0 || dragCount >= 3 || rectangles[rectangles.length - 1]?.confirmed
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-slate-700 text-white hover:bg-slate-800'
+                }`}
+              >
+                + Add Section
+              </button>
+              <button
+                onClick={handleMergeSections}
+                disabled={selectedSectionIds.length < 2}
+                className={`px-6 py-2 rounded font-semibold transition-colors ${
+                  selectedSectionIds.length < 2
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                🔗 Merge Sections ({selectedSectionIds.length})
+              </button>
+              <button
+                onClick={handleConfirmSections}
+                disabled={selectedSectionIds.length < 1}
+                className={`px-6 py-2 rounded font-semibold transition-colors shadow-lg ${
+                  selectedSectionIds.length < 1
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+              >
+                ✓ Confirm Sections ({selectedSectionIds.length})
+              </button>
+              <button
+                onClick={() => setShowAgentDashboard(true)}
+                className="px-6 py-2 rounded font-semibold transition-colors bg-indigo-600 text-white hover:bg-indigo-700 shadow-md"
+              >
+                📊 Agent Dashboard
+              </button>
+              <div className="ml-auto text-slate-700 font-semibold">
+                Sections: {confirmedSections.length}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 px-6 pt-6">
           {/* Left Side - Document View */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-bold text-slate-800 mb-4">Full Document</h2>
@@ -347,7 +443,7 @@ export default function SectioningPage() {
               onMouseLeave={handleMouseUp}
             >
               <div className="whitespace-pre-wrap text-slate-700 leading-relaxed">
-                {FULL_DOCUMENT_TEXT}
+                {displayedDocumentText}
               </div>
 
               {/* Draw all confirmed rectangles */}
@@ -395,7 +491,24 @@ export default function SectioningPage() {
 
           {/* Right Side - Sections Preview */}
           <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">Confirmed Sections</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-slate-800">Confirmed Sections</h2>
+              
+              {confirmedSections.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="select-all"
+                    checked={selectedSectionIds.length === confirmedSections.length && confirmedSections.length > 0}
+                    onChange={handleSelectAll}
+                    className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="select-all" className="text-sm font-medium text-slate-700 cursor-pointer">
+                    Select All
+                  </label>
+                </div>
+              )}
+            </div>
             
             {confirmedSections.length === 0 ? (
               <div className="text-center py-20 text-slate-400">
@@ -476,30 +589,22 @@ export default function SectioningPage() {
               </div>
             )}
 
-            {confirmedSections.length === 3 && (
-              <div className="mt-6">
-                <button
-                  onClick={handleConfirmSections}
-                  className="w-full px-6 py-4 bg-slate-700 text-white rounded hover:bg-slate-800 transition-colors font-bold text-lg shadow-md"
-                >
-                  ✓ Confirm Sections & Continue
-                </button>
-                <p className="text-center text-sm text-slate-600 mt-2">
-                  Proceed to multi-agent evaluation workflow
-                </p>
-              </div>
-            )}
-
-            {confirmedSections.length > 0 && confirmedSections.length < 3 && (
-              <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded">
-                <p className="text-sm text-slate-600 text-center">
-                  Add {3 - confirmedSections.length} more section(s) or merge existing ones to continue
+            {confirmedSections.length > 0 && (
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded">
+                <p className="text-sm text-slate-700 text-center">
+                  <strong>💡 Tip:</strong> Select sections above and click "✓ Confirm Sections" in the toolbar to proceed
                 </p>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Agent Dashboard Modal */}
+      <AgentDashboard 
+        isOpen={showAgentDashboard}
+        onClose={() => setShowAgentDashboard(false)}
+      />
     </div>
   );
 }

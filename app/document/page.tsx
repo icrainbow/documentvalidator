@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import AgentDashboard from '../components/AgentDashboard';
 
 type SectionStatus = 'unevaluated' | 'pass' | 'fail';
 
@@ -58,6 +60,7 @@ const FAKE_SECTIONS = [
 ];
 
 export default function DocumentPage() {
+  const router = useRouter();
   const [sections, setSections] = useState<Section[]>(FAKE_SECTIONS);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -69,12 +72,79 @@ export default function DocumentPage() {
 
   // Check on mount if we should use user-provided content from chat flow
   useEffect(() => {
+    // Check for sections from manual segmentation (new format)
+    const section1Title = sessionStorage.getItem('section1_title');
+    const section1Content = sessionStorage.getItem('section1_content');
+    const section2Title = sessionStorage.getItem('section2_title');
+    const section2Content = sessionStorage.getItem('section2_content');
+    const section3Title = sessionStorage.getItem('section3_title');
+    const section3Content = sessionStorage.getItem('section3_content');
+
+    // If we have sections from manual segmentation with the new format
+    if (section1Content || section2Content || section3Content) {
+      const loadedSections: Section[] = [];
+      
+      if (section1Content) {
+        loadedSections.push({
+          id: 1,
+          title: section1Title || 'Section 1',
+          content: section1Content,
+          status: 'pass' as SectionStatus,
+          log: [{ agent: 'Evaluate', action: 'PASS: All criteria met', timestamp: new Date() }]
+        });
+      }
+      
+      if (section2Content) {
+        loadedSections.push({
+          id: 2,
+          title: section2Title || 'Section 2',
+          content: section2Content,
+          status: 'fail' as SectionStatus,
+          log: [
+            { agent: 'Evaluate', action: 'FAIL: Too long, unclear risk methodology', timestamp: new Date() },
+            { agent: 'Optimize', action: 'Proposal: Shorten to 100 words, clarify approach', timestamp: new Date() }
+          ]
+        });
+      }
+      
+      if (section3Content) {
+        loadedSections.push({
+          id: 3,
+          title: section3Title || 'Section 3',
+          content: section3Content,
+          status: 'fail' as SectionStatus,
+          log: [
+            { agent: 'Evaluate', action: 'FAIL: Missing mandatory disclaimer', timestamp: new Date() },
+            { agent: 'Policy', action: 'Mandatory disclaimer required for compliance', timestamp: new Date() }
+          ]
+        });
+      }
+      
+      if (loadedSections.length > 0) {
+        setSections(loadedSections);
+        
+        // Update initial message
+        const sectionMessages = loadedSections.map((sec, idx) => 
+          `${idx === 0 ? '✓' : '✗'} Section ${idx + 1} (${sec.title}): ${idx === 0 ? 'PASS' : 'FAIL - Issues detected'}`
+        ).join('\n');
+        
+        setMessages([
+          {
+            role: 'agent',
+            agent: 'Evaluate Agent',
+            content: `Document evaluation completed:\n${sectionMessages}`
+          }
+        ]);
+        return;
+      }
+    }
+
     // Check if coming from chat-only flow (user answered questions)
     const investmentBackground = sessionStorage.getItem('investmentBackground');
     const riskAssessment = sessionStorage.getItem('riskAssessment');
     const technicalStrategy = sessionStorage.getItem('technicalStrategy');
 
-    // Check if coming from manual segmentation
+    // Check if coming from manual segmentation (old format - fallback)
     const definedSectionsStr = sessionStorage.getItem('definedSections');
 
     if (definedSectionsStr) {
@@ -171,6 +241,7 @@ export default function DocumentPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [hasComplianceIssue, setHasComplianceIssue] = useState(false);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [showAgentDashboard, setShowAgentDashboard] = useState(false);
 
   const handleEvaluateSection = (sectionId: number) => {
     const section = sections.find(s => s.id === sectionId);
@@ -205,8 +276,8 @@ export default function DocumentPage() {
 
   const handleModifySection = (sectionId: number) => {
     if (editingSectionId === sectionId) {
-      // Check for compliance issues when saving Section 3
-      if (sectionId === 3 && editContent.toLowerCase().includes('tobacco industry')) {
+      // Check for compliance issues when saving ANY section
+      if (editContent.toLowerCase().includes('tobacco industry')) {
         // Compliance Agent blocks the save
         setHasComplianceIssue(true);
         
@@ -214,6 +285,7 @@ export default function DocumentPage() {
           if (s.id === sectionId) {
             return {
               ...s,
+              status: 'fail', // Mark section as failed
               log: [...s.log, { agent: 'Compliance', action: 'BLOCKED: Prohibited term "tobacco industry" detected', timestamp: new Date() }]
             };
           }
@@ -223,7 +295,7 @@ export default function DocumentPage() {
         const newMessage: Message = {
           role: 'agent',
           agent: 'Compliance Agent',
-          content: '⚠️ WARNING: Your modification contains "tobacco industry" which violates our company\'s KYC (Know Your Customer) compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. Please remove or replace this term before saving.'
+          content: `⚠️ COMPLIANCE VIOLATION: Your modification to Section ${sectionId} contains "tobacco industry" which violates our company\'s KYC (Know Your Customer) compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED. Please remove or replace this term before saving.`
         };
         setMessages(prevMessages => [...prevMessages, newMessage]);
         return; // Don't save, keep in edit mode
@@ -323,6 +395,27 @@ export default function DocumentPage() {
 
   const canSubmit = sections.every(s => s.status === 'pass');
 
+  const highlightProhibitedTerms = (text: string) => {
+    const prohibitedTerm = 'tobacco industry';
+    const regex = new RegExp(`(${prohibitedTerm})`, 'gi');
+    const parts = text.split(regex);
+    
+    return parts.map((part, index) => {
+      if (part.toLowerCase() === prohibitedTerm.toLowerCase()) {
+        return (
+          <span key={index} className="bg-red-600 text-white px-1 rounded font-bold border-2 border-red-800">
+            {part}
+          </span>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
+  const hasProhibitedTerm = (text: string) => {
+    return text.toLowerCase().includes('tobacco industry');
+  };
+
   const handleDownloadPDF = () => {
     let pdfContent = 'INVESTMENT DOCUMENT\n\n';
     pdfContent += '='.repeat(80) + '\n\n';
@@ -370,6 +463,11 @@ export default function DocumentPage() {
     const section = sections.find(s => s.id === sectionId);
     if (!section) return null;
 
+    // Get user's language preference
+    const userLanguage = typeof window !== 'undefined' 
+      ? sessionStorage.getItem('userLanguage') || 'english'
+      : 'english';
+
     try {
       setIsAIProcessing(true);
 
@@ -381,7 +479,8 @@ export default function DocumentPage() {
         body: JSON.stringify({
           sectionContent: section.content,
           sectionTitle: section.title,
-          userPrompt: userPrompt
+          userPrompt: userPrompt,
+          language: userLanguage // Pass language preference
         })
       });
 
@@ -429,21 +528,22 @@ export default function DocumentPage() {
           const revisedContent = await callLLMForOptimization(mentionedSection, inputValue);
           
           if (revisedContent) {
-            // COMPLIANCE CHECK: Validate AI-generated content for Section 3
-            if (mentionedSection === 3 && revisedContent.toLowerCase().includes('tobacco industry')) {
+            // COMPLIANCE CHECK: Validate AI-generated content for ANY section
+            if (revisedContent.toLowerCase().includes('tobacco industry')) {
               // Compliance Agent blocks AI-generated content with forbidden terms
               const complianceWarning: Message = {
                 role: 'agent',
                 agent: 'Compliance Agent',
-                content: '⚠️ COMPLIANCE ALERT: The AI-generated content contains "tobacco industry" which violates our company\'s KYC compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The content has NOT been updated. Please modify your request to exclude prohibited terms.'
+                content: `⚠️ COMPLIANCE VIOLATION: The AI-generated content for Section ${mentionedSection} contains "tobacco industry" which violates our company\'s KYC compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED and content has NOT been updated. Please modify your request to exclude prohibited terms.`
               };
               setMessages(prev => [...prev, complianceWarning]);
 
-              // Add to decision log
+              // Add to decision log and mark section as FAIL
               setSections(prevSections => prevSections.map(s => {
                 if (s.id === mentionedSection) {
                   return {
                     ...s,
+                    status: 'fail',
                     log: [...s.log, { 
                       agent: 'Compliance', 
                       action: 'BLOCKED: AI-generated content contains prohibited term "tobacco industry"', 
@@ -454,19 +554,19 @@ export default function DocumentPage() {
                 return s;
               }));
 
-              setInputValue('');
-              return;
+              return; // Stop here, don't update content
             }
 
-            // Compliance check passed - update the section with AI-generated content
+            // No compliance issues - proceed with update
             setSections(prevSections => prevSections.map(s => {
               if (s.id === mentionedSection) {
                 return {
                   ...s,
                   content: revisedContent,
+                  status: 'pass',
                   log: [...s.log, { 
                     agent: 'Optimize', 
-                    action: 'AI-optimized content based on user request', 
+                    action: 'AI optimized content successfully, status updated to PASS', 
                     timestamp: new Date() 
                   }]
                 };
@@ -477,7 +577,7 @@ export default function DocumentPage() {
             const successMessage: Message = {
               role: 'agent',
               agent: 'Optimize Agent',
-              content: `✓ Section ${mentionedSection} has been successfully optimized using AI. The content has been updated based on your requirements.`
+              content: `✓ Section ${mentionedSection} has been optimized based on your request. The content has been updated and the section status is now PASS.`
             };
             setMessages(prev => [...prev, successMessage]);
           }
@@ -489,7 +589,7 @@ export default function DocumentPage() {
           };
           setMessages(prev => [...prev, errorMessage]);
         }
-        
+
         setInputValue('');
         return;
       }
@@ -646,7 +746,19 @@ export default function DocumentPage() {
               ))}
             </div>
 
-            <div className="flex justify-center">
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={() => router.push('/')}
+                className="px-8 py-4 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-bold text-lg shadow-md"
+              >
+                ← Back to Main Page
+              </button>
+              <button
+                onClick={() => setShowAgentDashboard(true)}
+                className="px-8 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-bold text-lg shadow-md"
+              >
+                📊 Agent Dashboard
+              </button>
               <button
                 onClick={handleDownloadPDF}
                 className="px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold text-lg shadow-md"
@@ -698,21 +810,39 @@ export default function DocumentPage() {
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
                         className={`w-full text-slate-700 mb-2 leading-relaxed p-3 rounded-lg focus:outline-none focus:ring-2 min-h-[120px] ${
-                          hasComplianceIssue && section.id === 3
+                          hasComplianceIssue && hasProhibitedTerm(editContent)
                             ? 'border-4 border-red-600 bg-red-50 focus:ring-red-500'
                             : 'border-2 border-blue-400 focus:ring-blue-500'
                         }`}
                       />
-                      {hasComplianceIssue && section.id === 3 && editContent.toLowerCase().includes('tobacco industry') && (
-                        <div className="mb-2 p-2 bg-red-100 border border-red-400 rounded text-red-800 text-sm">
-                          <strong>⚠️ Compliance Issue:</strong> The term "tobacco industry" is highlighted as prohibited content.
+                      {hasComplianceIssue && hasProhibitedTerm(editContent) && (
+                        <div className="mb-2 p-3 bg-red-100 border-2 border-red-500 rounded-lg">
+                          <div className="text-red-800 text-sm font-bold mb-2">
+                            ⚠️ Compliance Violation Detected:
+                          </div>
+                          <div className="text-red-700 text-sm leading-relaxed">
+                            {highlightProhibitedTerms(editContent)}
+                          </div>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <p className="text-slate-700 mb-4 leading-relaxed">
-                      {section.content}
-                    </p>
+                    <div>
+                      {hasProhibitedTerm(section.content) && section.status === 'fail' ? (
+                        <div className="mb-4">
+                          <div className="mb-2 p-2 bg-red-100 border-2 border-red-500 rounded text-red-800 text-sm font-bold">
+                            ⚠️ Compliance Violation: Prohibited terms detected
+                          </div>
+                          <p className="text-slate-700 leading-relaxed">
+                            {highlightProhibitedTerms(section.content)}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-slate-700 mb-4 leading-relaxed">
+                          {section.content}
+                        </p>
+                      )}
+                    </div>
                   )}
 
                   <div className="flex gap-3">
@@ -843,6 +973,12 @@ export default function DocumentPage() {
           </div>
         )}
       </div>
+
+      {/* Agent Dashboard Modal */}
+      <AgentDashboard 
+        isOpen={showAgentDashboard}
+        onClose={() => setShowAgentDashboard(false)}
+      />
     </div>
   );
 }
