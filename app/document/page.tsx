@@ -320,7 +320,7 @@ export default function DocumentPage() {
         const newMessage: Message = {
           role: 'agent',
           agent: 'Compliance Agent',
-          content: `⚠️ COMPLIANCE VIOLATION: Your modification to Section ${sectionId} contains "tobacco industry" which violates our company\'s KYC (Know Your Customer) compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED. Please remove or replace this term before saving.`
+          content: `⚠️ COMPLIANCE VIOLATION: Your modification to Section ${getSectionPosition(sectionId)} contains "tobacco industry" which violates our company\'s KYC (Know Your Customer) compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED. Please remove or replace this term before saving.`
         };
         setMessages(prevMessages => [...prevMessages, newMessage]);
         return; // Don't save, keep in edit mode
@@ -469,19 +469,61 @@ export default function DocumentPage() {
     window.URL.revokeObjectURL(url);
   };
 
-  const detectSection = (input: string): number | null => {
+  // Get section position (1-based index) in the sections array
+  const getSectionPosition = (sectionId: number): number => {
+    const index = sections.findIndex(s => s.id === sectionId);
+    return index >= 0 ? index + 1 : sectionId; // Fallback to ID if not found
+  };
+
+  // Detect section by position (index) in the sections array, not by name or ID
+  const detectSectionByPosition = (input: string): number | null => {
     const lower = input.toLowerCase();
-    if (lower.includes('section 2') || lower.includes('risk assessment')) return 2;
-    if (lower.includes('section 3') || lower.includes('technical strategy')) return 3;
+    
+    // Extract section number from user input (e.g., "section 2", "section 3")
+    const sectionMatch = lower.match(/section\s*(\d+)/);
+    if (sectionMatch) {
+      const position = parseInt(sectionMatch[1], 10);
+      // Position is 1-based, check if it's within bounds
+      if (position >= 1 && position <= sections.length) {
+        // Return the actual section ID at this position (index = position - 1)
+        return sections[position - 1].id;
+      }
+    }
+    
+    // Fallback: try to match by section title keywords (for backward compatibility)
+    // But still map to position-based ID
+    for (let i = 0; i < sections.length; i++) {
+      const sectionTitle = sections[i].title.toLowerCase();
+      // Check if input contains significant keywords from the title
+      const titleWords = sectionTitle.split(/[\s:+]+/).filter(w => w.length > 3);
+      if (titleWords.some(word => lower.includes(word))) {
+        return sections[i].id;
+      }
+    }
+    
     return null;
   };
 
-  const detectSectionForModify = (input: string): number | null => {
-    const lower = input.toLowerCase();
-    if (lower.includes('section 1') || lower.includes('investment background')) return 1;
-    if (lower.includes('section 2') || lower.includes('risk assessment')) return 2;
-    if (lower.includes('section 3') || lower.includes('technical strategy')) return 3;
+  // For "fix" command - only sections 2 and 3 can be fixed
+  const detectSection = (input: string): number | null => {
+    const sectionId = detectSectionByPosition(input);
+    if (!sectionId) return null;
+    
+    // Find the position (index) of this section
+    const sectionIndex = sections.findIndex(s => s.id === sectionId);
+    if (sectionIndex === -1) return null;
+    
+    // Only allow fixing sections at position 2 or 3 (index 1 or 2)
+    if (sectionIndex === 1 || sectionIndex === 2) {
+      return sectionId;
+    }
+    
     return null;
+  };
+
+  // For modify/optimize command - any section can be modified
+  const detectSectionForModify = (input: string): number | null => {
+    return detectSectionByPosition(input);
   };
 
   const callLLMForOptimization = async (sectionId: number, userPrompt: string) => {
@@ -552,7 +594,7 @@ export default function DocumentPage() {
         const processingMessage: Message = {
           role: 'agent',
           agent: 'Optimize Agent',
-          content: `Processing your request for Section ${mentionedSection}... AI is analyzing and optimizing the content.`
+          content: `Processing your request for Section ${getSectionPosition(mentionedSection)}... AI is analyzing and optimizing the content.`
         };
         setMessages(prev => [...prev, processingMessage]);
 
@@ -566,7 +608,7 @@ export default function DocumentPage() {
               const complianceWarning: Message = {
                 role: 'agent',
                 agent: 'Compliance Agent',
-                content: `⚠️ COMPLIANCE VIOLATION: The AI-generated content for Section ${mentionedSection} contains "tobacco industry" which violates our company\'s KYC compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED and content has NOT been updated. Please modify your request to exclude prohibited terms.`
+                content: `⚠️ COMPLIANCE VIOLATION: The AI-generated content for Section ${getSectionPosition(mentionedSection)} contains "tobacco industry" which violates our company\'s KYC compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED and content has NOT been updated. Please modify your request to exclude prohibited terms.`
               };
               setMessages(prev => [...prev, complianceWarning]);
 
@@ -609,7 +651,7 @@ export default function DocumentPage() {
             const successMessage: Message = {
               role: 'agent',
               agent: 'Optimize Agent',
-              content: `✓ Section ${mentionedSection} has been optimized based on your request. The content has been updated and the section status is now PASS.`
+              content: `✓ Section ${getSectionPosition(mentionedSection)} has been optimized based on your request. The content has been updated and the section status is now PASS.`
             };
             setMessages(prev => [...prev, successMessage]);
           }
@@ -673,7 +715,7 @@ export default function DocumentPage() {
           agentMessage = {
             role: 'agent',
             agent: 'Optimize Agent',
-            content: `Section ${sectionId} "${section?.title}" has been fixed and optimized. Status updated to PASS. ✓`
+            content: `Section ${getSectionPosition(sectionId)} "${section?.title}" has been fixed and optimized. Status updated to PASS. ✓`
           };
         } else {
           agentMessage = {
@@ -757,7 +799,7 @@ export default function DocumentPage() {
             </div>
 
             <div className="space-y-6 mb-8">
-              {sections.map(section => (
+              {sections.map((section, index) => (
                 <div
                   key={section.id}
                   className={`border-4 rounded-xl p-6 ${getSectionColor(section.status)}`}
@@ -765,7 +807,7 @@ export default function DocumentPage() {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h2 className="text-xl font-bold text-slate-800 mb-2">
-                        Section {section.id}: {section.title}
+                        Section {index + 1}: {section.title}
                       </h2>
                       {getStatusBadge(section.status)}
                     </div>
@@ -802,7 +844,7 @@ export default function DocumentPage() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
-              {sections.map(section => (
+              {sections.map((section, index) => (
                 <div
                   key={section.id}
                   className={`border-4 rounded-xl p-6 transition-all ${getSectionColor(section.status)}`}
@@ -810,7 +852,7 @@ export default function DocumentPage() {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h2 className="text-xl font-bold text-slate-800 mb-2">
-                        Section {section.id}: {section.title}
+                        Section {index + 1}: {section.title}
                       </h2>
                       {getStatusBadge(section.status)}
                     </div>
