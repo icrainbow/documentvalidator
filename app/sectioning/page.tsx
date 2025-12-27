@@ -68,7 +68,7 @@ export default function SectioningPage() {
   const [showAgentDashboard, setShowAgentDashboard] = useState(false);
 
   // Load merged content from session storage if available and build document display
-  useState(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const section1Content = sessionStorage.getItem('section1_content');
       const section1Title = sessionStorage.getItem('section1_title');
@@ -132,13 +132,11 @@ export default function SectioningPage() {
 
         setDisplayedDocumentText(combinedText);
       }
-    } else {
-      setSectionsSource(PREDEFINED_SECTIONS);
     }
-  });
+  }, []); // Run once on mount
 
   const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-    if (dragCount >= 3) return; // Max 3 sections
+    if (dragCount >= 10) return; // Max 10 sections
     
     const container = containerRef.current;
     if (!container) return;
