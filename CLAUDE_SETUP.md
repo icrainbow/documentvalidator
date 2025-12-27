@@ -149,6 +149,25 @@ The system distinguishes between different command types:
 - Verify API key is correctly set
 - Restart dev server
 
+### Error: "API configuration error" or "Unexpected token '<'"
+
+**This means the API key is missing or .env.local doesn't exist**
+
+**Solution:**
+1. Create `.env.local` in project root:
+   ```bash
+   touch .env.local
+   ```
+2. Add your API key:
+   ```env
+   ANTHROPIC_API_KEY=sk-ant-api03-your-actual-key-here
+   ```
+3. Restart dev server:
+   ```bash
+   # Stop server (Ctrl+C)
+   npm run dev
+   ```
+
 ### Error: "Failed to call Claude API"
 
 **Possible causes:**

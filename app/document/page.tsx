@@ -484,6 +484,13 @@ export default function DocumentPage() {
         })
       });
 
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('API returned non-JSON response:', await response.text());
+        throw new Error('API configuration error. Please check ANTHROPIC_API_KEY in .env.local');
+      }
+
       if (!response.ok) {
         const errorData = await response.json();
         console.error('API error:', errorData);
