@@ -6,7 +6,13 @@ export type AgentId =
   | 'optimize-agent'
   | 'merge-agent'
   | 'evaluate-agent'
-  | 'compliance-agent';
+  | 'compliance-agent'
+  | 'extract-facts-agent'
+  | 'map-policy-agent'
+  | 'redteam-review-agent'
+  | 'request-evidence-agent'
+  | 'draft-client-comms-agent'
+  | 'write-audit-agent';
 
 export type AgentMode = 'fake' | 'real';
 
