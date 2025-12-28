@@ -264,6 +264,8 @@ export default function DocumentPage() {
   const [editingSectionId, setEditingSectionId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState<string>('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [orchestrationResult, setOrchestrationResult] = useState<any | null>(null);
+  const [isOrchestrating, setIsOrchestrating] = useState(false);
   const [hasComplianceIssue, setHasComplianceIssue] = useState(false);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [showAgentDashboard, setShowAgentDashboard] = useState(false);
@@ -416,6 +418,56 @@ export default function DocumentPage() {
       agent: 'System',
       content: '✓ Submission successfully! Your submission has been recorded.'
     }]);
+  };
+
+  const handleFullComplianceReview = async () => {
+    setIsOrchestrating(true);
+    setOrchestrationResult(null);
+    
+    try {
+      // Use the first section for review
+      const sectionToReview = sections[0];
+      
+      const response = await fetch('/api/orchestrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          flow_id: 'compliance-review-v1',
+          document_id: 'DOC-' + Date.now(),
+          sections: [{
+            id: String(sectionToReview.id),
+            title: sectionToReview.title,
+            content: sectionToReview.content
+          }],
+          options: {
+            language: 'english',
+            tone: 'formal',
+            mode: 'fake'
+          }
+        })
+      });
+      
+      const result = await response.json();
+      setOrchestrationResult(result);
+      
+      // Add a chat message about the orchestration
+      if (result.ok) {
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          agent: 'Orchestrator',
+          content: `Full compliance review completed. Decision: ${result.decision.next_action}. ${result.execution.steps.length} agents executed.`
+        }]);
+      }
+    } catch (error: any) {
+      console.error('Orchestration error:', error);
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: `❌ Orchestration failed: ${error.message}`
+      }]);
+    } finally {
+      setIsOrchestrating(false);
+    }
   };
 
   const canSubmit = sections.every(s => s.status === 'pass');
@@ -985,11 +1037,141 @@ export default function DocumentPage() {
                   >
                     📊 Agent Dashboard
                   </button>
+                  
+                  <button
+                    onClick={handleFullComplianceReview}
+                    disabled={isOrchestrating || isSubmitted}
+                    className={`w-full px-6 py-3 rounded-lg transition-colors font-semibold shadow-sm ${
+                      isOrchestrating || isSubmitted
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {isOrchestrating ? '🔄 Running Review...' : '🔍 Run Full Compliance Review'}
+                  </button>
                 </div>
                 {!canSubmit && !isSubmitted && (
                   <p className="text-sm text-red-600 mt-2 text-center font-semibold">
                     ⚠️ All sections must pass evaluation before submission
                   </p>
+                )}
+                
+                {/* Orchestration Result Panel */}
+                {orchestrationResult && (
+                  <div className="mt-6 bg-slate-50 border-2 border-slate-300 rounded-xl p-6">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                      <span>🎯</span> Compliance Review Results
+                    </h3>
+                    
+                    {/* Parent Trace ID */}
+                    <div className="mb-4 text-xs text-slate-600 font-mono bg-white px-3 py-2 rounded border border-slate-200">
+                      Trace: {orchestrationResult.parent_trace_id}
+                    </div>
+                    
+                    {/* Decision */}
+                    <div className={`mb-4 p-4 rounded-lg border-2 ${
+                      orchestrationResult.decision?.next_action === 'ready_to_send' || orchestrationResult.decision?.next_action === 'approved'
+                        ? 'bg-green-50 border-green-400'
+                        : orchestrationResult.decision?.next_action === 'rejected'
+                        ? 'bg-red-50 border-red-400'
+                        : 'bg-yellow-50 border-yellow-400'
+                    }`}>
+                      <div className="font-bold text-sm mb-1">
+                        Decision: <span className="uppercase">{orchestrationResult.decision?.next_action}</span>
+                      </div>
+                      <div className="text-sm text-slate-700">{orchestrationResult.decision?.reason}</div>
+                    </div>
+                    
+                    {/* Agent Timeline */}
+                    <div className="mb-4">
+                      <h4 className="font-semibold text-sm text-slate-700 mb-2">Agent Timeline ({orchestrationResult.execution?.steps?.length || 0} steps)</h4>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {orchestrationResult.execution?.steps?.map((step: any, idx: number) => (
+                          <div key={idx} className="flex items-center gap-2 text-xs bg-white px-3 py-2 rounded border border-slate-200">
+                            <span className={`w-2 h-2 rounded-full ${
+                              step.status === 'success' ? 'bg-green-500' : step.status === 'error' ? 'bg-red-500' : 'bg-slate-400'
+                            }`}></span>
+                            <span className="font-mono text-slate-600 flex-1">{step.agent_id}</span>
+                            <span className="text-slate-500">{step.latency_ms}ms</span>
+                            <span className="text-slate-400 font-mono text-[10px]">{step.trace_id?.substring(0, 12)}...</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* Artifacts Counts */}
+                    <div className="mb-4 grid grid-cols-2 gap-2">
+                      <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
+                        <div className="font-semibold text-slate-600">Facts</div>
+                        <div className="text-lg font-bold text-slate-800">{orchestrationResult.artifacts?.facts?.facts?.length || 0}</div>
+                      </div>
+                      <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
+                        <div className="font-semibold text-slate-600">Policy Mappings</div>
+                        <div className="text-lg font-bold text-slate-800">{orchestrationResult.artifacts?.policy_mappings?.mappings?.length || 0}</div>
+                      </div>
+                      <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
+                        <div className="font-semibold text-slate-600">Issues</div>
+                        <div className="text-lg font-bold text-red-600">{orchestrationResult.artifacts?.review_issues?.issues?.length || 0}</div>
+                      </div>
+                      <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
+                        <div className="font-semibold text-slate-600">Evidence Requests</div>
+                        <div className="text-lg font-bold text-slate-800">{orchestrationResult.artifacts?.evidence_requests?.requests?.length || 0}</div>
+                      </div>
+                    </div>
+                    
+                    {/* First 2 Issues */}
+                    {orchestrationResult.artifacts?.review_issues?.issues && orchestrationResult.artifacts.review_issues.issues.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="font-semibold text-sm text-slate-700 mb-2">Top Issues</h4>
+                        <div className="space-y-2">
+                          {orchestrationResult.artifacts.review_issues.issues.slice(0, 2).map((issue: any, idx: number) => (
+                            <div key={idx} className={`p-3 rounded-lg border-l-4 text-xs ${
+                              issue.severity === 'critical' ? 'bg-red-50 border-red-500' :
+                              issue.severity === 'high' ? 'bg-orange-50 border-orange-500' :
+                              'bg-yellow-50 border-yellow-500'
+                            }`}>
+                              <div className="font-bold mb-1 uppercase text-[10px]">{issue.severity}</div>
+                              <div className="text-slate-700 mb-1">{issue.description}</div>
+                              {issue.suggested_fix && (
+                                <div className="text-slate-600 italic">→ {issue.suggested_fix}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* First Evidence Request */}
+                    {orchestrationResult.artifacts?.evidence_requests?.requests && orchestrationResult.artifacts.evidence_requests.requests.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="font-semibold text-sm text-slate-700 mb-2">Evidence Request</h4>
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-xs text-slate-700">
+                          {orchestrationResult.artifacts.evidence_requests.requests[0].request_text}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Client Communication Preview */}
+                    {orchestrationResult.artifacts?.client_communication && (
+                      <div className="mb-4">
+                        <h4 className="font-semibold text-sm text-slate-700 mb-2">Client Communication</h4>
+                        <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
+                          <div className="font-bold mb-1">{orchestrationResult.artifacts.client_communication.subject}</div>
+                          <div className="text-slate-600">
+                            {orchestrationResult.artifacts.client_communication.body?.substring(0, 200)}
+                            {orchestrationResult.artifacts.client_communication.body?.length > 200 && '...'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Audit Log */}
+                    {orchestrationResult.artifacts?.audit_log && (
+                      <div className="text-xs text-slate-600 bg-white px-3 py-2 rounded border border-slate-200">
+                        <span className="font-semibold">Audit:</span> {orchestrationResult.artifacts.audit_log.audit_id} @ {new Date(orchestrationResult.artifacts.audit_log.timestamp).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
