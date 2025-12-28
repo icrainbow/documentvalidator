@@ -304,7 +304,7 @@ export default function DocumentPage() {
   const handleModifySection = (sectionId: number) => {
     if (editingSectionId === sectionId) {
       // Check for compliance issues when saving ANY section
-      if (editContent.toLowerCase().includes('tobacco industry')) {
+      if (editContent.toLowerCase().includes('tobacco')) {
         // Compliance Agent blocks the save
         setHasComplianceIssue(true);
         
@@ -313,7 +313,7 @@ export default function DocumentPage() {
             return {
               ...s,
               status: 'fail', // Mark section as failed
-              log: [...s.log, { agent: 'Compliance', action: 'BLOCKED: Prohibited term "tobacco industry" detected', timestamp: new Date() }]
+              log: [...s.log, { agent: 'Compliance', action: 'BLOCKED: Prohibited term "tobacco" detected', timestamp: new Date() }]
             };
           }
           return s;
@@ -322,7 +322,7 @@ export default function DocumentPage() {
         const newMessage: Message = {
           role: 'agent',
           agent: 'Compliance Agent',
-          content: `⚠️ COMPLIANCE VIOLATION: Your modification to Section ${getSectionPosition(sectionId)} contains "tobacco industry" which violates our company\'s KYC (Know Your Customer) compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED. Please remove or replace this term before saving.`
+          content: `⚠️ COMPLIANCE VIOLATION: Your modification to Section ${getSectionPosition(sectionId)} contains "tobacco" which violates our company\'s KYC (Know Your Customer) compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED. Please remove or replace this term before saving.`
         };
         setMessages(prevMessages => [...prevMessages, newMessage]);
         return; // Don't save, keep in edit mode
@@ -655,12 +655,12 @@ export default function DocumentPage() {
           
           if (revisedContent) {
             // COMPLIANCE CHECK: Validate AI-generated content for ANY section
-            if (revisedContent.toLowerCase().includes('tobacco industry')) {
+            if (revisedContent.toLowerCase().includes('tobacco')) {
               // Compliance Agent blocks AI-generated content with forbidden terms
               const complianceWarning: Message = {
                 role: 'agent',
                 agent: 'Compliance Agent',
-                content: `⚠️ COMPLIANCE VIOLATION: The AI-generated content for Section ${getSectionPosition(mentionedSection)} contains "tobacco industry" which violates our company\'s KYC compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED and content has NOT been updated. Please modify your request to exclude prohibited terms.`
+                content: `⚠️ COMPLIANCE VIOLATION: The AI-generated content for Section ${getSectionPosition(mentionedSection)} contains "tobacco" which violates our company\'s KYC compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED and content has NOT been updated. Please modify your request to exclude prohibited terms.`
               };
               setMessages(prev => [...prev, complianceWarning]);
 
@@ -672,7 +672,7 @@ export default function DocumentPage() {
                     status: 'fail',
                     log: [...s.log, { 
                       agent: 'Compliance', 
-                      action: 'BLOCKED: AI-generated content contains prohibited term "tobacco industry"', 
+                      action: 'BLOCKED: AI-generated content contains prohibited term "tobacco"', 
                       timestamp: new Date() 
                     }]
                   };
