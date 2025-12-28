@@ -40,7 +40,12 @@ export default function ChatEntryPage() {
     resetTranscript 
   } = useSpeechRecognition(detectedLanguage);
   
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<Array<{
+    role: 'system' | 'user';
+    content: string;
+    agentId?: string;
+    traceId?: string;
+  }>>([
     {
       role: 'system',
       content: "Hi, I'm your AI Investment Assistant. I'll guide you through creating your investment profile. Let's start with your investment background. Please tell me about your experience with investing, time horizons, investment instruments you use, and your financial goals."
@@ -213,7 +218,10 @@ export default function ChatEntryPage() {
 
   const handleSendMessage = async () => {
     if (inputValue.trim() && !isProcessing) {
-      const userMessage = { role: 'user', content: inputValue };
+      const userMessage: { role: 'user' | 'system'; content: string; agentId?: string; traceId?: string } = { 
+        role: 'user' as const, 
+        content: inputValue 
+      };
       
       // Detect language from user input
       const userLanguage = detectLanguage(inputValue);
@@ -323,23 +331,42 @@ export default function ChatEntryPage() {
         } else {
           // User wants to add more - validate this additional input
           try {
-            const validationResponse = await fetch('/api/validate-topic', {
+            // NEW: Use unified agent endpoint instead of validate-topic
+            const agentResponse = await fetch('/api/agent', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                topic: currentTopic.id,
-                userMessage: inputValue,
-                existingContent,
-                language: userLanguage // Pass detected language
+                agent_id: 'validate-agent',
+                input: {
+                  topic: currentTopic.id,
+                  userMessage: inputValue,
+                  existingContent,
+                  language: userLanguage
+                },
+                mode: 'fake'
               })
             });
 
-            if (!validationResponse.ok) {
+            if (!agentResponse.ok) {
               throw new Error('Failed to validate input');
             }
 
-            const result = await validationResponse.json();
+            const agentResult = await agentResponse.json();
+            
+            // Log agent execution for observability
+            console.log('[Agent Execution]', {
+              agent_id: agentResult.agent_id,
+              trace_id: agentResult.trace_id,
+              mode: agentResult.mode,
+              latency_ms: agentResult.metadata?.latency_ms,
+              status: agentResult.metadata?.status
+            });
 
+            if (!agentResult.ok) {
+              throw new Error(agentResult.error || 'Agent execution failed');
+            }
+
+            const result = agentResult.output;
             const localizedMsg = getLocalizedMessages(userLanguage);
 
             if (result.is_relevant && result.content_fragment) {
@@ -351,7 +378,10 @@ export default function ChatEntryPage() {
               // Ask if they want to add more (in detected language)
               setMessages(prev => [...prev, {
                 role: 'system',
-                content: localizedMsg.anythingElse
+                content: localizedMsg.anythingElse,
+                // NEW: Store agent metadata for display
+                agentId: agentResult.agent_id,
+                traceId: agentResult.trace_id
               }]);
               
               setWaitingForConfirmation(true);
@@ -364,7 +394,10 @@ export default function ChatEntryPage() {
               
               setMessages(prev => [...prev, {
                 role: 'system',
-                content: questionText + examplesText
+                content: questionText + examplesText,
+                // NEW: Store agent metadata
+                agentId: agentResult.agent_id,
+                traceId: agentResult.trace_id
               }]);
             }
           } catch (error) {
@@ -448,8 +481,8 @@ export default function ChatEntryPage() {
     setUploadedFile(file);
 
     // Show upload confirmation message
-    const uploadMessage = {
-      role: 'system',
+    const uploadMessage: { role: 'user' | 'system'; content: string; agentId?: string; traceId?: string } = {
+      role: 'system' as const,
       content: `[System]:\nDocument "${file.name}" uploaded successfully.\nClick "Evaluate" to proceed.`
     };
     
@@ -490,8 +523,8 @@ export default function ChatEntryPage() {
     const fileName = uploadedFile.name.toLowerCase();
     
     if (fileName === 'badformat.word' || fileName.includes('badformat')) {
-      const explanationMessage = {
-        role: 'system',
+      const explanationMessage: { role: 'user' | 'system'; content: string; agentId?: string; traceId?: string } = {
+        role: 'system' as const,
         content: '[Evaluate Agent]:\nThe uploaded document lacks reliable structural markers.\nRedirecting to manual section definition tool.'
       };
       setMessages(prev => [...prev, explanationMessage]);
@@ -678,7 +711,21 @@ export default function ChatEntryPage() {
                     >
                       {msg.role === 'system' && (
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-slate-600 font-medium text-xs uppercase tracking-wide">System</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-600 font-medium text-xs uppercase tracking-wide">System</span>
+                            
+                            {/* NEW: Display agent metadata if available */}
+                            {msg.agentId && (
+                              <span className="text-xs text-slate-400 font-mono">
+                                [{msg.agentId}]
+                              </span>
+                            )}
+                            {msg.traceId && (
+                              <span className="text-xs text-slate-300 font-mono" title={`Trace ID: ${msg.traceId}`}>
+                                {msg.traceId.substring(0, 12)}...
+                              </span>
+                            )}
+                          </div>
                           
                           {/* Voice Button - Only show for system messages if speech is supported */}
                           {isSupported && (
