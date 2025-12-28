@@ -46,6 +46,54 @@ npm start
 
 ## Application Flows
 
+## Troubleshooting
+
+### "Cannot find module './XXX.js'" Error
+
+This is a known Next.js webpack cache corruption issue that can occur during development, especially after frequent hot-reloads or code changes.
+
+**Quick Fix:**
+
+```bash
+npm run clean
+npm run dev
+```
+
+Or use the combined command:
+
+```bash
+npm run dev:clean
+```
+
+**Manual Fix:**
+
+```bash
+# Stop the dev server (Ctrl+C)
+rm -rf .next
+rm -rf node_modules/.cache
+npm run dev
+```
+
+**Why This Happens:**
+
+Next.js uses webpack to build and cache modules. During development with hot-reload, the cache can sometimes become corrupted, leading to references to non-existent chunk files (like `./276.js`, `./682.js`, etc.).
+
+**Prevention:**
+
+The project's `next.config.js` has been optimized to reduce cache corruption by:
+- Using named module IDs instead of hashed IDs
+- Configuring stable filesystem caching
+- Disabling certain aggressive optimizations in dev mode
+
+If the issue persists frequently, try:
+1. Restarting your computer (clears file system cache)
+2. Updating Next.js to the latest version: `npm update next`
+3. Increasing your system's file descriptor limit (macOS): `ulimit -n 10240`
+
+---
+
+## Application Flows
+
 ### Flow 1: Chat-Only Input (User-Provided Content)
 
 1. **Home Page** - Answer 3 questions in chat:
