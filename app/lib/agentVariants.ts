@@ -17,6 +17,11 @@ export interface AgentVariant {
   compatibleWith: string[]; // IDs of compatible agents in other categories
   requires?: string[]; // Required agents in other categories
   prohibitedTerms?: string[]; // For compliance agents
+  applicableTo?: {  // NEW - optional metadata for UI display
+    segments: string[];
+    jurisdictions: string[];
+    note: string;
+  };
 }
 
 export const AGENT_VARIANTS: Record<string, AgentVariant> = {
@@ -154,6 +159,180 @@ export const AGENT_VARIANTS: Record<string, AgentVariant> = {
       'Enhanced disclosure preservation'
     ],
     compatibleWith: ['compliance-enhanced', 'evaluation-enhanced']
+  },
+
+  // ===== NEW DEMO VARIANTS (Revision 2) =====
+  // COMPLIANCE VARIANTS
+  'compliance_standard_v1': {
+    id: 'compliance_standard_v1',
+    category: 'compliance',
+    name: 'Standard Compliance',
+    version: 'v1',
+    description: 'Retail/HNW compliance checks',
+    bestFor: ['Retail', 'HNW', 'Standard products'],
+    skills: [
+      'Prohibited terms detection (tobacco)',
+      'Basic policy checks',
+      'Risk disclosure validation',
+      'Standard regulatory framework'
+    ],
+    constraints: [
+      'Zero tolerance for restricted content'
+    ],
+    compatibleWith: ['evaluation_standard_v1', 'rewrite_standard_v1'],
+    prohibitedTerms: ['tobacco'],  // MINIMAL - demo focus
+    applicableTo: {
+      segments: ['Retail', 'HNW'],
+      jurisdictions: ['SG', 'EU', 'UK', 'US'],
+      note: 'Standard compliance for simple products'
+    }
+  },
+
+  'compliance_enhanced_uhnw_v1': {
+    id: 'compliance_enhanced_uhnw_v1',
+    category: 'compliance',
+    name: 'Enhanced Compliance (UHNW)',
+    version: 'v1',
+    description: 'Stringent UHNW compliance',
+    bestFor: ['UHNW'],
+    skills: [
+      'Advanced regulatory checks',
+      'Enhanced due diligence',
+      'UHNW-specific disclosures',
+      'Sophisticated product validation'
+    ],
+    constraints: [
+      'Mandatory for UHNW segment'
+    ],
+    compatibleWith: ['evaluation_standard_v1', 'evaluation_strict_v1', 'rewrite_policy_safe_v1'],
+    prohibitedTerms: ['tobacco'],  // MINIMAL - demo focus
+    applicableTo: {
+      segments: ['UHNW'],
+      jurisdictions: ['SG', 'CH', 'EU', 'UK', 'US'],
+      note: 'Required for UHNW clients'
+    }
+  },
+
+  'compliance_enhanced_ch_cic_v1': {
+    id: 'compliance_enhanced_ch_cic_v1',
+    category: 'compliance',
+    name: 'Enhanced Compliance (CH/CIC)',
+    version: 'v1',
+    description: 'Switzerland/CIC jurisdiction compliance',
+    bestFor: ['CIC', 'CH jurisdiction'],
+    skills: [
+      'CH regulatory framework',
+      'CIC-specific rules',
+      'Cross-border compliance',
+      'Enhanced documentation requirements'
+    ],
+    constraints: [
+      'Mandatory for CH jurisdiction',
+      'Mandatory for CIC segment'
+    ],
+    compatibleWith: ['evaluation_strict_v1', 'rewrite_policy_safe_v1'],
+    prohibitedTerms: ['tobacco'],  // MINIMAL - demo focus
+    applicableTo: {
+      segments: ['CIC', 'UHNW', 'Institutional'],
+      jurisdictions: ['CH'],
+      note: 'Required for CH jurisdiction or CIC segment'
+    }
+  },
+
+  // EVALUATION VARIANTS
+  'evaluation_standard_v1': {
+    id: 'evaluation_standard_v1',
+    category: 'evaluation',
+    name: 'Standard Evaluation',
+    version: 'v1',
+    description: 'Basic quality and completeness checks',
+    bestFor: ['Retail', 'HNW', 'UHNW', 'Simple to moderate products'],
+    skills: [
+      'Inconsistency detection',
+      'Basic disclosure checks',
+      'Clarity validation',
+      'Completeness assessment'
+    ],
+    constraints: [],
+    compatibleWith: ['compliance_standard_v1', 'compliance_enhanced_uhnw_v1', 'rewrite_standard_v1'],
+    applicableTo: {
+      segments: ['Retail', 'HNW', 'UHNW'],
+      jurisdictions: ['SG', 'EU', 'UK', 'US'],
+      note: 'Standard evaluation for most contexts'
+    }
+  },
+
+  'evaluation_strict_v1': {
+    id: 'evaluation_strict_v1',
+    category: 'evaluation',
+    name: 'Strict Evaluation',
+    version: 'v1',
+    description: 'Enhanced quality checks for complex products and jurisdictions',
+    bestFor: ['CIC', 'CH', 'Complex products'],
+    skills: [
+      'Deep logical analysis',
+      'Advanced disclosure validation',
+      'Regulatory compliance verification',
+      'Sophisticated product suitability checks'
+    ],
+    constraints: [
+      'Required for CH/CIC contexts'
+    ],
+    compatibleWith: ['compliance_enhanced_uhnw_v1', 'compliance_enhanced_ch_cic_v1', 'rewrite_policy_safe_v1'],
+    applicableTo: {
+      segments: ['CIC', 'UHNW', 'Institutional'],
+      jurisdictions: ['CH'],
+      note: 'Required for CH jurisdiction or CIC segment'
+    }
+  },
+
+  // REWRITE VARIANTS
+  'rewrite_standard_v1': {
+    id: 'rewrite_standard_v1',
+    category: 'rewrite',
+    name: 'Standard Rewrite',
+    version: 'v1',
+    description: 'Basic compliant text generation',
+    bestFor: ['Retail', 'HNW', 'Standard products'],
+    skills: [
+      'Basic compliant rewrites',
+      'Simple language improvements',
+      'Disclosure insertion'
+    ],
+    constraints: [
+      'Preserve original meaning'
+    ],
+    compatibleWith: ['compliance_standard_v1', 'evaluation_standard_v1'],
+    applicableTo: {
+      segments: ['Retail', 'HNW'],
+      jurisdictions: ['SG', 'EU', 'UK', 'US'],
+      note: 'Standard rewrite for simple products'
+    }
+  },
+
+  'rewrite_policy_safe_v1': {
+    id: 'rewrite_policy_safe_v1',
+    category: 'rewrite',
+    name: 'Policy-Safe Rewrite',
+    version: 'v1',
+    description: 'Policy-aware rewrites for complex contexts',
+    bestFor: ['UHNW', 'CIC', 'Institutional', 'Complex products'],
+    skills: [
+      'Policy-aware text generation',
+      'Regulatory language adaptation',
+      'Sophisticated disclosure integration',
+      'Jurisdiction-specific phrasing'
+    ],
+    constraints: [
+      'Must preserve all regulatory requirements',
+      'Enhanced accuracy validation'
+    ],
+    compatibleWith: ['compliance_enhanced_uhnw_v1', 'compliance_enhanced_ch_cic_v1', 'evaluation_standard_v1', 'evaluation_strict_v1'],
+    applicableTo: {
+      segments: ['UHNW', 'CIC', 'Institutional'],
+      jurisdictions: ['SG', 'CH', 'EU', 'UK', 'US'],
+      note: 'Policy-safe rewrite for high-value clients'
+    }
   }
 };
 

@@ -467,6 +467,9 @@ export default function DocumentPage() {
   // Track which section warnings have been signed off
   const [signedOffWarnings, setSignedOffWarnings] = useState<Set<number>>(new Set());
   
+  // AUDIT: Expansion state for Accepted Warnings section (collapsed by default)
+  const [showAcceptedWarnings, setShowAcceptedWarnings] = useState(false);
+  
   // Agents Drawer state
   const [showAgentsDrawer, setShowAgentsDrawer] = useState(false);
   
@@ -960,9 +963,18 @@ export default function DocumentPage() {
   const groupIssuesBySection = (issues: any[]): SectionBundle[] => {
     if (!issues || issues.length === 0) return [];
     
+    // AUDIT: Filter to only show ACTIVE (open) issues, not accepted warnings
+    const activeIssues = issues.filter(issue => {
+      const status = issue.status || 'open'; // default to 'open' for backward compatibility
+      return status === 'open';
+    });
+    
+    console.log('[groupIssuesBySection] Starting with', issues.length, 'total issues,', activeIssues.length, 'active');
+    console.log('[groupIssuesBySection] Sections:', sections.map(s => ({ id: s.id, title: s.title })));
+    
     // Group by sectionIndex - FIXED for real API Issue structure
     const grouped: Record<number, any[]> = {};
-    issues.forEach(issue => {
+    activeIssues.forEach(issue => {
       // Real API returns sectionId as string like "section-3"
       let sectionIndex = -1;
       
@@ -973,13 +985,16 @@ export default function DocumentPage() {
           const sectionId = parseInt(match[1]);
           // Find section index by ID
           sectionIndex = sections.findIndex(s => s.id === sectionId);
+          console.log(`[groupIssuesBySection] Issue sectionId="${issue.sectionId}" -> parsed ID=${sectionId} -> found at index=${sectionIndex}`);
         }
       } else if (issue.section_index !== undefined) {
         // Fallback for old demo format
         sectionIndex = issue.section_index;
+        console.log(`[groupIssuesBySection] Issue has section_index=${sectionIndex} (direct)`);
       } else if (issue.section_id !== undefined) {
         // Fallback for old demo format
         sectionIndex = sections.findIndex(s => s.id === issue.section_id);
+        console.log(`[groupIssuesBySection] Issue has section_id=${issue.section_id} -> found at index=${sectionIndex}`);
       }
       
       if (sectionIndex >= 0) {
@@ -987,6 +1002,8 @@ export default function DocumentPage() {
           grouped[sectionIndex] = [];
         }
         grouped[sectionIndex].push(issue);
+      } else {
+        console.warn('[groupIssuesBySection] Could not find section for issue:', issue);
       }
     });
     
@@ -1019,11 +1036,11 @@ export default function DocumentPage() {
       
       // Fallback to demo templates if no real remediation found (for backward compatibility)
       if (!proposedText) {
-        const policyViolationIssue = sectionIssues.find(issue => 
-          issue.type === 'policy_violation'
-        );
-        if (policyViolationIssue) {
-          proposedText = PROPOSED_FIX_TEMPLATES.policy_violation;
+      const policyViolationIssue = sectionIssues.find(issue => 
+        issue.type === 'policy_violation'
+      );
+      if (policyViolationIssue) {
+        proposedText = PROPOSED_FIX_TEMPLATES.policy_violation;
         }
       }
       
@@ -1063,6 +1080,17 @@ export default function DocumentPage() {
     const bundles = groupIssuesBySection(currentIssues);
     return computeParticipants(currentIssues, bundles);
   }, [currentIssues, reviewRunId]);
+  
+  /**
+   * FIX 2: Memoize grouped issues to ensure proper re-rendering when issues change
+   * This fixes the bug where section turns green but right-side issues remain
+   */
+  const groupedIssuesBundles = useMemo(() => {
+    console.log('[groupedIssuesBundles] Recomputing with currentIssues count:', currentIssues.length);
+    const bundles = groupIssuesBySection(currentIssues);
+    console.log('[groupedIssuesBundles] Computed', bundles.length, 'bundles');
+    return bundles;
+  }, [currentIssues, sections, orchestrationResult, reviewRunId]);
 
   /**
    * Phase 2-A: Generate a stable key for an issue (deterministic across renders)
@@ -1633,8 +1661,8 @@ export default function DocumentPage() {
       setSections(prev => prev.map(s => {
         if (s.id === sectionId) {
           return {
-            ...s,
-            status: newStatus,
+              ...s,
+              status: newStatus,
             log: [...s.log, { agent: 'AI Review', action: logAction, timestamp: new Date() }]
           };
         }
@@ -1643,15 +1671,43 @@ export default function DocumentPage() {
 
       // Update currentIssues with REAL API results
       const updatedIssues = (() => {
-        // Remove old issues for this section
-        const sectionKey = `section-${sectionId}`;
-        const filtered = currentIssues.filter(issue => issue.sectionId !== sectionKey);
+        // DEBUG: Log before filtering
+        console.log(`[handleReReviewSection] Before filter - sectionId: ${sectionId}, currentIssues count: ${currentIssues.length}`);
+        console.log('[handleReReviewSection] Current issues:', currentIssues.map(i => ({ 
+          sectionId: i.sectionId, 
+          section_id: (i as any).section_id,
+          title: i.title 
+        })));
         
-        // Add new REAL issues from API
-        return [...filtered, ...result.issues];
+        // Remove old issues for this section - ROBUST FILTERING
+        const sectionKey = `section-${sectionId}`;
+        const filtered = currentIssues.filter(issue => {
+          // Check all possible sectionId formats
+          if (issue.sectionId === sectionKey) return false; // String format "section-3"
+          if ((issue as any).section_id === sectionId) return false; // Number format (legacy)
+          if (issue.sectionId === sectionId.toString()) return false; // String number "3"
+          
+          // Also check if sectionId can be parsed to match
+          if (typeof issue.sectionId === 'string' && issue.sectionId.includes('-')) {
+            const match = issue.sectionId.match(/section-(\d+)/);
+            if (match && parseInt(match[1]) === sectionId) return false;
+          }
+          
+          return true; // Keep this issue (it's for a different section)
+        });
+        
+        // DEBUG: Log after filtering
+        console.log(`[handleReReviewSection] After filter - filtered count: ${filtered.length}, new issues from API: ${result.issues.length}`);
+        console.log('[handleReReviewSection] New issues from API:', result.issues);
+        
+        // Add new REAL issues from API (should be empty if section passes)
+        const final = [...filtered, ...result.issues];
+        console.log(`[handleReReviewSection] Final updatedIssues count: ${final.length}`);
+        return final;
       })();
       
       setCurrentIssues(updatedIssues);
+      console.log('[handleReReviewSection] ✓ setCurrentIssues called with', updatedIssues.length, 'issues');
       
       // CRITICAL: Also update orchestrationResult so the two stay in sync
       setOrchestrationResult((prev: any) => {
@@ -1681,7 +1737,7 @@ export default function DocumentPage() {
       if (signOff) {
         const newFingerprint = computeWarningsFingerprint(updatedIssues);
         if (newFingerprint !== signOff.warningsFingerprint) {
-          setSignOff(null);
+        setSignOff(null);
           // Remove from localStorage
           localStorage.removeItem(`doc:${docKey}:signoff`);
         }
@@ -2198,7 +2254,28 @@ export default function DocumentPage() {
                       <h2 className="text-xl font-bold text-slate-800 mb-2">
                         Section {index + 1}: {section.title}
                       </h2>
+                      <div className="flex items-center gap-2">
                       {getStatusBadge(section.status)}
+                        {/* AUDIT: Show accepted warnings count (non-blocking marker) */}
+                        {(() => {
+                          const acceptedWarningsInSection = currentIssues.filter(issue => {
+                            if (!issue.sectionId || typeof issue.sectionId !== 'string') return false;
+                            const issueSecId = issue.sectionId.match(/section-(\d+)/);
+                            const issueSectionId = issueSecId ? parseInt(issueSecId[1]) : null;
+                            return issueSectionId === section.id && 
+                                   issue.status === 'accepted' && 
+                                   issue.severity === 'WARNING';
+                          }).length;
+                          
+                          if (acceptedWarningsInSection === 0) return null;
+                          
+                          return (
+                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                              ⚠️ {acceptedWarningsInSection} warning{acceptedWarningsInSection > 1 ? 's' : ''} accepted
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
 
@@ -2317,34 +2394,34 @@ export default function DocumentPage() {
                         </span>
                         {orchestrationResult && (
                           <span className={`text-xs px-2 py-1 rounded font-semibold ${
-                            (orchestrationResult.metadata?.flow_version || selectedFlowId) === 'compliance-review-v1'
+                          (orchestrationResult.metadata?.flow_version || selectedFlowId) === 'compliance-review-v1'
                               ? 'bg-blue-100 text-blue-800'
                               : 'bg-purple-100 text-purple-800'
-                          }`}>
-                            {orchestrationResult.metadata?.flow_version || selectedFlowId}
+                        }`}>
+                          {orchestrationResult.metadata?.flow_version || selectedFlowId}
                           </span>
                         )}
-                      </div>
-                    </div>
+                        </div>
+                          </div>
 
                     {/* Compact Metrics Row */}
                     {orchestrationResult && (
                       <div className="grid grid-cols-2 gap-2 text-xs mb-3">
                         <div className="bg-slate-50 px-2 py-1 rounded">
                           <span className="font-semibold">Sections:</span> {sections.length}
-                        </div>
+                          </div>
                         <div className="bg-slate-50 px-2 py-1 rounded">
                           <span className="font-semibold">Issues:</span> {currentIssues.length}
                         </div>
                         {documentStatus.counts.totalFails > 0 && (
                           <div className="bg-red-50 px-2 py-1 rounded text-red-700">
                             <span className="font-semibold">Blocking:</span> {documentStatus.counts.totalFails}
-                          </div>
-                        )}
+                            </div>
+                          )}
                         {documentStatus.counts.totalWarnings > 0 && (
                           <div className="bg-yellow-50 px-2 py-1 rounded text-yellow-700">
                             <span className="font-semibold">Warnings:</span> {documentStatus.counts.totalWarnings}
-                          </div>
+                        </div>
                         )}
                       </div>
                     )}
@@ -2353,6 +2430,24 @@ export default function DocumentPage() {
                     <p className="text-xs text-slate-700 mb-3 leading-relaxed">
                       {documentStatus.explanation}
                     </p>
+
+                    {/* AUDIT: Accepted Warnings Summary - MUST show after Pass with Signature */}
+                    {currentIssues.filter(i => i.status === 'accepted' && i.severity === 'WARNING').length > 0 && (
+                      <div className="bg-purple-50 border-2 border-purple-300 rounded-lg p-3 mb-3">
+                        <div className="flex items-center gap-2 text-purple-900 mb-1.5">
+                          <span className="text-base">⚠️</span>
+                          <span className="font-bold text-sm">
+                            {currentIssues.filter(i => i.status === 'accepted' && i.severity === 'WARNING').length} warning{currentIssues.filter(i => i.status === 'accepted' && i.severity === 'WARNING').length > 1 ? 's' : ''} accepted with signature
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-purple-800">
+                          <span className="text-sm">✍️</span>
+                          <span className="text-sm font-semibold">
+                            [{Array.from(new Set(currentIssues.filter(i => i.status === 'accepted' && i.severity === 'WARNING' && i.acceptedBy).map(i => i.acceptedBy!))).join(', ') || 'Victoria'}] Warning accepted with signature
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Trace ID (secondary) */}
                     {orchestrationResult && (
@@ -2365,12 +2460,25 @@ export default function DocumentPage() {
                     <div className="flex flex-col gap-2">
                       <button
                         onClick={handleFullComplianceReview}
-                        disabled={isOrchestrating || isSubmitted}
+                        disabled={
+                          isOrchestrating || 
+                          isSubmitted || 
+                          (reviewConfig.validationStatus === 'required' || reviewConfig.validationStatus === 'failed')
+                        }
                         className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
-                          isOrchestrating || isSubmitted
+                          isOrchestrating || 
+                          isSubmitted || 
+                          (reviewConfig.validationStatus === 'required' || reviewConfig.validationStatus === 'failed')
                             ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                             : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg'
                         }`}
+                        title={
+                          reviewConfig.validationStatus === 'required' 
+                            ? 'Validate agent feasibility first' 
+                            : reviewConfig.validationStatus === 'failed'
+                            ? 'Fix validation errors first'
+                            : ''
+                        }
                       >
                         {isOrchestrating ? '🔄 Running Review...' : '🔍 Run Full Review'}
                       </button>
@@ -2437,7 +2545,8 @@ export default function DocumentPage() {
 
                       {/* Phase 2-D: Issues Grouped by Section */}
                       {currentIssues.length > 0 && (() => {
-                        const bundles = groupIssuesBySection(currentIssues);
+                        // FIX 2: Use memoized bundles for proper reactivity
+                        const bundles = groupedIssuesBundles;
                         
                         // Auto-expand FAIL bundles on first render
                         if (bundles.length > 0 && expandedBundles.size === 0) {
@@ -2511,30 +2620,35 @@ export default function DocumentPage() {
                                         >
                                           🔍 Jump to section
                                         </button>
-                                        {(bundle.status === 'fail' || bundle.status === 'warning') && (
-                                          <button
-                                            onClick={() => handleReReviewSection(bundle.sectionId!)}
-                                            disabled={reviewingSectionId === bundle.sectionId}
-                                            className={`px-2 py-1 text-[11px] font-medium rounded transition-all ${
-                                              reviewingSectionId === bundle.sectionId
-                                                ? 'bg-slate-300 text-slate-500 cursor-wait'
-                                                : 'bg-green-100 text-green-700 hover:bg-green-200'
-                                            }`}
-                                          >
-                                            {reviewingSectionId === bundle.sectionId ? '⏳ Reviewing...' : '🔄 Re-review section'}
-                                          </button>
-                                        )}
                                         {bundle.status === 'warning' && !signedOffWarnings.has(bundle.sectionIndex) && (
                                           <button
                                             onClick={() => {
                                               // Mark this section's warnings as signed off
                                               setSignedOffWarnings(prev => new Set(prev).add(bundle.sectionIndex));
                                               
-                                              // Remove warning issues for this section (match by sectionId string)
+                                              // AUDIT: Mark warnings as 'accepted' instead of deleting
                                               const sectionKey = `section-${bundle.sectionId}`;
-                                              setCurrentIssues(prevIssues => 
-                                                prevIssues.filter(issue => issue.sectionId !== sectionKey)
-                                              );
+                                              const now = new Date().toISOString();
+                                              
+                                              const updatedIssues = currentIssues.map(issue => {
+                                                // Match warnings for this section
+                                                if (issue.sectionId === sectionKey && issue.severity === 'WARNING') {
+                                                  console.log('[Pass with signature] Marking issue as accepted:', issue.id);
+                                                  return {
+                                                    ...issue,
+                                                    status: 'accepted' as const,
+                                                    acceptedBy: 'Victoria',
+                                                    acceptedAt: now
+                                                  };
+                                                }
+                                                return issue;
+                                              });
+                                              
+                                              console.log('[Pass with signature] Updated issues:', updatedIssues.filter(i => i.status === 'accepted'));
+                                              setCurrentIssues(updatedIssues);
+                                              
+                                              // Force recomputation by incrementing review run ID
+                                              setReviewRunId(prev => prev + 1);
                                               
                                               // Update section to pass status
                                               setSections(prev => prev.map(s => 
@@ -2553,9 +2667,6 @@ export default function DocumentPage() {
                                                     }
                                                   : s
                                               ));
-                                              
-                                              // Increment review run ID
-                                              setReviewRunId(prev => prev + 1);
                                               
                                               // Add message
                                               setMessages(prev => [...prev, {
@@ -2697,6 +2808,72 @@ export default function DocumentPage() {
                                 );
                               })}
                             </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* AUDIT: Accepted Warnings Section (collapsible, bottom of issues panel) */}
+                      {(() => {
+                        const acceptedWarnings = currentIssues.filter(issue => 
+                          issue.status === 'accepted' && issue.severity === 'WARNING'
+                        );
+                        
+                        if (acceptedWarnings.length === 0) return null;
+                        
+                        return (
+                          <div className="mb-6 border-2 border-purple-200 bg-purple-50 rounded-lg overflow-hidden">
+                            <button
+                              onClick={() => setShowAcceptedWarnings(!showAcceptedWarnings)}
+                              className="w-full p-3 flex items-center justify-between hover:bg-purple-100 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-purple-700 font-bold">{showAcceptedWarnings ? '▼' : '▶'}</span>
+                                <h4 className="font-bold text-sm text-purple-800">
+                                  Accepted Warnings ({acceptedWarnings.length})
+                                </h4>
+                                <span className="px-2 py-0.5 bg-purple-600 text-white text-[10px] font-bold rounded uppercase">
+                                  AUDIT
+                                </span>
+                              </div>
+                              <span className="text-xs text-purple-600">
+                                {showAcceptedWarnings ? 'Click to collapse' : 'Click to expand'}
+                              </span>
+                            </button>
+                            
+                            {showAcceptedWarnings && (
+                              <div className="p-4 bg-white border-t-2 border-purple-200 space-y-3">
+                                {acceptedWarnings.map((warning, idx) => {
+                                  // Find section for this warning (with null safety)
+                                  const sectionMatch = warning.sectionId && typeof warning.sectionId === 'string' 
+                                    ? warning.sectionId.match(/section-(\d+)/) 
+                                    : null;
+                                  const sectionId = sectionMatch ? parseInt(sectionMatch[1]) : null;
+                                  const section = sectionId ? sections.find(s => s.id === sectionId) : null;
+                                  const sectionIndex = section ? sections.findIndex(s => s.id === sectionId) : -1;
+                                  
+                                  return (
+                                    <div key={warning.id || idx} className="p-3 bg-purple-50 border border-purple-200 rounded">
+                                      <div className="flex items-start gap-2 mb-2">
+                                        <span className="text-purple-600 text-xs font-bold">⚠</span>
+                                        <div className="flex-1">
+                                          <div className="text-xs font-bold text-purple-800 mb-1">
+                                            {section && `Section ${sectionIndex + 1} — ${section.title}`}
+                                          </div>
+                                          <div className="text-xs text-slate-700">
+                                            <span className="font-semibold">{warning.title || 'Warning'}:</span> {warning.message}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 text-[10px] text-purple-700 border-t border-purple-200 pt-2 mt-2">
+                                        <span className="font-bold">✍ Signed by {warning.acceptedBy || '—'}</span>
+                                        <span>•</span>
+                                        <span>{warning.acceptedAt ? new Date(warning.acceptedAt).toISOString().split('T')[0] : '—'}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
@@ -2855,8 +3032,8 @@ export default function DocumentPage() {
                         </label>
                       </div>
                     </div>
-                  </div>
-                </div>
+                      </div>
+                        </div>
               </div>
             </div>
 

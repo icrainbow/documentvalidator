@@ -103,11 +103,12 @@ export const REVIEW_PROFILES: Record<string, ReviewProfile> = {
 };
 
 export interface ClientContext {
-  clientSegment: 'Retail' | 'HNW' | 'UHNW' | 'Institutional';
+  clientSegment: 'Retail' | 'HNW' | 'UHNW' | 'CIC' | 'Institutional';  // Added CIC
   jurisdiction: 'SG' | 'EU' | 'CH' | 'UK' | 'US';
   riskAppetite: 'Low' | 'Medium' | 'High';
-  productScope: 'Equities' | 'Derivatives' | 'Structured Products' | 'Alternatives';
+  productScope: 'Equities' | 'Derivatives' | 'Structured Products' | 'Alternatives' | string[];  // Support both string and array
   notes?: string;
+  contractNumber?: string;  // Optional contract identifier
 }
 
 /**

@@ -14,6 +14,17 @@ export interface ReviewConfig {
     rewrite?: string;
   };
   context?: ClientContext;
+  // Validation fields (additive, backward compatible)
+  validationStatus?: 'valid' | 'required' | 'failed';
+  validationErrors?: string[];
+  validationWarnings?: string[];
+  lastValidatedAt?: string;
+  // Locking policy (additive, backward compatible)
+  locked?: {
+    compliance?: boolean;
+    evaluation?: boolean;
+    rewrite?: boolean;
+  };
 }
 
 /**

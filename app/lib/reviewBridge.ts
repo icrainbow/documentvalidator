@@ -38,7 +38,12 @@ export function apiSeverityToUIStatus(severity: 'FAIL' | 'WARNING' | 'INFO'): 'f
 // Compute section status from API issues
 export function computeSectionStatus(sectionId: number, apiIssues: APIIssue[]): 'pass' | 'fail' | 'warning' {
   const sectionKey = `section-${sectionId}`;
-  const sectionIssues = apiIssues.filter(issue => issue.sectionId === sectionKey);
+  
+  // AUDIT: Only consider OPEN issues for blocking logic (filter out accepted warnings)
+  const sectionIssues = apiIssues.filter(issue => {
+    const status = issue.status || 'open'; // default to 'open' for backward compatibility
+    return issue.sectionId === sectionKey && status === 'open';
+  });
   
   if (sectionIssues.length === 0) {
     return 'pass';
@@ -128,8 +133,14 @@ export function computeDocumentStatus(
   };
   explanation: string;
 } {
-  const failIssues = apiIssues.filter(i => i.severity === 'FAIL');
-  const warningIssues = apiIssues.filter(i => i.severity === 'WARNING');
+  // AUDIT: Only consider OPEN issues for blocking logic (filter out accepted warnings)
+  const activeIssues = apiIssues.filter(issue => {
+    const status = issue.status || 'open'; // default to 'open' for backward compatibility
+    return status === 'open';
+  });
+  
+  const failIssues = activeIssues.filter(i => i.severity === 'FAIL');
+  const warningIssues = activeIssues.filter(i => i.severity === 'WARNING');
   
   const totalFails = failIssues.length;
   const totalWarnings = warningIssues.length;
@@ -150,7 +161,7 @@ export function computeDocumentStatus(
   
   // Has warnings but no fails
   if (totalWarnings > 0) {
-    const currentFingerprint = computeWarningsFingerprint(apiIssues);
+    const currentFingerprint = computeWarningsFingerprint(activeIssues);
     const isSignOffValid = signOff && signOff.warningsFingerprint === currentFingerprint;
     
     if (isSignOffValid) {

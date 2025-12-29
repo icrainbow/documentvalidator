@@ -11,6 +11,7 @@ export interface Section {
 }
 
 export type IssueSeverity = 'FAIL' | 'WARNING' | 'INFO';
+export type IssueStatus = 'open' | 'resolved' | 'accepted';
 
 export interface Issue {
   id: string;
@@ -25,6 +26,10 @@ export interface Issue {
     id: string;
     name: string;
   };
+  // AUDIT: Warning acceptance tracking
+  status?: IssueStatus;     // default 'open' for backward compatibility
+  acceptedBy?: string;      // who accepted the warning
+  acceptedAt?: string;      // ISO timestamp when accepted
 }
 
 export interface Remediation {

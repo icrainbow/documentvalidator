@@ -2,6 +2,16 @@
 const nextConfig = {
   // Improve webpack caching stability
   webpack: (config, { dev, isServer }) => {
+    // Handle mammoth library for client-side usage
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        buffer: false,
+      };
+    }
+    
     if (dev) {
       // Disable filesystem cache entirely in dev to prevent corruption
       config.cache = false;
