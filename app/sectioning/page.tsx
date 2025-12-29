@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import AgentDashboard from '../components/AgentDashboard';
+import { parseDocxBySections, ParsedSection } from '../lib/docxParser';
 
 interface Rectangle {
   id: number;
@@ -21,17 +22,64 @@ interface Section {
   selected?: boolean;
 }
 
-const FULL_DOCUMENT_TEXT = `Investment Background and Portfolio Analysis
+const FULL_DOCUMENT_TEXT = `Investment & Service Agreement Proposal
 
-This comprehensive section outlines the investor's financial history, current portfolio composition, and primary investment objectives. The analysis takes into account the client's existing asset allocation across multiple investment vehicles including equities, fixed income securities, and alternative investments. Key considerations include risk tolerance assessment based on investment horizon, liquidity requirements for planned expenditures, and tax optimization strategies. The investor's previous investment experience and comfort level with market volatility have been evaluated to establish appropriate risk parameters.
+Document ID
+DEMO-INV-CONTRACT-001
 
-Risk Assessment and Management Framework
+Executive Summary
+This document outlines a proposed strategic investment and service agreement between Alpha Capital Ltd. ("Client") and Beta Growth Partners ("Service Provider").
 
-Comprehensive analysis of market risks, portfolio volatility, concentration risks, and external macroeconomic factors that may impact investment performance. This evaluation considers both systematic risks inherent to market movements and unsystematic risks specific to individual holdings or sectors. The assessment incorporates stress testing scenarios, correlation analysis between asset classes, and downside protection mechanisms. Currency exposure, interest rate sensitivity, and geopolitical considerations are analyzed to ensure robust risk management. Regular portfolio rebalancing protocols are established to maintain target allocation ranges.
+The purpose of this agreement is to enable Alpha Capital to gain exposure to high-growth industries through a managed investment strategy while leveraging Beta Growth Partners' proprietary market access and execution capabilities.
 
-Technical Strategy and Implementation Plan
+The proposed collaboration is intended to be long-term and mutually beneficial, subject to regulatory compliance and risk finalization.
 
-Detailed methodology for strategic asset allocation, tactical rebalancing frequency, and implementation of investment adjustments based on market conditions. The framework includes specific technical indicators used for entry and exit decisions, position sizing algorithms, and risk management protocols including stop-loss parameters. The strategy incorporates both quantitative metrics such as moving averages and relative strength indicators, as well as qualitative factors including sector rotation dynamics and macroeconomic cycle positioning. Execution protocols ensure optimal trade timing and minimize market impact costs.`;
+Investment Strategy
+Alpha Capital intends to invest USD 100,000 into a diversified portfolio managed by Beta Growth Partners.
+
+The portfolio may include exposure to the following sectors:
+- Consumer goods
+- Emerging markets infrastructure
+- Tobacco-related equities and derivatives
+- Energy and commodities
+
+Beta Growth Partners will exercise full discretion in selecting instruments that maximize returns, including exposure to high-risk derivative products.
+
+The Client acknowledges that certain sectors may carry heightened regulatory or reputational considerations but agrees that return optimization is the primary objective.
+
+Risk Disclosure
+The Client understands that all investments involve risk, including the potential loss of principal.
+
+However, no specific sector-level risk disclosures are provided in this document, and no explicit exclusions for high-risk investment universes described above.
+
+Beta Growth Partners shall not be responsible for losses arising from market volatility, regulatory changes, or sector-specific restrictions.
+
+Liability and Indemnification
+The Service Provider shall not be held liable for losses resulting from market conditions, regulatory changes, or other factors beyond their direct control.
+
+The Client agrees to indemnify the Service Provider against claims arising from the execution of investment strategies outlined in this agreement.
+
+Insurance requirements and breach consequences are subject to separate negotiation.
+
+Termination
+Either party may terminate this agreement with 30 days' written notice.
+
+In the event of termination, all open positions will be liquidated at prevailing market rates.
+
+The Client acknowledges that early termination may result in liquidation costs or adverse tax consequences.
+
+Governing Law and Jurisdiction
+This agreement shall be governed by the laws of [Jurisdiction].
+
+Any disputes arising from this agreement shall be resolved through binding arbitration in accordance with the rules of [Arbitration Body].
+
+The parties agree to waive their right to jury trial.
+
+Document Status
+Draft for Review
+Version: 1.0
+Effective Date: Pending Execution
+Last Modified: [Date]`;
 
 const PREDEFINED_SECTIONS: Section[] = [
   {
@@ -51,58 +99,123 @@ const PREDEFINED_SECTIONS: Section[] = [
   }
 ];
 
-// Maximum sections allowed for demo
-const MAX_SECTIONS = 5;
+// Maximum sections allowed - updated to 8 for real document parsing
+const MAX_SECTIONS = 8;
 
 /**
- * Demo-only parser: generates exactly 5 predefined sections.
- * Future-proof: replace this function body with real parser/API call.
+ * Real document parser: intelligently extracts 8 sections based on document structure.
  * @param text - full document text
- * @returns Array of exactly 5 section definitions
+ * @returns Array of 8 section definitions with real extracted content
  */
-function parseDocumentInto5Sections(text: string): Section[] {
+function parseDocumentInto8Sections(text: string): Section[] {
   const sectionDefinitions = [
-    { title: 'Overview & Scope', keywords: ['overview', 'scope', 'purpose', 'objective'] },
-    { title: 'Investment Strategy & Restricted Areas', keywords: ['investment', 'strategy', 'restricted', 'prohibited', 'allocation'] },
-    { title: 'Liability & Indemnification', keywords: ['liability', 'indemnification', 'responsibility', 'risk'] },
-    { title: 'Termination & Governing Law', keywords: ['termination', 'governing', 'law', 'jurisdiction', 'legal'] },
-    { title: 'Signatures & Annexes', keywords: ['signature', 'annex', 'appendix', 'exhibit', 'attachment'] }
+    { 
+      title: 'Document ID', 
+      markers: ['document id', 'document no', 'id:', 'reference:', 'demo-inv-contract'],
+      isHeader: true
+    },
+    { 
+      title: 'Executive Summary', 
+      markers: ['executive summary', 'summary'],
+      endMarkers: ['investment strategy', 'risk disclosure']
+    },
+    { 
+      title: 'Investment Strategy', 
+      markers: ['investment strategy'],
+      endMarkers: ['risk disclosure', 'liability']
+    },
+    { 
+      title: 'Risk Disclosure', 
+      markers: ['risk disclosure', 'risk warning'],
+      endMarkers: ['liability', 'indemnification', 'termination']
+    },
+    { 
+      title: 'Liability and Indemnification', 
+      markers: ['liability', 'indemnification'],
+      endMarkers: ['termination', 'governing law']
+    },
+    { 
+      title: 'Termination', 
+      markers: ['termination'],
+      endMarkers: ['governing law', 'jurisdiction', 'document status', 'signatures']
+    },
+    { 
+      title: 'Governing Law and Jurisdiction', 
+      markers: ['governing law', 'jurisdiction', 'legal framework'],
+      endMarkers: ['document status', 'signatures', 'effective date']
+    },
+    { 
+      title: 'Document Status', 
+      markers: ['document status', 'status:', 'effective date', 'version'],
+      isFooter: true
+    }
   ];
 
   const sections: Section[] = [];
   const lowerText = text.toLowerCase();
+  const lines = text.split('\n');
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 8; i++) {
     const def = sectionDefinitions[i];
-    
-    // Try keyword-based extraction (simple demo logic)
     let content = '';
-    let startIndex = -1;
-    
-    // Find first keyword occurrence
-    for (const kw of def.keywords) {
-      const idx = lowerText.indexOf(kw);
+    let startIdx = -1;
+    let endIdx = text.length;
+
+    // Find section start
+    for (const marker of def.markers) {
+      const idx = lowerText.indexOf(marker);
       if (idx !== -1) {
-        startIndex = idx;
+        startIdx = idx;
         break;
       }
     }
-    
-    // Extract ~250-300 chars if keyword found
-    if (startIndex !== -1) {
-      const endIndex = Math.min(startIndex + 280, text.length);
-      content = text.substring(startIndex, endIndex).trim();
-      // Clean up: if content is too short or doesn't make sense, use placeholder
-      if (content.length < 50) {
-        content = '';
+
+    if (startIdx !== -1) {
+      // Find section end (look for next section marker)
+      if (def.endMarkers) {
+        for (const endMarker of def.endMarkers) {
+          const endMarkerIdx = lowerText.indexOf(endMarker, startIdx + 10);
+          if (endMarkerIdx !== -1 && endMarkerIdx < endIdx) {
+            endIdx = endMarkerIdx;
+          }
+        }
       }
+
+      // Extract content
+      let extracted = text.substring(startIdx, endIdx).trim();
+
+      // For header sections (Document ID), keep it short
+      if (def.isHeader) {
+        // Find the first 2-3 lines or until first blank line
+        const headerLines = extracted.split('\n').slice(0, 3);
+        extracted = headerLines.join('\n').trim();
+        if (extracted.length > 150) {
+          extracted = extracted.substring(0, 150) + '...';
+        }
+      }
+      
+      // For footer sections, keep it short
+      if (def.isFooter) {
+        const footerLines = extracted.split('\n').slice(0, 3);
+        extracted = footerLines.join('\n').trim();
+        if (extracted.length > 150) {
+          extracted = extracted.substring(0, 150) + '...';
+        }
+      }
+
+      // For main content sections, limit to reasonable length
+      if (!def.isHeader && !def.isFooter && extracted.length > 800) {
+        extracted = extracted.substring(0, 800).trim() + '...';
+      }
+
+      content = extracted;
     }
-    
-    // Fallback to placeholder if no match or extraction failed
-    if (!content) {
+
+    // Fallback to placeholder if extraction failed or content too short
+    if (!content || content.length < 20) {
       content = getPlaceholderContent(i);
     }
-    
+
     sections.push({
       id: Date.now() + i,
       title: def.title,
@@ -115,15 +228,18 @@ function parseDocumentInto5Sections(text: string): Section[] {
 }
 
 /**
- * Get hardcoded placeholder content for section index.
+ * Get hardcoded placeholder content for section index (8 sections).
  */
 function getPlaceholderContent(sectionIndex: number): string {
   const placeholders = [
-    'This section provides an overview and defines the scope of the agreement. It outlines the purpose, parties involved, and the general framework under which the document operates. Key objectives and boundaries are established to ensure clarity and mutual understanding.',
-    'Investment strategy focuses on diversified portfolios with careful consideration of asset allocation, risk tolerance, and time horizons. Restricted areas include investments in sectors deemed high-risk, non-compliant with regulatory requirements, or inconsistent with institutional guidelines. Prohibited activities are clearly defined to prevent exposure to unacceptable risk levels.',
-    'Liability provisions outline responsibilities, obligations, and indemnification clauses for all parties. This section establishes the legal framework for accountability, defines limits of liability, and specifies conditions under which indemnification may be claimed. Insurance requirements and breach consequences are detailed.',
-    'Termination clauses specify conditions under which the agreement may be ended by either party, including notice periods, breach conditions, and mutual consent scenarios. Governing law establishes the jurisdiction and legal framework that will apply to the interpretation and enforcement of this agreement.',
-    'Signatures and annexes complete the formal documentation. This section includes signature blocks for all authorized parties, dates of execution, and references to attached exhibits, schedules, and appendices that form an integral part of this agreement.'
+    'Document ID: DEMO-INV-CONTRACT-001\n\nInvestment & Service Agreement Proposal',
+    'Executive Summary: This document outlines a proposed strategic investment and service agreement between Alpha Capital Ltd. ("Client") and Beta Growth Partners ("Service Provider"). The purpose of this agreement is to enable Alpha Capital to gain exposure to high-growth industries through a managed investment strategy while leveraging Beta Growth Partners\' proprietary market access and execution capabilities.',
+    'Investment Strategy: Alpha Capital intends to invest USD 100,000 into a diversified portfolio managed by Beta Growth Partners. The portfolio may include exposure to the following sectors: Consumer goods, Emerging markets infrastructure, Tobacco-related equities and derivatives, Energy and commodities. Beta Growth Partners will exercise full discretion in selecting instruments that maximize returns, including exposure to high-risk derivative products.',
+    'Risk Disclosure: The Client understands that all investments involve risk, including the potential loss of principal. However, no specific sector-level risk disclosures are provided in this document, and no explicit exclusions for high-risk investment universes described above. Beta Growth Partners shall not be responsible for losses arising from market volatility, regulatory changes, or sector-specific restrictions.',
+    'Liability and Indemnification: The Service Provider shall not be held liable for losses resulting from market conditions, regulatory changes, or other factors beyond their direct control. The Client agrees to indemnify the Service Provider against claims arising from the execution of investment strategies outlined in this agreement.',
+    'Termination: Either party may terminate this agreement with 30 days\' written notice. In the event of termination, all open positions will be liquidated at prevailing market rates. The Client acknowledges that early termination may result in liquidation costs or adverse tax consequences.',
+    'Governing Law and Jurisdiction: This agreement shall be governed by the laws of [Jurisdiction]. Any disputes arising from this agreement shall be resolved through binding arbitration in accordance with the rules of [Arbitration Body]. The parties agree to waive their right to jury trial.',
+    'Document Status: Draft for Review\nVersion: 1.0\nEffective Date: Pending Execution\nLast Modified: [Date]'
   ];
   return placeholders[sectionIndex] || 'Content placeholder for section ' + (sectionIndex + 1) + '.';
 }
@@ -143,6 +259,38 @@ export default function SectioningPage() {
   const [sectionsSource, setSectionsSource] = useState<Section[]>([]);
   const [displayedDocumentText, setDisplayedDocumentText] = useState<string>(FULL_DOCUMENT_TEXT);
   const [showAgentDashboard, setShowAgentDashboard] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isParsingFile, setIsParsingFile] = useState(false);
+
+  // Load uploaded file from sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const fileName = sessionStorage.getItem('uploadedFileName');
+      const fileType = sessionStorage.getItem('uploadedFileType');
+      const fileData = sessionStorage.getItem('uploadedFileData');
+      
+      if (fileName && fileType && fileData) {
+        console.log('[sectioning] Found uploaded file in storage:', fileName);
+        
+        // Convert base64 back to File object
+        try {
+          const byteString = atob(fileData.split(',')[1]);
+          const mimeString = fileData.split(',')[0].split(':')[1].split(';')[0];
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+          const blob = new Blob([ab], { type: mimeString });
+          const file = new File([blob], fileName, { type: fileType });
+          setUploadedFile(file);
+          console.log('[sectioning] Reconstructed file object:', file.name, file.type);
+        } catch (error) {
+          console.error('[sectioning] Failed to reconstruct file:', error);
+        }
+      }
+    }
+  }, []);
 
   // Load merged content from session storage if available and build document display
   useEffect(() => {
@@ -292,8 +440,8 @@ export default function SectioningPage() {
     if (rectangles.length === 0) return;
     if (confirmedSections.length >= MAX_SECTIONS) return;
     
-    // Parse document to get all 5 section definitions
-    const allSections = parseDocumentInto5Sections(displayedDocumentText);
+    // Parse document to get all 8 section definitions
+    const allSections = parseDocumentInto8Sections(displayedDocumentText);
     
     // Get the next section based on current count
     const nextSectionIndex = confirmedSections.length;
@@ -309,14 +457,54 @@ export default function SectioningPage() {
     setRectangles(updatedRects);
   };
 
-  const handleAutoParse = () => {
+  const handleAutoParse = async () => {
     if (confirmedSections.length >= MAX_SECTIONS) return;
     
-    // Generate all 5 sections at once
-    const allSections = parseDocumentInto5Sections(displayedDocumentText);
+    let allSections: Section[] = [];
+    
+    // Check if we have an uploaded .docx file to parse
+    if (uploadedFile && (uploadedFile.name.endsWith('.docx') || uploadedFile.type.includes('wordprocessingml'))) {
+      console.log('[sectioning] Using REAL .docx parser for:', uploadedFile.name);
+      setIsParsingFile(true);
+      
+      try {
+        const parseResult = await parseDocxBySections(uploadedFile);
+        console.log('[sectioning] ✓ Parse complete:', parseResult.totalSections, 'sections detected');
+        console.log('[sectioning] Detected sections:');
+        parseResult.sections.forEach((s, i) => {
+          console.log(`  [${i + 1}] "${s.title}" (${s.paragraphCount} paragraphs)`);
+        });
+        
+        // Convert ParsedSection to Section interface
+        allSections = parseResult.sections.map((ps: ParsedSection, idx) => ({
+          id: Date.now() + idx,
+          title: ps.title,
+          content: ps.content,
+          selected: false
+        }));
+        
+        // Update displayed document text with extracted text
+        if (parseResult.rawText) {
+          setDisplayedDocumentText(parseResult.rawText);
+        }
+        
+        console.log('[sectioning] Converted to', allSections.length, 'Section objects');
+      } catch (error) {
+        console.error('[sectioning] Parse error:', error);
+        alert(`Failed to parse document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setIsParsingFile(false);
+        return;
+      }
+      
+      setIsParsingFile(false);
+    } else {
+      // Fallback to demo parser if no .docx file
+      console.log('[sectioning] Using demo parser (no .docx file found)');
+      allSections = parseDocumentInto8Sections(displayedDocumentText);
+    }
     
     setConfirmedSections(allSections);
-    setDragCount(MAX_SECTIONS);
+    setDragCount(allSections.length);
     
     // Clear rectangles and current drawing state
     setRectangles([]);
@@ -325,6 +513,8 @@ export default function SectioningPage() {
     
     // Auto-select all sections for easy confirmation
     setSelectedSectionIds(allSections.map(s => s.id));
+    
+    console.log('[sectioning] Auto Parse complete:', allSections.length, 'sections ready');
   };
 
   const handleEditTitle = (sectionId: number) => {
@@ -418,32 +608,48 @@ export default function SectioningPage() {
 
     if (selectedSections.length === 0) return;
 
-    // Clear stale section keys first (1 through 10)
-    for (let i = 1; i <= 10; i++) {
-      sessionStorage.removeItem(`section${i}_title`);
-      sessionStorage.removeItem(`section${i}_content`);
+    // Generate stable docKey for this navigation event
+    const docKey = `demo_${Date.now()}`;
+    const storageKey = `draft_sections::${docKey}`;
+
+    const dataToStore = {
+      docKey,
+      source: "sectioning_confirm",
+      createdAt: Date.now(),
+      sections: selectedSections,
+    };
+
+    console.log("[sectioning] Preparing to store sections:");
+    console.log("[sectioning] - docKey:", docKey);
+    console.log("[sectioning] - storageKey:", storageKey);
+    console.log("[sectioning] - sections count:", selectedSections.length);
+    console.log("[sectioning] - sections:", selectedSections.map(s => ({ id: s.id, title: s.title })));
+
+    // Persist sections in new unified format
+    sessionStorage.setItem(storageKey, JSON.stringify(dataToStore));
+
+    // Verify storage
+    const stored = sessionStorage.getItem(storageKey);
+    console.log("[sectioning] ✓ Verified storage, data exists:", !!stored);
+    if (stored) {
+      console.log("[sectioning] Stored data length:", stored.length);
     }
 
-    // Store the selected sections in sessionStorage
-    selectedSections.forEach((section, index) => {
-      const sectionNum = index + 1;
-      sessionStorage.setItem(`section${sectionNum}_title`, section.title);
-      sessionStorage.setItem(`section${sectionNum}_content`, section.content);
-    });
-
-    // Also store for backward compatibility with document page
-    if (selectedSections[0]) {
-      sessionStorage.setItem('investmentBackground', selectedSections[0].content);
+    console.log("[sectioning] persisted sections", docKey, selectedSections.length);
+    
+    // Check if we have a sessionId
+    const sessionId = sessionStorage.getItem('currentSessionId');
+    
+    let url = `/document?docKey=${encodeURIComponent(docKey)}`;
+    if (sessionId) {
+      url += `&sessionId=${encodeURIComponent(sessionId)}`;
+      console.log("[sectioning] Including sessionId:", sessionId);
     }
-    if (selectedSections[1]) {
-      sessionStorage.setItem('riskAssessment', selectedSections[1].content);
-    }
-    if (selectedSections[2]) {
-      sessionStorage.setItem('technicalStrategy', selectedSections[2].content);
-    }
+    
+    console.log("[sectioning] Navigating to:", url);
 
     // Navigate to document page
-    router.push('/document');
+    router.push(url);
   };
 
   return (
@@ -491,14 +697,14 @@ export default function SectioningPage() {
               </button>
               <button
                 onClick={handleAutoParse}
-                disabled={confirmedSections.length >= MAX_SECTIONS}
+                disabled={confirmedSections.length >= MAX_SECTIONS || isParsingFile}
                 className={`px-6 py-2 rounded font-semibold transition-colors shadow-md ${
-                  confirmedSections.length >= MAX_SECTIONS
+                  confirmedSections.length >= MAX_SECTIONS || isParsingFile
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     : 'bg-slate-700 text-white hover:bg-slate-800'
                 }`}
               >
-                🔍 Auto Parse
+                {isParsingFile ? '⏳ Parsing Document...' : '🔍 Auto Parse'}
               </button>
               <button
                 onClick={handleAddSection}

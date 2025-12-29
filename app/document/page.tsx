@@ -1,10 +1,35 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AgentDashboard from '../components/AgentDashboard';
+import ReviewConfigDrawer from '../components/ReviewConfigDrawer';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { computeParticipants } from '../lib/computeParticipants';
+import { normalizeAgentId, getAgentMetadata } from '../lib/agentRegistry';
+import { 
+  loadReviewSession, 
+  saveReviewSession, 
+  type ReviewSession 
+} from '../lib/reviewSessions';
+import type { Issue as APIIssue, ReviewResult, ReviewRequest } from '../lib/types/review';
+import { 
+  toAPISection, 
+  computeSectionStatus, 
+  computeWarningsFingerprint, 
+  computeDocumentStatus as computeRealDocumentStatus,
+  createSignOff,
+  saveSignOff,
+  loadSignOff,
+  type UISection
+} from '../lib/reviewBridge';
+import { 
+  getDefaultReviewConfig, 
+  saveReviewConfig, 
+  loadReviewConfig,
+  type ReviewConfig 
+} from '../lib/reviewConfig';
 
 type SectionStatus = 'unreviewed' | 'pass' | 'fail' | 'warning';
 
@@ -27,6 +52,96 @@ interface Message {
   agent?: string;
   content: string;
 }
+
+// Phase 2-A: Issue Action Types
+interface AddSectionPayload {
+  sectionTitle: string;
+  sectionContent: string;
+  insertPosition?: 'end' | 'after-current';
+}
+
+interface DraftFixPayload {
+  chatMessage: string;
+  targetSectionId?: number;
+}
+
+interface RequestInfoPayload {
+  chatMessage: string;
+  infoType: 'evidence' | 'clarification' | 'documentation';
+}
+
+type ActionPayload = AddSectionPayload | DraftFixPayload | RequestInfoPayload;
+
+interface IssueAction {
+  id: string;
+  type: 'ADD_SECTION' | 'DRAFT_FIX' | 'REQUEST_INFO';
+  label: string;
+  description?: string;
+  payload: ActionPayload;
+}
+
+// Phase 2-B: Proposed Fix Templates (hard-coded, demo-safe)
+const PROPOSED_FIX_TEMPLATES: Record<string, string> = {
+  policy_violation: `Alpha Capital intends to invest USD 100,000 into a diversified portfolio managed by Beta Growth Partners.
+
+The portfolio may include exposure to the following sectors, subject to applicable regulatory restrictions and internal compliance requirements:
+- Consumer goods
+- Emerging markets infrastructure
+- Energy and commodities
+- Other permitted sectors as agreed in writing
+
+Beta Growth Partners will exercise discretion in selecting instruments intended to meet the Client's investment objectives, which may include equities and permitted derivatives or structured products, provided that all instruments are compliant with applicable regulations and internal policies.
+
+The Client acknowledges that certain sectors and instruments may carry heightened regulatory or reputational considerations. Any exposure to restricted sectors is expressly excluded, and portfolio construction will be aligned with the Client's stated risk tolerance and suitability parameters.`,
+  missing_disclaimer: "IMPORTANT DISCLOSURE: Past performance is not indicative of future results. The value of investments may fluctuate, and investors may not recover the full amount invested. This document does not constitute financial advice. All investment decisions should be made in consultation with a qualified financial advisor.",
+  missing_evidence: "Supporting documentation: [Client financial statements dated XX/XX/XXXX], [Transaction history from authorized custodian], [Third-party valuation report by certified appraiser]. All evidence has been verified and is available for compliance review.",
+  unclear_wording: "This section has been clarified to state: The client's investment objectives are capital preservation with moderate growth potential over a 5-10 year horizon. Risk tolerance is assessed as moderate, with acceptance of short-term volatility in exchange for long-term returns.",
+  missing_signature: "CLIENT ACKNOWLEDGMENT: By signing below, I confirm that I have read and understood the contents of this document and agree to the terms outlined herein.\n\nClient Name: ___________________\nSignature: ___________________\nDate: ___________________",
+  generic_fallback: "This section should be reviewed and revised to address the identified issue. Please ensure compliance with internal policy guidelines and regulatory requirements."
+};
+
+/**
+ * Utility: Highlight problematic keywords in text (case-insensitive)
+ * Returns JSX with red-highlighted spans for matched keywords
+ */
+const COMPLIANCE_KEYWORDS = ['tobacco', 'tobacco-related'];
+
+const highlightComplianceKeywords = (text: string): JSX.Element => {
+  // Build regex pattern for all keywords (case-insensitive)
+  const pattern = new RegExp(`(${COMPLIANCE_KEYWORDS.join('|')})`, 'gi');
+  const parts = text.split(pattern);
+  
+  return (
+    <>
+      {parts.map((part, idx) => {
+        const isKeyword = COMPLIANCE_KEYWORDS.some(kw => 
+          part.toLowerCase() === kw.toLowerCase()
+        );
+        
+        if (isKeyword) {
+          return (
+            <span 
+              key={idx} 
+              className="text-red-700 bg-red-50 px-1 rounded font-semibold"
+            >
+              {part}
+            </span>
+          );
+        }
+        return <span key={idx}>{part}</span>;
+      })}
+    </>
+  );
+};
+
+/**
+ * Check if text contains compliance keywords
+ */
+const hasComplianceKeywords = (text: string): boolean => {
+  return COMPLIANCE_KEYWORDS.some(kw => 
+    text.toLowerCase().includes(kw.toLowerCase())
+  );
+};
 
 // Predefined fake demo content (used for manual segmentation and badformat.word)
 const FAKE_SECTIONS = [
@@ -53,8 +168,17 @@ const FAKE_SECTIONS = [
   }
 ];
 
+// Force dynamic rendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 export default function DocumentPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Extract docKey SYNCHRONOUSLY from URL - critical for Priority 1 loading
+  const docKey = searchParams.get("docKey");
+  console.log("[document] URL docKey from searchParams:", docKey);
+  
   const { speak, stop, isSpeaking, isSupported } = useSpeech();
   const { 
     isListening, 
@@ -72,9 +196,90 @@ export default function DocumentPage() {
       content: 'Document loaded. Sections are ready for review. Click "Run Full Review" to analyze a section with the orchestrator.'
     }
   ]);
+  const [loadedFromStorage, setLoadedFromStorage] = useState(false);
 
-  // Check on mount if we should use user-provided content from chat flow
+  // PRIORITY 1: Load from new unified storage format if docKey exists
   useEffect(() => {
+    console.log("[document] Priority 1 useEffect triggered, docKey:", docKey, "loadedFromStorage:", loadedFromStorage);
+    
+    // Skip if already loaded to prevent resetting section statuses
+    if (loadedFromStorage) {
+      console.log("[document] Already loaded from storage, skipping to prevent status reset");
+      return;
+    }
+    
+    if (!docKey) {
+      console.log("[document] No docKey found, skipping unified storage load");
+      return;
+    }
+
+    const storageKey = `draft_sections::${docKey}`;
+    console.log("[document] Looking for storage key:", storageKey);
+    
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) {
+      console.log("[document] No data found in storage for key:", storageKey);
+      console.log("[document] All sessionStorage keys:", Object.keys(sessionStorage));
+      return;
+    }
+
+    console.log("[document] Found raw data, length:", raw.length);
+    
+    try {
+      const parsed = JSON.parse(raw);
+      console.log("[document] Parsed data:", parsed);
+      
+      if (Array.isArray(parsed?.sections) && parsed.sections.length > 0) {
+        console.log("[document] Sections array found, length:", parsed.sections.length);
+        
+        // Map to full Section objects with required fields
+        const loadedSections: Section[] = parsed.sections.map((s: any, idx: number) => ({
+          id: s.id || idx + 1,
+          title: s.title || `Section ${idx + 1}`,
+          content: s.content || '',
+          status: 'unreviewed' as SectionStatus,
+          log: []
+        }));
+        
+        console.log("[document] Mapped sections:", loadedSections.map(s => ({ id: s.id, title: s.title })));
+        
+        setSections(loadedSections);
+        setLoadedFromStorage(true);
+        
+        setMessages([
+          {
+            role: 'agent',
+            agent: 'System',
+            content: `${loadedSections.length} section(s) loaded from sectioning. Ready for review.`
+          }
+        ]);
+        
+        console.log("[document] ✓ Successfully loaded sections", docKey, parsed.sections.length);
+      } else {
+        console.log("[document] ✗ sections not found or empty in parsed data");
+      }
+    } catch (error) {
+      console.error("[document] ✗ failed to parse storage", error);
+      // Fall through to legacy loading logic
+    }
+  }, [docKey]);
+
+  // PRIORITY 2: Legacy loading logic (only if NOT loaded from new storage)
+  useEffect(() => {
+    console.log("[document] Priority 2 useEffect triggered, docKey:", docKey, "loadedFromStorage:", loadedFromStorage);
+    
+    // If docKey exists, Priority 1 handles loading - do not run Priority 2
+    if (docKey) {
+      console.log("[document] Skipping Priority 2 - docKey exists, Priority 1 will handle loading");
+      return;
+    }
+    
+    if (loadedFromStorage) {
+      console.log("[document] Skipping Priority 2 - already loaded from unified storage");
+      return; // Guard: do not override if already loaded from unified storage
+    }
+    
+    console.log("[document] Running legacy loading logic...");
     // Check for sections from manual segmentation (new format)
     const section1Title = sessionStorage.getItem('section1_title');
     const section1Content = sessionStorage.getItem('section1_content');
@@ -204,9 +409,19 @@ export default function DocumentPage() {
       sessionStorage.removeItem('investmentBackground');
       sessionStorage.removeItem('riskAssessment');
       sessionStorage.removeItem('technicalStrategy');
+    } else if (!docKey && sections.length === 0) {
+      // Final fallback: use FAKE_SECTIONS only if no other data source
+      console.log("[document] No data from any source, using FAKE_SECTIONS fallback");
+      setSections(FAKE_SECTIONS);
+      setMessages([
+        {
+          role: 'agent',
+          agent: 'System',
+          content: 'Document loaded. Sections are ready for review. Click "Run Full Review" to analyze a section with the orchestrator.'
+        }
+      ]);
     }
-    // Otherwise, use default fake sections (already set in initial state)
-  }, []);
+  }, [docKey, loadedFromStorage]);
 
   // Cleanup speech on unmount
   useEffect(() => {
@@ -232,36 +447,162 @@ export default function DocumentPage() {
   const [hasComplianceIssue, setHasComplianceIssue] = useState(false);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [showAgentDashboard, setShowAgentDashboard] = useState(false);
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const [executedActionIds, setExecutedActionIds] = useState<Set<string>>(new Set());
+  const [hasNewChatMessage, setHasNewChatMessage] = useState(false);
+  
+  // Phase 2-B: Copy and Re-review states
+  const [copiedIssueKey, setCopiedIssueKey] = useState<string | null>(null);
+  const [showCopyToast, setShowCopyToast] = useState(false);
+  const [reviewingSectionId, setReviewingSectionId] = useState<number | null>(null);
+  const [highlightedSectionId, setHighlightedSectionId] = useState<number | null>(null);
+  
+  // Phase 2-C: Apply/Undo state per section
+  // Map: sectionId -> { previousContent: string, appliedText: string }
+  const [appliedFixes, setAppliedFixes] = useState<Record<number, { previousContent: string; appliedText: string }>>({});
+  
+  // Phase 2-D: Expansion state for section bundles (WARNING sections collapsed by default)
+  const [expandedBundles, setExpandedBundles] = useState<Set<number>>(new Set());
+  
+  // Track which section warnings have been signed off
+  const [signedOffWarnings, setSignedOffWarnings] = useState<Set<number>>(new Set());
+  
+  // Agents Drawer state
+  const [showAgentsDrawer, setShowAgentsDrawer] = useState(false);
+  
+  // Review state synchronization - REAL API issues only
+  const [reviewRunId, setReviewRunId] = useState(0); // Increment on each review run
+  const [currentIssues, setCurrentIssues] = useState<APIIssue[]>([]); // Issues from REAL API
+  const [lastReviewResult, setLastReviewResult] = useState<ReviewResult | null>(null);
+  
+  // Sign-off state - for WARNING acceptance
+  const [signOff, setSignOff] = useState<{ signerName: string; signedAt: string; warningsFingerprint: string; runId: string } | null>(null);
+  
+  // Review configuration state - for governed agent selection
+  const [reviewConfig, setReviewConfig] = useState<ReviewConfig>(getDefaultReviewConfig());
 
-  const handleEvaluateSection = (sectionId: number) => {
-    const section = sections.find(s => s.id === sectionId);
-    const newStatus: SectionStatus = sectionId === 2 ? 'fail' : 'pass';
-    
-    const logAction = newStatus === 'pass' 
-      ? 'PASS: All criteria met'
-      : 'FAIL: Issues detected, requires revision';
-    
-    setSections(sections.map(s => {
-      if (s.id === sectionId) {
-        return {
-          ...s,
-          status: newStatus,
-          log: [...s.log, { agent: 'Evaluate', action: logAction, timestamp: new Date() }]
-        };
+  // Clear new message flag when chat is expanded
+  useEffect(() => {
+    if (isChatExpanded && hasNewChatMessage) {
+      setHasNewChatMessage(false);
+    }
+  }, [isChatExpanded, hasNewChatMessage]);
+  
+  // Sync currentIssues from orchestrationResult
+  useEffect(() => {
+    if (orchestrationResult?.artifacts?.review_issues?.issues) {
+      setCurrentIssues(orchestrationResult.artifacts.review_issues.issues);
+      setReviewRunId(prev => prev + 1);
+    }
+  }, [orchestrationResult]);
+  
+  // Load review config on mount
+  useEffect(() => {
+    if (docKey) {
+      const loaded = loadReviewConfig(docKey);
+      if (loaded) {
+        setReviewConfig(loaded);
       }
-      return s;
-    }));
-
-    const newMessage: Message = {
-      role: 'agent',
-      agent: 'Evaluate Agent',
-      content: newStatus === 'pass' 
-        ? `Section ${sectionId} "${section?.title}" meets all evaluation criteria. ✓`
-        : `Section ${sectionId} "${section?.title}" does not meet evaluation criteria. Issues detected.`
+    }
+  }, [docKey]);
+  
+  // Save review config whenever it changes
+  useEffect(() => {
+    if (docKey && reviewConfig) {
+      saveReviewConfig(docKey, reviewConfig);
+    }
+  }, [reviewConfig, docKey]);
+  
+  // Load session data on mount (if sessionId in URL)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('sessionId');
+    
+    if (sessionId) {
+      const session = loadReviewSession(sessionId);
+      if (session) {
+        // IMPORTANT: Only restore sections from session if NOT already loaded from docKey
+        // Priority: docKey storage (fresh from sectioning) > session storage (might be stale)
+        if (session.sections && session.sections.length > 0 && !loadedFromStorage) {
+          console.log('[document] Restoring sections from session:', session.sections.length);
+          setSections(session.sections);
+        } else if (loadedFromStorage) {
+          console.log('[document] Skipping session sections - already loaded from docKey storage');
+        }
+        
+        // Always restore other session state (non-conflicting)
+        if (session.issues) {
+          setCurrentIssues(session.issues);
+        }
+        if (session.signOff) {
+          setSignOff(session.signOff);
+        }
+        if (session.orchestrationResult) {
+          setOrchestrationResult(session.orchestrationResult);
+        }
+        if (session.flowId) {
+          setSelectedFlowId(session.flowId);
+        }
+        
+        // Add system message only if not already loaded from docKey
+        if (!loadedFromStorage) {
+          setMessages(prev => [...prev, {
+            role: 'agent' as const,
+            agent: 'System',
+            content: `✓ Restored review session: ${session.title}`
+          }]);
+        }
+        
+        console.log('✓ Loaded session:', sessionId, session);
+      }
+    } else if (docKey) {
+      // Fallback: load sign-off from legacy docKey
+      const loaded = loadSignOff(docKey);
+      setSignOff(loaded);
+    }
+  }, [docKey, loadedFromStorage, searchParams]);
+  
+  // Auto-save session on state changes
+  useEffect(() => {
+    // Only save if we have a sessionId
+    const sessionId = typeof window !== 'undefined' 
+      ? sessionStorage.getItem('currentSessionId') 
+      : null;
+    
+    // Don't auto-save if no sessionId or if sections haven't been loaded yet
+    if (!sessionId || sections.length === 0) return;
+    
+    // Don't auto-save if sections are still the initial FAKE_SECTIONS (check by comparing titles)
+    const isFakeSections = sections.length === 3 && 
+      sections[0].title === 'Investment Background' &&
+      sections[1].title === 'Risk Assessment' &&
+      sections[2].title === 'Technical Strategy' &&
+      !loadedFromStorage;
+    
+    if (isFakeSections) {
+      console.log('[document] Skipping auto-save - sections are still FAKE_SECTIONS');
+      return;
+    }
+    
+    // Get session title (from first section or fallback)
+    const title = sections[0]?.title || 'Untitled Review';
+    
+    // Save session
+    const session: ReviewSession = {
+      id: sessionId,
+      title,
+      lastUpdated: new Date().toISOString(),
+      sections,
+      issues: currentIssues,
+      signOff: signOff || undefined,
+      orchestrationResult: orchestrationResult || undefined,
+      flowId: selectedFlowId
     };
-
-    setMessages([...messages, newMessage]);
-  };
+    
+    saveReviewSession(session);
+    
+    console.log('✓ Auto-saved session:', sessionId);
+  }, [sections, currentIssues, signOff, orchestrationResult, selectedFlowId, loadedFromStorage]);
 
   const handleModifySection = (sectionId: number) => {
     if (editingSectionId === sectionId) {
@@ -294,27 +635,51 @@ export default function DocumentPage() {
       setHasComplianceIssue(false);
       setSections(prevSections => prevSections.map(s => {
         if (s.id === sectionId) {
-          const newStatus = (sectionId === 2 || sectionId === 3) ? 'pass' : s.status;
-          const logAction = (sectionId === 2 || sectionId === 3)
-            ? 'Content optimized and saved, status updated to PASS'
-            : 'Content updated successfully';
-          
+          // After manual edit, status should be 'unreviewed' until re-reviewed
           return {
             ...s,
             content: editContent,
-            status: newStatus,
-            log: [...s.log, { agent: 'Optimize', action: logAction, timestamp: new Date() }]
+            status: 'unreviewed',
+            log: [...s.log, { agent: 'User', action: 'Content modified and saved - requires re-review', timestamp: new Date() }]
           };
         }
         return s;
       }));
       
+      // Remove issues for this section since content changed
+      const sectionKey = `section-${sectionId}`;
+      const updatedIssues = currentIssues.filter(issue => issue.sectionId !== sectionKey);
+      setCurrentIssues(updatedIssues);
+      
+      // Also update orchestrationResult to keep in sync
+      setOrchestrationResult((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          artifacts: {
+            ...prev.artifacts,
+            review_issues: {
+              issues: updatedIssues,
+              total_count: updatedIssues.length
+            }
+          }
+        };
+      });
+      
+      // Invalidate sign-off if warnings existed
+      if (signOff) {
+        setSignOff(null);
+        localStorage.removeItem(`doc:${docKey || 'default'}:signoff`);
+      }
+      
+      // Increment review run ID to force recomputation
+      setReviewRunId(prev => prev + 1);
+      
       const section = sections.find(s => s.id === sectionId);
-      const statusUpdate = (sectionId === 2 || sectionId === 3) ? ' Status updated to PASS. ✓' : '';
       const newMessage: Message = {
         role: 'agent',
-        agent: 'Optimize Agent',
-        content: `Section ${sectionId} "${section?.title}" has been saved successfully.${statusUpdate}`
+        agent: 'System',
+        content: `✓ Section ${getSectionPosition(sectionId)} "${section?.title}" saved. Status set to UNREVIEWED. Please run "Re-review Section" to update compliance status.`
       };
       setMessages(prevMessages => [...prevMessages, newMessage]);
       
@@ -355,78 +720,532 @@ export default function DocumentPage() {
     }]);
   };
 
+  /**
+   * STEP 7: Demo function to review all sections
+   * Returns status for each section based on hard-coded rules
+   */
+  const demoRunFullReview = (sectionsToReview: Section[]) => {
+    const results: Record<number, { status: SectionStatus; issues: any[] }> = {};
+    
+    sectionsToReview.forEach((section, idx) => {
+      const content = section.content.toLowerCase();
+      const title = section.title.toLowerCase();
+      
+      // Hard-coded demo logic for different sections
+      let status: SectionStatus = 'pass';
+      const issues: any[] = [];
+      
+      // Rule 1: Sections with "tobacco" always fail
+      if (content.includes('tobacco')) {
+        status = 'fail';
+        issues.push({
+          severity: 'critical',
+          type: 'policy_violation',
+          description: 'Section contains reference to tobacco industry which is prohibited by compliance policy.',
+          section_id: section.id,
+          section_title: section.title,
+          section_index: idx
+        });
+      }
+      
+      // Rule 2: Investment Strategy sections need disclaimers
+      if (title.includes('investment') || title.includes('strategy')) {
+        if (!content.includes('disclaimer') && !content.includes('risk')) {
+          status = status === 'fail' ? 'fail' : 'warning';
+          issues.push({
+            severity: 'high',
+            type: 'missing_disclaimer',
+            description: 'Investment strategy section missing required risk disclaimer.',
+            section_id: section.id,
+            section_title: section.title,
+            section_index: idx
+          });
+        }
+      }
+      
+      // Rule 3: Liability sections must exist
+      if (title.includes('liability') || title.includes('indemnification')) {
+        if (content.length < 50) {
+          status = status === 'fail' ? 'fail' : 'warning';
+          issues.push({
+            severity: 'medium',
+            type: 'insufficient_content',
+            description: 'Liability section appears incomplete or too brief.',
+            section_id: section.id,
+            section_title: section.title,
+            section_index: idx
+          });
+        }
+      }
+      
+      // Rule 4: Signature sections should mention signatures
+      if (title.includes('signature') || title.includes('status')) {
+        if (!content.includes('signature') && !content.includes('sign')) {
+          status = status === 'fail' ? 'fail' : 'warning';
+          issues.push({
+            severity: 'low',
+            type: 'missing_signature',
+            description: 'Signature section does not contain signature placeholders.',
+            section_id: section.id,
+            section_title: section.title,
+            section_index: idx
+          });
+        }
+      }
+      
+      results[section.id] = { status, issues };
+    });
+    
+    return results;
+  };
+
   const handleFullComplianceReview = async () => {
     setIsOrchestrating(true);
     setOrchestrationResult(null);
     
+    console.log("[document] Starting full review of all", sections.length, "sections");
+    
     try {
-      // Use the first section for review
-      const sectionToReview = sections[0];
+      // Demo: Review all sections locally
+      const reviewResults = demoRunFullReview(sections);
+      console.log("[document] Review results:", reviewResults);
       
-      const response = await fetch('/api/orchestrate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          flow_id: selectedFlowId,
-          document_id: 'DOC-' + Date.now(),
-          sections: [{
-            id: String(sectionToReview.id),
-            title: sectionToReview.title,
-            content: sectionToReview.content
-          }],
-          options: {
-            language: 'english',
-            tone: 'formal',
-            mode: 'fake'
-          }
-        })
+      // Aggregate all issues
+      const allIssues: any[] = [];
+      let totalPass = 0;
+      let totalFail = 0;
+      let totalWarning = 0;
+      
+      Object.values(reviewResults).forEach(result => {
+        allIssues.push(...result.issues);
+        if (result.status === 'pass') totalPass++;
+        else if (result.status === 'fail') totalFail++;
+        else if (result.status === 'warning') totalWarning++;
       });
       
-      const result = await response.json();
-      setOrchestrationResult(result);
+      // Generate remediations for sections with policy violations (demo)
+      const remediations: any[] = [];
+      Object.entries(reviewResults).forEach(([sectionId, result]) => {
+        const hasPolicyViolation = result.issues.some((issue: any) => issue.type === 'policy_violation');
+        if (hasPolicyViolation) {
+          remediations.push({
+            sectionId: `section-${sectionId}`,
+            proposedText: PROPOSED_FIX_TEMPLATES.policy_violation,
+            agent: { id: 'rewrite-agent', name: 'Rewrite Agent (Demo)' }
+          });
+        }
+      });
       
-      // Add a chat message about the orchestration
-      if (result.ok) {
-        // Derive status for the reviewed section
-        const newStatus = deriveSectionStatus(sectionToReview.id, result);
-        
-        // Update the section status
-        setSections(prev => prev.map(s => 
-          s.id === sectionToReview.id 
-            ? { 
-                ...s, 
-                status: newStatus,
-                log: [
-                  ...s.log,
-                  {
-                    agent: 'Orchestrator',
-                    action: `Review completed: ${newStatus.toUpperCase()}. Decision: ${result.decision.next_action}`,
-                    timestamp: new Date()
-                  }
-                ]
+      // Create mock orchestration result for compatibility with existing UI
+      const mockResult = {
+        ok: true,
+        parent_trace_id: `orch_${Date.now()}`,
+        mode: 'demo',
+        artifacts: {
+          review_issues: {
+            issues: allIssues,
+            total_count: allIssues.length
+          },
+          remediations: remediations // Add remediations for proposed text
+        },
+        decision: {
+          next_action: totalFail > 0 ? 'rejected' : totalWarning > 0 ? 'request_more_info' : 'ready_to_send',
+          reason: `Reviewed ${sections.length} sections: ${totalPass} passed, ${totalFail} failed, ${totalWarning} warnings.`
+        },
+        execution: {
+          steps: [] // Empty for demo
+        }
+      };
+      
+      setOrchestrationResult(mockResult);
+      
+      // Update currentIssues with all issues from full review
+      setCurrentIssues(allIssues);
+      
+      // Update all section statuses
+      setSections(prev => {
+        const updatedSections = prev.map(s => {
+          const result = reviewResults[s.id];
+          if (!result) return s;
+          
+          console.log(`[document] Updating section ${s.id} (${s.title}) status: ${s.status} -> ${result.status}`);
+          
+          return {
+            ...s,
+            status: result.status,
+            log: [
+              ...s.log,
+              {
+                agent: 'Evaluate',
+                action: `Full review: ${result.status.toUpperCase()}. ${result.issues.length} issue(s) found.`,
+                timestamp: new Date()
               }
-            : s
-        ));
+            ]
+          };
+        });
         
-        setMessages(prev => [...prev, {
-          role: 'agent',
-          agent: 'Orchestrator',
-          content: `Full compliance review completed for "${sectionToReview.title}".\nDecision: ${result.decision.next_action}\nStatus: ${newStatus.toUpperCase()}\n${result.execution.steps.length} agents executed.`
-        }]);
-      }
+        console.log("[document] ✓ Sections after update:", updatedSections.map(s => ({ id: s.id, title: s.title, status: s.status })));
+        return updatedSections;
+      });
+      
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'Evaluation Agent',
+        content: `✓ Full document review completed.\n\nReviewed: ${sections.length} sections\nPassed: ${totalPass}\nFailed: ${totalFail}\nWarnings: ${totalWarning}\nTotal issues: ${allIssues.length}`
+      }]);
+      
+      console.log("[document] ✓ Full review complete, all section statuses updated");
     } catch (error: any) {
-      console.error('Orchestration error:', error);
+      console.error('Review error:', error);
       setMessages(prev => [...prev, {
         role: 'agent',
         agent: 'System',
-        content: `❌ Orchestration failed: ${error.message}`
+        content: `❌ Review failed: ${error.message}`
       }]);
     } finally {
       setIsOrchestrating(false);
     }
   };
 
-  const canSubmit = sections.every(s => s.status === 'pass');
+  // OLD: const canSubmit = sections.every(s => s.status === 'pass');
+  // NOW: Using documentStatus.isSubmittable (includes sign-off requirement)
+
+  /**
+   * Jump to a specific section, scroll into view, and highlight it.
+   * @param sectionIndex - 0-based index in the sections array
+   */
+  const jumpToSection = (sectionIndex: number) => {
+    if (sectionIndex < 0 || sectionIndex >= sections.length) {
+      console.warn(`[document] Invalid section index: ${sectionIndex}`);
+      return;
+    }
+    
+    const section = sections[sectionIndex];
+    const anchorId = `sec-${sectionIndex + 1}`; // 1-based anchor IDs
+    const element = document.getElementById(anchorId);
+    
+    if (!element) {
+      console.warn(`[document] Section anchor not found: ${anchorId}`);
+      return;
+    }
+    
+    console.log(`[document] Jumping to section ${sectionIndex + 1}: "${section.title}"`);
+    
+    // Smooth scroll to section
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Highlight the section temporarily
+    setHighlightedSectionId(section.id);
+    setTimeout(() => {
+      setHighlightedSectionId(null);
+    }, 1500);
+    
+    // Update URL hash without causing page jump
+    history.replaceState(null, '', `#sec-${sectionIndex + 1}`);
+  };
+
+  /**
+   * Phase 2-D: Group issues by section and determine section-level status
+   */
+  interface SectionBundle {
+    sectionIndex: number;
+    sectionId: number | null;
+    sectionTitle: string;
+    issues: any[];
+    status: 'fail' | 'warning';
+    proposedText: string | null;
+    hasChecklist: boolean;
+  }
+
+  const groupIssuesBySection = (issues: any[]): SectionBundle[] => {
+    if (!issues || issues.length === 0) return [];
+    
+    // Group by sectionIndex - FIXED for real API Issue structure
+    const grouped: Record<number, any[]> = {};
+    issues.forEach(issue => {
+      // Real API returns sectionId as string like "section-3"
+      let sectionIndex = -1;
+      
+      if (issue.sectionId && typeof issue.sectionId === 'string') {
+        // Extract section ID from "section-3" format
+        const match = issue.sectionId.match(/section-(\d+)/);
+        if (match) {
+          const sectionId = parseInt(match[1]);
+          // Find section index by ID
+          sectionIndex = sections.findIndex(s => s.id === sectionId);
+        }
+      } else if (issue.section_index !== undefined) {
+        // Fallback for old demo format
+        sectionIndex = issue.section_index;
+      } else if (issue.section_id !== undefined) {
+        // Fallback for old demo format
+        sectionIndex = sections.findIndex(s => s.id === issue.section_id);
+      }
+      
+      if (sectionIndex >= 0) {
+        if (!grouped[sectionIndex]) {
+          grouped[sectionIndex] = [];
+        }
+        grouped[sectionIndex].push(issue);
+      }
+    });
+    
+    // Convert to bundles
+    const bundles: SectionBundle[] = Object.keys(grouped).map(key => {
+      const sectionIndex = parseInt(key);
+      const sectionIssues = grouped[sectionIndex];
+      const section = sections[sectionIndex];
+      
+      // Determine bundle status - FIXED for real API severity values
+      // Real API uses: "FAIL" | "WARNING" | "INFO"
+      const hasFail = sectionIssues.some(issue => 
+        issue.severity === 'FAIL' || issue.severity === 'critical' || issue.severity === 'high'
+      );
+      const status: 'fail' | 'warning' = hasFail ? 'fail' : 'warning';
+      
+      // Get proposed text from orchestrationResult remediations (real API) or fallback to demo templates
+      let proposedText: string | null = null;
+      
+      // First try real API remediations
+      if (orchestrationResult?.artifacts?.remediations) {
+        const sectionKey = `section-${section?.id}`;
+        const remediation = orchestrationResult.artifacts.remediations.find(
+          (rem: any) => rem.sectionId === sectionKey
+        );
+        if (remediation?.proposedText) {
+          proposedText = remediation.proposedText;
+        }
+      }
+      
+      // Fallback to demo templates if no real remediation found (for backward compatibility)
+      if (!proposedText) {
+        const policyViolationIssue = sectionIssues.find(issue => 
+          issue.type === 'policy_violation'
+        );
+        if (policyViolationIssue) {
+          proposedText = PROPOSED_FIX_TEMPLATES.policy_violation;
+        }
+      }
+      
+      // Check for checklist items (not used in real API currently)
+      const hasChecklist = false;
+      
+      return {
+        sectionIndex,
+        sectionId: section?.id || null,
+        sectionTitle: section?.title || `Section ${sectionIndex + 1}`,
+        issues: sectionIssues,
+        status,
+        proposedText,
+        hasChecklist
+      };
+    });
+    
+    // Sort by sectionIndex
+    return bundles.sort((a, b) => a.sectionIndex - b.sectionIndex);
+  };
+
+  /**
+   * Compute document status from REAL API issues and sign-off
+   */
+  const documentStatus = useMemo(() => {
+    return computeRealDocumentStatus(currentIssues, signOff);
+  }, [currentIssues, signOff, reviewRunId]);
+  
+  /**
+   * Compute participating agents from current review results
+   */
+  const agentParticipants = useMemo(() => {
+    if (currentIssues.length === 0) {
+      return [];
+    }
+    
+    const bundles = groupIssuesBySection(currentIssues);
+    return computeParticipants(currentIssues, bundles);
+  }, [currentIssues, reviewRunId]);
+
+  /**
+   * Phase 2-A: Generate a stable key for an issue (deterministic across renders)
+   */
+  const getIssueKey = (issue: any): string => {
+    // Prefer explicit issue ID if present
+    if (issue.id) return String(issue.id);
+    
+    // Build deterministic key from issue properties
+    const parts = [
+      issue.type || 'unknown',
+      issue.severity || 'unknown',
+      issue.section_id ? `sec${issue.section_id}` : '',
+      issue.section_title ? issue.section_title.substring(0, 20) : '',
+      issue.section_index !== undefined ? `idx${issue.section_index}` : ''
+    ].filter(Boolean);
+    
+    // Add simple hash of description (first 50 chars)
+    const descHash = issue.description 
+      ? issue.description.substring(0, 50).replace(/\s+/g, '-').toLowerCase()
+      : 'nodesc';
+    
+    return `issue-${parts.join('-')}-${descHash}`;
+  };
+
+  /**
+   * Phase 2-A: Generate stable action ID
+   */
+  const makeActionId = (issueKey: string, actionType: string, templateId: string): string => {
+    return `action-${issueKey}-${actionType}-${templateId}`;
+  };
+
+  /**
+   * Phase 2-A: Generate recommended actions for an issue (hard-coded rules)
+   */
+  const generateActionsForIssue = (issue: any): IssueAction[] => {
+    const actions: IssueAction[] = [];
+    const issueKey = getIssueKey(issue);
+    const desc = (issue.description || '').toLowerCase();
+    const issueType = issue.type || '';
+    
+    // Rule 1: Missing Disclaimer (by type or keyword)
+    if (issueType === 'missing_disclaimer' || desc.includes('disclaimer')) {
+      actions.push({
+        id: makeActionId(issueKey, 'ADD_SECTION', 'disclaimer'),
+        type: 'ADD_SECTION',
+        label: 'Add Disclaimer Section',
+        description: 'Append standard risk disclaimer',
+        payload: {
+          sectionTitle: 'Risk Disclaimer',
+          sectionContent: 'This document contains forward-looking statements and projections that involve risks and uncertainties. Past performance is not indicative of future results. The value of investments may go down as well as up, and investors may not get back the full amount invested. All investment decisions should be made in consultation with a qualified financial advisor and in accordance with your individual risk tolerance and investment objectives. This document does not constitute financial advice, investment recommendation, or an offer to buy or sell any securities.',
+          insertPosition: 'end'
+        } as AddSectionPayload
+      });
+    }
+    
+    // Rule 2: Missing Signature (by type or keyword)
+    if (issueType === 'missing_signature' || desc.includes('signature')) {
+      actions.push({
+        id: makeActionId(issueKey, 'ADD_SECTION', 'signature'),
+        type: 'ADD_SECTION',
+        label: 'Add Signature Block',
+        description: 'Append standard signature section',
+        payload: {
+          sectionTitle: 'Signatures & Authorization',
+          sectionContent: 'By signing below, all parties acknowledge that they have read, understood, and agree to the terms and conditions outlined in this document.\n\nClient Signature: _____________________________\nDate: _____________________________\n\nAdvisor Signature: _____________________________\nDate: _____________________________\n\nCompliance Officer Signature: _____________________________\nDate: _____________________________',
+          insertPosition: 'end'
+        } as AddSectionPayload
+      });
+    }
+    
+    // Rule 3: Missing Evidence (by type or keyword)
+    if (issueType === 'missing_evidence' || desc.includes('evidence') || desc.includes('supporting')) {
+      actions.push({
+        id: makeActionId(issueKey, 'REQUEST_INFO', 'evidence'),
+        type: 'REQUEST_INFO',
+        label: 'Request Evidence',
+        description: 'Ask for supporting documents',
+        payload: {
+          chatMessage: '📋 Evidence Request: Supporting documentation is required for the claims made in this section. Please provide: (1) Financial statements or transaction records, (2) Third-party verification or attestations, (3) Regulatory filing references. Once submitted, we can proceed with review.',
+          infoType: 'evidence'
+        } as RequestInfoPayload
+      });
+    }
+    
+    // Rule 4: Policy Violation (non-critical)
+    if (issueType === 'policy_violation' && issue.severity !== 'critical') {
+      const targetSectionId = issue.section_id ? parseInt(issue.section_id) : undefined;
+      actions.push({
+        id: makeActionId(issueKey, 'DRAFT_FIX', 'policy-rewrite'),
+        type: 'DRAFT_FIX',
+        label: 'Draft Policy-Compliant Version',
+        description: 'Generate alternative wording',
+        payload: {
+          chatMessage: `✏️ Policy Compliance Assistance: The current wording violates internal policy guidelines. Suggested approach: (1) Remove references to restricted investment types or prohibited terminology, (2) Replace with approved alternatives that convey similar intent, (3) Ensure compliance with regulatory disclosure requirements. ${targetSectionId ? `This affects Section ${targetSectionId}.` : ''} Would you like me to suggest specific revisions?`,
+          targetSectionId
+        } as DraftFixPayload
+      });
+    }
+    
+    // Rule 5: Unclear/Ambiguous Wording (by keyword)
+    if (desc.includes('unclear') || desc.includes('ambiguous') || desc.includes('vague')) {
+      actions.push({
+        id: makeActionId(issueKey, 'REQUEST_INFO', 'clarification'),
+        type: 'REQUEST_INFO',
+        label: 'Request Clarification',
+        description: 'Ask author to clarify intent',
+        payload: {
+          chatMessage: '❓ Clarification Required: The identified text is ambiguous and may lead to misinterpretation. Please provide: (1) The intended meaning or objective of this section, (2) Target audience and their expected level of knowledge, (3) Any legal, regulatory, or compliance constraints that must be considered. This will help us provide accurate guidance.',
+          infoType: 'clarification'
+        } as RequestInfoPayload
+      });
+    }
+    
+    // Rule 6: High/Critical Severity Fallback (escalation)
+    if ((issue.severity === 'high' || issue.severity === 'critical') && actions.length === 0) {
+      actions.push({
+        id: makeActionId(issueKey, 'REQUEST_INFO', 'escalate'),
+        type: 'REQUEST_INFO',
+        label: 'Escalate to Compliance',
+        description: 'Flag for senior review',
+        payload: {
+          chatMessage: `🚨 High-Severity Issue Flagged: This issue requires senior compliance review and management approval. Issue Details: ${issue.description || 'No description provided'}. Required Documentation: (1) Business justification for the flagged content, (2) Risk mitigation strategy and controls, (3) Written approval from department head or compliance officer. Please prepare these materials for review.`,
+          infoType: 'documentation'
+        } as RequestInfoPayload
+      });
+    }
+    
+    // Cap at 3 actions max
+    return actions.slice(0, 3);
+  };
+
+  /**
+   * Map issues from orchestration result to a specific section.
+   * Only maps issues that have explicit section references.
+   */
+  const mapIssuesToSection = (sectionId: number, orchestrationResult: any): any[] => {
+    if (!orchestrationResult?.artifacts?.review_issues?.issues) {
+      return [];
+    }
+    
+    const section = sections.find(s => s.id === sectionId);
+    if (!section) return [];
+    
+    const mappedIssues = [];
+    
+    for (const issue of orchestrationResult.artifacts.review_issues.issues) {
+      let isMatch = false;
+      
+      // Check explicit references only
+      if (issue.section_id !== undefined) {
+        isMatch = (String(issue.section_id) === String(section.id));
+      }
+      
+      if (!isMatch && issue.section_title !== undefined) {
+        isMatch = (issue.section_title.toLowerCase() === section.title.toLowerCase());
+      }
+      
+      if (!isMatch && issue.section_index !== undefined) {
+        const sectionIndex = sections.findIndex(s => s.id === section.id);
+        isMatch = (issue.section_index === sectionIndex);
+      }
+      
+      if (isMatch) {
+        mappedIssues.push(issue);
+      }
+    }
+    
+    return mappedIssues;
+  };
+
+  /**
+   * Get document-level issues that don't reference any specific section.
+   */
+  const getDocumentLevelIssues = (orchestrationResult: any): any[] => {
+    if (!orchestrationResult?.artifacts?.review_issues?.issues) {
+      return [];
+    }
+    
+    return orchestrationResult.artifacts.review_issues.issues.filter((issue: any) => {
+      return !issue.section_id && !issue.section_title && issue.section_index === undefined;
+    });
+  };
 
   /**
    * Derive section status from orchestration result artifacts.
@@ -437,27 +1256,15 @@ export default function DocumentPage() {
       return 'unreviewed';
     }
 
-    const { artifacts } = orchestrationResult;
-    if (!artifacts || !artifacts.review_issues) {
-      // No issues means section was analyzed and passed
-      return 'pass';
-    }
-
-    const issues = artifacts.review_issues || [];
+    const mappedIssues = mapIssuesToSection(sectionId, orchestrationResult);
     
-    // Check if any issues are for this section (issues may have section_id or other identifiers)
-    const sectionIssues = issues.filter((issue: any) => {
-      // Issues might not have explicit section_id in current implementation
-      // For now, assume all issues in the result apply to the reviewed section
-      return true;
-    });
-
-    if (sectionIssues.length === 0) {
+    if (mappedIssues.length === 0) {
+      // Section was reviewed and has no issues
       return 'pass';
     }
 
-    // Check severity of issues
-    const hasCritical = sectionIssues.some((issue: any) => 
+    // Check severity of mapped issues
+    const hasCritical = mappedIssues.some((issue: any) => 
       issue.severity === 'critical' || issue.type === 'policy_violation'
     );
     
@@ -465,38 +1272,484 @@ export default function DocumentPage() {
       return 'fail';
     }
 
-    const hasHigh = sectionIssues.some((issue: any) => 
+    const hasHigh = mappedIssues.some((issue: any) => 
       issue.severity === 'high'
     );
 
     if (hasHigh) {
-      return 'warning';
+      return 'fail';
     }
 
     // Has only medium or low issues
     return 'warning';
   };
 
-  const highlightProhibitedTerms = (text: string) => {
-    const prohibitedTerm = 'tobacco industry';
-    const regex = new RegExp(`(${prohibitedTerm})`, 'gi');
-    const parts = text.split(regex);
-    
-    return parts.map((part, index) => {
-      if (part.toLowerCase() === prohibitedTerm.toLowerCase()) {
-        return (
-          <span key={index} className="bg-red-600 text-white px-1 rounded font-bold border-2 border-red-800">
-            {part}
-          </span>
-        );
+  /**
+   * Phase 2-A: Execute an action (ADD_SECTION, DRAFT_FIX, or REQUEST_INFO)
+   */
+  const executeAction = (action: IssueAction) => {
+    try {
+      switch (action.type) {
+        case 'ADD_SECTION': {
+          const payload = action.payload as AddSectionPayload;
+          // Generate new section ID (max existing + 1)
+          const maxId = sections.length > 0 ? Math.max(...sections.map(s => s.id)) : 0;
+          const newSection: Section = {
+            id: maxId + 1,
+            title: payload.sectionTitle,
+            content: payload.sectionContent,
+            status: 'unreviewed',
+            log: [{
+              agent: 'System',
+              action: 'Section created via issue action',
+              timestamp: new Date()
+            }]
+          };
+          
+          setSections(prev => [...prev, newSection]);
+          
+          // Add confirmation to chat
+          const confirmMsg: Message = {
+            role: 'agent',
+            agent: 'System',
+            content: `✓ Section "${newSection.title}" has been added to the document. Status: NOT REVIEWED. You can review and modify it in the sections list.`
+          };
+          setMessages(prev => [...prev, confirmMsg]);
+          
+          // Scroll to new section after brief delay
+          setTimeout(() => {
+            const sectionEl = document.querySelector(`[data-section-id="${newSection.id}"]`);
+            if (sectionEl) {
+              sectionEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 200);
+          
+          break;
+        }
+        
+        case 'DRAFT_FIX': {
+          const payload = action.payload as DraftFixPayload;
+          const fixMsg: Message = {
+            role: 'agent',
+            agent: 'Policy Agent',
+            content: payload.chatMessage
+          };
+          setMessages(prev => [...prev, fixMsg]);
+          setHasNewChatMessage(true);
+          // Auto-expand chat for DRAFT_FIX
+          setIsChatExpanded(true);
+          break;
+        }
+        
+        case 'REQUEST_INFO': {
+          const payload = action.payload as RequestInfoPayload;
+          const requestMsg: Message = {
+            role: 'agent',
+            agent: 'System',
+            content: payload.chatMessage
+          };
+          setMessages(prev => [...prev, requestMsg]);
+          setHasNewChatMessage(true);
+          // Auto-expand chat for REQUEST_INFO
+          setIsChatExpanded(true);
+          break;
+        }
       }
-      return <span key={index}>{part}</span>;
+    } catch (error) {
+      console.error('Action execution error:', error);
+      const errorMsg: Message = {
+        role: 'agent',
+        agent: 'System',
+        content: `❌ Failed to execute action: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or contact support.`
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    }
+  };
+
+  /**
+   * Phase 2-A: Handle action button click
+   */
+  const handleActionClick = (action: IssueAction) => {
+    // Check if already executed
+    if (executedActionIds.has(action.id)) {
+      return;
+    }
+    
+    // Execute the action
+    executeAction(action);
+    
+    // Mark as executed
+    setExecutedActionIds(prev => {
+      const newSet = new Set(prev);
+      newSet.add(action.id);
+      return newSet;
     });
   };
 
-  const hasProhibitedTerm = (text: string) => {
-    return text.toLowerCase().includes('tobacco industry');
+  /**
+   * Phase 2-B: Get proposed fix text for an issue (hard-coded templates)
+   */
+  const getProposedFixForIssue = (issue: any): string | null => {
+    const desc = (issue.description || '').toLowerCase();
+    const issueType = issue.type || '';
+    
+    // Priority 1: Issue type
+    if (issueType === 'policy_violation') {
+      return PROPOSED_FIX_TEMPLATES.policy_violation;
+    }
+    
+    if (issueType === 'missing_disclaimer') {
+      return PROPOSED_FIX_TEMPLATES.missing_disclaimer;
+    }
+    
+    if (issueType === 'missing_evidence') {
+      return PROPOSED_FIX_TEMPLATES.missing_evidence;
+    }
+    
+    if (issueType === 'missing_signature') {
+      return PROPOSED_FIX_TEMPLATES.missing_signature;
+    }
+    
+    // Priority 2: Keyword matching in description
+    if (desc.includes('disclaimer')) {
+      return PROPOSED_FIX_TEMPLATES.missing_disclaimer;
+    }
+    
+    if (desc.includes('evidence') || desc.includes('supporting')) {
+      return PROPOSED_FIX_TEMPLATES.missing_evidence;
+    }
+    
+    if (desc.includes('unclear') || desc.includes('ambiguous') || desc.includes('vague')) {
+      return PROPOSED_FIX_TEMPLATES.unclear_wording;
+    }
+    
+    if (desc.includes('signature')) {
+      return PROPOSED_FIX_TEMPLATES.missing_signature;
+    }
+    
+    // Priority 3: Policy violation keyword fallback
+    if (desc.includes('policy') || desc.includes('violation') || desc.includes('restricted')) {
+      return PROPOSED_FIX_TEMPLATES.policy_violation;
+    }
+    
+    // For high/critical without specific match, return generic
+    if (issue.severity === 'high' || issue.severity === 'critical') {
+      return PROPOSED_FIX_TEMPLATES.generic_fallback;
+    }
+    
+    // No template available
+    return null;
   };
+
+  /**
+   * Phase 2-B: Handle copy proposed fix to clipboard
+   */
+  const handleCopyProposedFix = (issueKey: string, text: string, targetSectionHint?: string) => {
+    if (!navigator.clipboard) {
+      // Fallback for browsers without clipboard API
+      alert('Copy this text:\n\n' + text);
+      return;
+    }
+    
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopiedIssueKey(issueKey);
+        setShowCopyToast(true);
+        
+        setTimeout(() => {
+          setCopiedIssueKey(null);
+          setShowCopyToast(false);
+        }, 2000);
+      })
+      .catch(err => {
+        console.error('Copy failed:', err);
+        // Fallback
+        alert('Copy this text:\n\n' + text);
+      });
+  };
+
+  /**
+   * Phase 2-C: Apply proposed fix to a section immediately (with undo support)
+   */
+  const handleApplyProposedFix = (sectionId: number, proposedText: string) => {
+    const section = sections.find(s => s.id === sectionId);
+    if (!section) return;
+    
+    // Check if already applied (toggle to undo)
+    if (appliedFixes[sectionId]) {
+      // UNDO: Restore previous content
+      const { previousContent } = appliedFixes[sectionId];
+      
+      setSections(prev => prev.map(s =>
+        s.id === sectionId
+          ? { 
+              ...s, 
+              content: previousContent,
+              status: 'unreviewed' // Still needs re-review after undo
+            }
+          : s // Keep other sections unchanged
+      ));
+      
+      // Remove from applied fixes
+      setAppliedFixes(prev => {
+        const updated = { ...prev };
+        delete updated[sectionId];
+        return updated;
+      });
+      
+      // Persist to localStorage
+      if (docKey) {
+        const storageKey = `draft_sections::${docKey}`;
+        const stored = sessionStorage.getItem(storageKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.sections = sections.map(s =>
+            s.id === sectionId ? { ...s, content: previousContent } : s
+          );
+          sessionStorage.setItem(storageKey, JSON.stringify(parsed));
+        }
+      }
+      
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: `Undo complete. Section ${getSectionPosition(sectionId)} "${section.title}" has been restored to its previous content.`
+      }]);
+      setHasNewChatMessage(true);
+      
+    } else {
+      // APPLY: Write proposed text immediately
+      const previousContent = section.content;
+      
+      setSections(prev => prev.map(s =>
+        s.id === sectionId
+          ? { 
+              ...s, 
+              content: proposedText,
+              status: 'unreviewed', // Mark as unreviewed after applying fix
+              log: [
+                ...s.log,
+                {
+                  agent: 'System',
+                  action: 'Applied proposed compliant version - requires re-review',
+                  timestamp: new Date()
+                }
+              ]
+            }
+          : s // Keep other sections unchanged
+      ));
+      
+      // Store undo state
+      setAppliedFixes(prev => ({
+        ...prev,
+        [sectionId]: { previousContent, appliedText: proposedText }
+      }));
+      
+      // Persist to localStorage
+      if (docKey) {
+        const storageKey = `draft_sections::${docKey}`;
+        const stored = sessionStorage.getItem(storageKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.sections = sections.map(s =>
+            s.id === sectionId ? { ...s, content: proposedText } : s
+          );
+          sessionStorage.setItem(storageKey, JSON.stringify(parsed));
+        }
+      }
+      
+      // Jump to section
+      const sectionIndex = sections.findIndex(s => s.id === sectionId);
+      if (sectionIndex >= 0) {
+        setTimeout(() => {
+          jumpToSection(sectionIndex);
+        }, 100);
+      }
+      
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: `Proposed compliant text applied to Section ${getSectionPosition(sectionId)} "${section.title}". Click "Undo Apply" if you want to revert.`
+      }]);
+      setHasNewChatMessage(true);
+    }
+  };
+
+  // REMOVED: simulateSectionReview - all review logic now uses REAL LLM API
+
+  /**
+   * REAL LLM-BACKED RE-REVIEW - NO FAKE LOGIC
+   * Calls /api/review with current section content
+   */
+  const handleReReviewSection = async (sectionId: number) => {
+    const sectionIndex = sections.findIndex(s => s.id === sectionId);
+    if (sectionIndex === -1 || reviewingSectionId !== null) return;
+    
+    const section = sections[sectionIndex];
+    
+    // Set reviewing state
+    setReviewingSectionId(sectionId);
+    
+    // Add message that review is starting
+    setMessages(prev => [...prev, {
+      role: 'agent',
+      agent: 'System',
+      content: `Reviewing Section ${sectionIndex + 1} "${section.title}" with AI agents...`
+    }]);
+    setHasNewChatMessage(true);
+    
+    try {
+      // Prepare API request with CURRENT section content
+      const reviewRequest: ReviewRequest = {
+        documentId: docKey || `doc_${Date.now()}`,
+        mode: 'section',
+        sectionId: `section-${sectionId}`,
+        sections: sections.map((s, idx) => toAPISection(s, idx + 1)),
+        config: reviewConfig // Pass review configuration for governed agent selection
+      };
+
+      // Call REAL API
+      const response = await fetch('/api/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reviewRequest)
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const result: ReviewResult = await response.json();
+      
+      // Store result
+      setLastReviewResult(result);
+      
+      // Compute new section status from REAL API issues
+      const newStatus = computeSectionStatus(sectionId, result.issues);
+      
+      const logAction = `Re-reviewed by AI: ${newStatus.toUpperCase()} - ${result.issues.length} issue(s)`;
+      
+      // Update section status
+      setSections(prev => prev.map(s => {
+        if (s.id === sectionId) {
+          return {
+            ...s,
+            status: newStatus,
+            log: [...s.log, { agent: 'AI Review', action: logAction, timestamp: new Date() }]
+          };
+        }
+        return s;
+      }));
+
+      // Update currentIssues with REAL API results
+      const updatedIssues = (() => {
+        // Remove old issues for this section
+        const sectionKey = `section-${sectionId}`;
+        const filtered = currentIssues.filter(issue => issue.sectionId !== sectionKey);
+        
+        // Add new REAL issues from API
+        return [...filtered, ...result.issues];
+      })();
+      
+      setCurrentIssues(updatedIssues);
+      
+      // CRITICAL: Also update orchestrationResult so the two stay in sync
+      setOrchestrationResult((prev: any) => {
+        if (!prev) return prev;
+        
+        // Update remediations - remove old ones for this section, add new ones
+        const sectionKey = `section-${sectionId}`;
+        const otherRemediations = (prev.artifacts?.remediations || []).filter(
+          (rem: any) => rem.sectionId !== sectionKey
+        );
+        const updatedRemediations = [...otherRemediations, ...(result.remediations || [])];
+        
+        return {
+          ...prev,
+          artifacts: {
+            ...prev.artifacts,
+            review_issues: {
+              issues: updatedIssues,
+              total_count: updatedIssues.length
+            },
+            remediations: updatedRemediations
+          }
+        };
+      });
+      
+      // Invalidate sign-off if warnings changed
+      if (signOff) {
+        const newFingerprint = computeWarningsFingerprint(updatedIssues);
+        if (newFingerprint !== signOff.warningsFingerprint) {
+          setSignOff(null);
+          // Remove from localStorage
+          localStorage.removeItem(`doc:${docKey}:signoff`);
+        }
+      }
+      
+      // Increment review run ID to force recomputation
+      setReviewRunId(prev => prev + 1);
+
+      // Success message
+      const failCount = result.issues.filter(i => i.severity === 'FAIL').length;
+      const warnCount = result.issues.filter(i => i.severity === 'WARNING').length;
+      
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: result.issues[0]?.agent.name || 'Review Agent',
+        content: result.issues.length === 0
+          ? `Section ${sectionIndex + 1} "${section.title}": ✓ No issues found. All compliance checks passed.`
+          : `Section ${sectionIndex + 1} "${section.title}": ${failCount > 0 ? `✗ ${failCount} blocking` : ''}${failCount > 0 && warnCount > 0 ? ', ' : ''}${warnCount > 0 ? `⚠ ${warnCount} warning(s)` : ''}`
+      }]);
+      setHasNewChatMessage(true);
+      
+    } catch (error: any) {
+      console.error('[document] Error calling review API:', error);
+      
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: `❌ Review failed: ${error.message}. Please try again.`
+      }]);
+      setHasNewChatMessage(true);
+    } finally {
+      setReviewingSectionId(null);
+    }
+  };
+
+  /**
+   * Phase 2-B: Parse re-review command from chat
+   */
+  const parseReReviewCommand = (userInput: string): number | null => {
+    const lower = userInput.toLowerCase();
+    
+    // Must contain review keyword
+    if (!lower.includes('review') && !lower.includes('check')) {
+      return null;
+    }
+    
+    // Extract section number
+    const sectionNumMatch = lower.match(/section\s*(\d+)/);
+    if (sectionNumMatch) {
+      const num = parseInt(sectionNumMatch[1]);
+      // Validate index
+      if (num >= 1 && num <= sections.length) {
+        return sections[num - 1].id; // Convert 1-based to actual ID
+      }
+    }
+    
+    // Try matching by title keywords
+    for (let i = 0; i < sections.length; i++) {
+      const titleWords = sections[i].title.toLowerCase().split(/\s+/);
+      if (titleWords.some(word => word.length > 3 && lower.includes(word))) {
+        return sections[i].id;
+      }
+    }
+    
+    return null;
+  };
+
+  // Replaced by highlightComplianceKeywords and hasComplianceKeywords (defined at top)
 
   const handleDownloadPDF = () => {
     let pdfContent = 'INVESTMENT DOCUMENT\n\n';
@@ -640,6 +1893,16 @@ export default function DocumentPage() {
 
       const lowerInput = inputValue.toLowerCase();
       let agentMessage: Message;
+
+      // Phase 2-B: Check for re-review command FIRST
+      const reReviewSectionId = parseReReviewCommand(lowerInput);
+      if (reReviewSectionId !== null) {
+        setMessages([...messages, userMessage]);
+        setInputValue('');
+        handleReReviewSection(reReviewSectionId);
+        setHasNewChatMessage(true);
+        return;
+      }
 
       // Check if user is requesting AI optimization for a specific section
       const mentionedSection = detectSectionForModify(lowerInput);
@@ -818,7 +2081,7 @@ export default function DocumentPage() {
   const getSectionColor = (status: SectionStatus) => {
     switch (status) {
       case 'pass':
-        return 'border-green-500 bg-green-50';
+        return 'border-green-400 bg-green-100'; // Phase 2-B: Softer green
       case 'fail':
         return 'border-red-500 bg-red-50';
       case 'warning':
@@ -832,7 +2095,16 @@ export default function DocumentPage() {
   const getStatusBadge = (status: SectionStatus) => {
     switch (status) {
       case 'pass':
-        return <span className="px-3 py-1 bg-green-600 text-white text-sm font-semibold rounded-full">✓ PASS</span>;
+        // Phase 2-B: No "approval" language, just detection
+        return (
+          <span 
+            className="px-3 py-1 bg-green-500 text-white text-xs font-medium rounded-md inline-flex flex-col items-start"
+            title="Automated AI review completed. Human approval still required."
+          >
+            <span className="font-semibold">No issues identified</span>
+            <span className="text-[10px] opacity-80 mt-0.5">(AI review)</span>
+          </span>
+        );
       case 'fail':
         return <span className="px-3 py-1 bg-red-600 text-white text-sm font-semibold rounded-full">✗ FAIL</span>;
       case 'warning':
@@ -905,12 +2177,21 @@ export default function DocumentPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-4">
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-[60%_40%] gap-6 pb-[450px]">
+              {/* Left Column: Sections */}
+              <div className="space-y-4">
               {sections.map((section, index) => (
                 <div
                   key={section.id}
-                  className={`border-4 rounded-xl p-6 transition-all ${getSectionColor(section.status)}`}
+                  id={`sec-${index + 1}`}
+                  data-section-id={section.id}
+                  data-section-title={section.title}
+                  className={`scroll-mt-24 border-4 rounded-xl p-6 transition-all ${getSectionColor(section.status)} ${
+                    reviewingSectionId === section.id ? 'animate-pulse' : ''
+                  } ${
+                    highlightedSectionId === section.id ? 'ring-4 ring-blue-500 ring-offset-2' : ''
+                  }`}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div>
@@ -947,31 +2228,32 @@ export default function DocumentPage() {
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
                         className={`w-full text-slate-700 mb-2 leading-relaxed p-3 rounded-lg focus:outline-none focus:ring-2 min-h-[120px] ${
-                          hasComplianceIssue && hasProhibitedTerm(editContent)
+                          hasComplianceIssue && hasComplianceKeywords(editContent)
                             ? 'border-4 border-red-600 bg-red-50 focus:ring-red-500'
                             : 'border-2 border-blue-400 focus:ring-blue-500'
                         }`}
                       />
-                      {hasComplianceIssue && hasProhibitedTerm(editContent) && (
+                      {hasComplianceIssue && hasComplianceKeywords(editContent) && (
                         <div className="mb-2 p-3 bg-red-100 border-2 border-red-500 rounded-lg">
                           <div className="text-red-800 text-sm font-bold mb-2">
                             ⚠️ Compliance Violation Detected:
                           </div>
                           <div className="text-red-700 text-sm leading-relaxed">
-                            {highlightProhibitedTerms(editContent)}
+                            {highlightComplianceKeywords(editContent)}
                           </div>
                         </div>
                       )}
                     </div>
                   ) : (
                     <div>
-                      {hasProhibitedTerm(section.content) && section.status === 'fail' ? (
+                      {/* Highlight compliance keywords if section has FAIL status */}
+                      {section.status === 'fail' && hasComplianceKeywords(section.content) ? (
                         <div className="mb-4">
                           <div className="mb-2 p-2 bg-red-100 border-2 border-red-500 rounded text-red-800 text-sm font-bold">
                             ⚠️ Compliance Violation: Prohibited terms detected
                           </div>
                           <p className="text-slate-700 leading-relaxed">
-                            {highlightProhibitedTerms(section.content)}
+                            {highlightComplianceKeywords(section.content)}
                           </p>
                         </div>
                       ) : (
@@ -982,12 +2264,17 @@ export default function DocumentPage() {
                     </div>
                   )}
 
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 flex-wrap">
                     <button
-                      onClick={() => handleEvaluateSection(section.id)}
-                      className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors font-semibold"
+                      onClick={() => handleReReviewSection(section.id)}
+                      disabled={reviewingSectionId === section.id}
+                      className={`px-6 py-2 text-white rounded-lg transition-colors font-semibold ${
+                        reviewingSectionId === section.id
+                          ? 'bg-slate-400 cursor-wait'
+                          : 'bg-green-600 hover:bg-green-700'
+                      }`}
                     >
-                      Evaluate
+                      {reviewingSectionId === section.id ? '⏳ Reviewing...' : '🔄 Re-review Section'}
                     </button>
                     <button
                       onClick={() => handleModifySection(section.id)}
@@ -999,6 +2286,7 @@ export default function DocumentPage() {
                     >
                       {editingSectionId === section.id ? 'Save' : 'Modify'}
                     </button>
+                    
                     {hasComplianceIssue && editingSectionId === section.id && section.id === 3 && (
                       <span className="flex items-center text-red-600 font-semibold">
                         ⚠️ Cannot Save
@@ -1007,385 +2295,768 @@ export default function DocumentPage() {
                   </div>
                 </div>
               ))}
+              </div>
 
-              <div className="bg-white border-2 border-slate-300 rounded-xl p-6">
-                <h3 className="text-xl font-bold text-slate-800 mb-4">Document Actions</h3>
-
-                <div className="space-y-4">
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitted || !canSubmit}
-                    className={`w-full px-6 py-4 rounded-lg transition-colors font-bold text-lg shadow-sm ${
-                      isSubmitted || !canSubmit
-                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                        : 'bg-slate-700 text-white hover:bg-slate-800'
-                    }`}
-                  >
-                    Submit
-                  </button>
+              {/* Right Column: Review Results Panel */}
+              <div className="sticky top-6 h-[calc(100vh-4rem)] overflow-y-auto">
+                <div className="bg-white border-2 border-slate-300 rounded-xl p-6">
                   
-                  <button
-                    onClick={() => setShowAgentDashboard(true)}
-                    className="w-full px-6 py-3 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-semibold shadow-sm"
-                  >
-                    📊 Agent Dashboard
-                  </button>
-                  
-                  {/* Flow Selector */}
-                  <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                    <label className="block text-sm font-semibold text-slate-700 mb-3">
-                      Select Review Type:
-                    </label>
-                    <div className="space-y-2">
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="flow"
-                          value="compliance-review-v1"
-                          checked={selectedFlowId === 'compliance-review-v1'}
-                          onChange={(e) => setSelectedFlowId(e.target.value)}
-                          disabled={isOrchestrating || isSubmitted}
-                          className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-slate-400 disabled:opacity-50"
-                        />
-                        <span className="ml-2 text-sm text-slate-700">
-                          Compliance Review
-                          <span className="ml-2 text-xs text-slate-500">(Regulatory & Policy)</span>
+                  {/* Document Status Dock - Sticky merged component */}
+                  <div className="sticky top-0 -mt-6 -mx-6 mb-6 bg-white border-b-2 border-slate-300 p-4 z-10">
+                    {/* Status Badge Row */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1 rounded-full font-bold text-xs uppercase ${
+                          documentStatus.status === 'READY_TO_SUBMIT'
+                            ? 'bg-green-600 text-white'
+                            : documentStatus.status === 'REQUIRES_SIGN_OFF'
+                            ? 'bg-yellow-600 text-white'
+                            : 'bg-red-600 text-white'
+                        }`}>
+                          {documentStatus.status.replace(/_/g, ' ')}
                         </span>
-                      </label>
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="flow"
-                          value="contract-risk-review-v1"
-                          checked={selectedFlowId === 'contract-risk-review-v1'}
-                          onChange={(e) => setSelectedFlowId(e.target.value)}
-                          disabled={isOrchestrating || isSubmitted}
-                          className="w-4 h-4 text-purple-600 focus:ring-2 focus:ring-slate-400 disabled:opacity-50"
-                        />
-                        <span className="ml-2 text-sm text-slate-700">
-                          Contract Risk Review
-                          <span className="ml-2 text-xs text-slate-500">(Legal & Financial)</span>
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <button
-                    onClick={handleFullComplianceReview}
-                    disabled={isOrchestrating || isSubmitted}
-                    className={`w-full px-6 py-3 rounded-lg transition-colors font-semibold shadow-sm ${
-                      isOrchestrating || isSubmitted
-                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    {isOrchestrating ? '🔄 Running Review...' : '🔍 Run Full Review'}
-                  </button>
-                </div>
-                {!canSubmit && !isSubmitted && (
-                  <p className="text-sm text-red-600 mt-2 text-center font-semibold">
-                    ⚠️ All sections must pass evaluation before submission
-                  </p>
-                )}
-                
-                {/* Orchestration Result Panel */}
-                {orchestrationResult && (
-                  <div className="mt-6 bg-slate-50 border-2 border-slate-300 rounded-xl p-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                      <span>🎯</span> Review Results
-                      <span className={`text-xs px-2 py-1 rounded font-normal ${
-                        (orchestrationResult.metadata?.flow_version || selectedFlowId) === 'compliance-review-v1'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-purple-100 text-purple-700'
-                      }`}>
-                        {orchestrationResult.metadata?.flow_version || selectedFlowId}
-                      </span>
-                    </h3>
-                    
-                    {/* Parent Trace ID */}
-                    <div className="mb-4 text-xs text-slate-600 font-mono bg-white px-3 py-2 rounded border border-slate-200">
-                      Trace: {orchestrationResult.parent_trace_id}
-                    </div>
-                    
-                    {/* Decision */}
-                    <div className={`mb-4 p-4 rounded-lg border-2 ${
-                      orchestrationResult.decision?.next_action === 'ready_to_send' || orchestrationResult.decision?.next_action === 'approved'
-                        ? 'bg-green-50 border-green-400'
-                        : orchestrationResult.decision?.next_action === 'rejected'
-                        ? 'bg-red-50 border-red-400'
-                        : 'bg-yellow-50 border-yellow-400'
-                    }`}>
-                      <div className="font-bold text-sm mb-1">
-                        Decision: <span className="uppercase">{orchestrationResult.decision?.next_action}</span>
+                        {orchestrationResult && (
+                          <span className={`text-xs px-2 py-1 rounded font-semibold ${
+                            (orchestrationResult.metadata?.flow_version || selectedFlowId) === 'compliance-review-v1'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {orchestrationResult.metadata?.flow_version || selectedFlowId}
+                          </span>
+                        )}
                       </div>
-                      <div className="text-sm text-slate-700">{orchestrationResult.decision?.reason}</div>
                     </div>
-                    
-                    {/* Agent Timeline */}
-                    <div className="mb-4">
-                      <h4 className="font-semibold text-sm text-slate-700 mb-2">Agent Timeline ({orchestrationResult.execution?.steps?.length || 0} steps)</h4>
-                      <div className="space-y-1 max-h-40 overflow-y-auto">
-                        {orchestrationResult.execution?.steps?.map((step: any, idx: number) => (
-                          <div key={idx} className="flex items-center gap-2 text-xs bg-white px-3 py-2 rounded border border-slate-200">
-                            <span className={`w-2 h-2 rounded-full ${
-                              step.status === 'success' ? 'bg-green-500' : step.status === 'error' ? 'bg-red-500' : 'bg-slate-400'
-                            }`}></span>
-                            <span className="font-mono text-slate-600 flex-1">{step.agent_id}</span>
-                            <span className="text-slate-500">{step.latency_ms}ms</span>
-                            <span className="text-slate-400 font-mono text-[10px]">{step.trace_id?.substring(0, 12)}...</span>
+
+                    {/* Compact Metrics Row */}
+                    {orchestrationResult && (
+                      <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                        <div className="bg-slate-50 px-2 py-1 rounded">
+                          <span className="font-semibold">Sections:</span> {sections.length}
+                        </div>
+                        <div className="bg-slate-50 px-2 py-1 rounded">
+                          <span className="font-semibold">Issues:</span> {currentIssues.length}
+                        </div>
+                        {documentStatus.counts.totalFails > 0 && (
+                          <div className="bg-red-50 px-2 py-1 rounded text-red-700">
+                            <span className="font-semibold">Blocking:</span> {documentStatus.counts.totalFails}
                           </div>
-                        ))}
+                        )}
+                        {documentStatus.counts.totalWarnings > 0 && (
+                          <div className="bg-yellow-50 px-2 py-1 rounded text-yellow-700">
+                            <span className="font-semibold">Warnings:</span> {documentStatus.counts.totalWarnings}
+                          </div>
+                        )}
                       </div>
+                    )}
+
+                    {/* Status Explanation */}
+                    <p className="text-xs text-slate-700 mb-3 leading-relaxed">
+                      {documentStatus.explanation}
+                    </p>
+
+                    {/* Trace ID (secondary) */}
+                    {orchestrationResult && (
+                      <div className="text-xs text-slate-500 font-mono mb-3">
+                        Trace: {orchestrationResult.parent_trace_id}
+                      </div>
+                    )}
+
+                    {/* Actions Row - Enhanced for better prominence */}
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={handleFullComplianceReview}
+                        disabled={isOrchestrating || isSubmitted}
+                        className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
+                          isOrchestrating || isSubmitted
+                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                            : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg'
+                        }`}
+                      >
+                        {isOrchestrating ? '🔄 Running Review...' : '🔍 Run Full Review'}
+                      </button>
+                      
+                      {documentStatus.status === 'REQUIRES_SIGN_OFF' && !signOff && (
+                        <button
+                          onClick={() => {
+                            const newSignOff = createSignOff(currentIssues, `run-${reviewRunId}`);
+                            setSignOff(newSignOff);
+                            saveSignOff(docKey || 'default', newSignOff);
+                            setMessages(prev => [...prev, {
+                              role: 'agent',
+                              agent: 'System',
+                              content: `✓ Warning sign-off recorded by ${newSignOff.signerName}. Document is now ready for submission.`
+                            }]);
+                          }}
+                          className="w-full px-5 py-3 bg-yellow-600 text-white rounded-lg text-sm font-bold hover:bg-yellow-700 transition-all shadow-md hover:shadow-lg"
+                        >
+                          ✍️ Sign Off on Warnings
+                        </button>
+                      )}
+                      
+                      <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitted || !documentStatus.isSubmittable}
+                        className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
+                          isSubmitted || !documentStatus.isSubmittable
+                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                            : 'bg-slate-700 text-white hover:bg-slate-800 hover:shadow-lg'
+                        }`}
+                      >
+                        {isSubmitted ? '✓ Submitted' : '📤 Submit Document'}
+                      </button>
+                      
+                      {/* Disabled state helper text */}
+                      {!documentStatus.isSubmittable && !isSubmitted && (
+                        <p className="text-xs text-red-600 text-center font-semibold">
+                          {documentStatus.status === 'NOT_READY' 
+                            ? '⚠️ Resolve all blocking issues before submission'
+                            : '⚠️ Sign off on warnings before submission'
+                          }
+                        </p>
+                      )}
                     </div>
-                    
-                    {/* Artifacts Counts */}
-                    <div className="mb-4 grid grid-cols-2 gap-2">
-                      <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
-                        <div className="font-semibold text-slate-600">Facts</div>
-                        <div className="text-lg font-bold text-slate-800">{orchestrationResult.artifacts?.facts?.facts?.length || 0}</div>
+
+                    {/* Sign-Off Status */}
+                    {signOff && (
+                      <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                        <span className="font-semibold text-blue-900">✍️ Signed by {signOff.signerName}</span>
+                        <span className="text-blue-600 ml-2">({new Date(signOff.signedAt).toLocaleDateString()})</span>
                       </div>
-                      <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
-                        <div className="font-semibold text-slate-600">Policy Mappings</div>
-                        <div className="text-lg font-bold text-slate-800">{orchestrationResult.artifacts?.policy_mappings?.mappings?.length || 0}</div>
-                      </div>
-                      <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
-                        <div className="font-semibold text-slate-600">Issues</div>
-                        <div className="text-lg font-bold text-red-600">{orchestrationResult.artifacts?.review_issues?.issues?.length || 0}</div>
-                      </div>
-                      <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
-                        <div className="font-semibold text-slate-600">Evidence Requests</div>
-                        <div className="text-lg font-bold text-slate-800">{orchestrationResult.artifacts?.evidence_requests?.requests?.length || 0}</div>
-                      </div>
+                    )}
+                  </div>
+
+                  {!orchestrationResult ? (
+                    <div className="text-center py-8">
+                      <div className="text-5xl mb-3">🔍</div>
+                      <p className="text-slate-600 text-sm">
+                        Click "Run Review" above to analyze this document.
+                      </p>
                     </div>
-                    
-                    {/* First 2 Issues */}
-                    {orchestrationResult.artifacts?.review_issues?.issues && orchestrationResult.artifacts.review_issues.issues.length > 0 && (
+                  ) : (
+                    <>
+
+                      {/* Phase 2-D: Issues Grouped by Section */}
+                      {currentIssues.length > 0 && (() => {
+                        const bundles = groupIssuesBySection(currentIssues);
+                        
+                        // Auto-expand FAIL bundles on first render
+                        if (bundles.length > 0 && expandedBundles.size === 0) {
+                          const failBundles = bundles.filter(b => b.status === 'fail').map(b => b.sectionIndex);
+                          setExpandedBundles(new Set(failBundles));
+                        }
+                        
+                        if (bundles.length === 0) return null;
+                        
+                        return (
+                          <div className="mb-6">
+                            <h4 className="font-bold text-sm text-slate-800 mb-3">
+                              Issues by Section ({bundles.length} section{bundles.length > 1 ? 's' : ''})
+                            </h4>
+                            <div className="space-y-3">
+                              {bundles.filter(bundle => !signedOffWarnings.has(bundle.sectionIndex)).map(bundle => {
+                                const isExpanded = expandedBundles.has(bundle.sectionIndex);
+                                const toggleExpansion = () => {
+                                  setExpandedBundles(prev => {
+                                    const updated = new Set(prev);
+                                    if (updated.has(bundle.sectionIndex)) {
+                                      updated.delete(bundle.sectionIndex);
+                                    } else {
+                                      updated.add(bundle.sectionIndex);
+                                    }
+                                    return updated;
+                                  });
+                                };
+                                
+                                return (
+                                  <div 
+                                    key={bundle.sectionIndex}
+                                    className={`border-2 rounded-lg overflow-hidden ${
+                                      bundle.status === 'fail' 
+                                        ? 'border-red-500 bg-red-50' 
+                                        : 'border-yellow-500 bg-yellow-50'
+                                    }`}
+                                  >
+                                    {/* Bundle Header */}
+                                    <div className="p-3 bg-white border-b-2 border-slate-200">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            onClick={toggleExpansion}
+                                            className="text-slate-600 hover:text-slate-800 font-bold"
+                                            aria-expanded={isExpanded}
+                                          >
+                                            {isExpanded ? '▼' : '▶'}
+                                          </button>
+                                          <h5 className="font-bold text-sm text-slate-800">
+                                            Section {bundle.sectionIndex + 1} — {bundle.sectionTitle}
+                                          </h5>
+                                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                            bundle.status === 'fail' 
+                                              ? 'bg-red-600 text-white' 
+                                              : 'bg-yellow-600 text-white'
+                                          }`}>
+                                            {bundle.status === 'fail' ? '✗ FAIL' : '⚠ WARNING'}
+                                          </span>
+                                          <span className="text-xs text-slate-600">
+                                            ({bundle.issues.length} issue{bundle.issues.length > 1 ? 's' : ''})
+                                          </span>
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Action Buttons */}
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => jumpToSection(bundle.sectionIndex)}
+                                          className="px-2 py-1 text-[11px] font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 rounded transition-all"
+                                        >
+                                          🔍 Jump to section
+                                        </button>
+                                        {(bundle.status === 'fail' || bundle.status === 'warning') && (
+                                          <button
+                                            onClick={() => handleReReviewSection(bundle.sectionId!)}
+                                            disabled={reviewingSectionId === bundle.sectionId}
+                                            className={`px-2 py-1 text-[11px] font-medium rounded transition-all ${
+                                              reviewingSectionId === bundle.sectionId
+                                                ? 'bg-slate-300 text-slate-500 cursor-wait'
+                                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                            }`}
+                                          >
+                                            {reviewingSectionId === bundle.sectionId ? '⏳ Reviewing...' : '🔄 Re-review section'}
+                                          </button>
+                                        )}
+                                        {bundle.status === 'warning' && !signedOffWarnings.has(bundle.sectionIndex) && (
+                                          <button
+                                            onClick={() => {
+                                              // Mark this section's warnings as signed off
+                                              setSignedOffWarnings(prev => new Set(prev).add(bundle.sectionIndex));
+                                              
+                                              // Remove warning issues for this section (match by sectionId string)
+                                              const sectionKey = `section-${bundle.sectionId}`;
+                                              setCurrentIssues(prevIssues => 
+                                                prevIssues.filter(issue => issue.sectionId !== sectionKey)
+                                              );
+                                              
+                                              // Update section to pass status
+                                              setSections(prev => prev.map(s => 
+                                                s.id === bundle.sectionId
+                                                  ? {
+                                                      ...s,
+                                                      status: 'pass' as SectionStatus,
+                                                      log: [
+                                                        ...s.log,
+                                                        {
+                                                          agent: 'Victoria',
+                                                          action: 'Warning accepted with signature',
+                                                          timestamp: new Date()
+                                                        }
+                                                      ]
+                                                    }
+                                                  : s
+                                              ));
+                                              
+                                              // Increment review run ID
+                                              setReviewRunId(prev => prev + 1);
+                                              
+                                              // Add message
+                                              setMessages(prev => [...prev, {
+                                                role: 'agent',
+                                                agent: 'Victoria',
+                                                content: `✓ Warning for Section ${bundle.sectionIndex + 1} "${bundle.sectionTitle}" has been accepted with signature.`
+                                              }]);
+                                              setHasNewChatMessage(true);
+                                            }}
+                                            className="px-2 py-1 text-[11px] font-medium bg-purple-100 text-purple-700 hover:bg-purple-200 rounded transition-all"
+                                          >
+                                            ✍️ Pass with signature
+                                          </button>
+                                        )}
+                                        {signedOffWarnings.has(bundle.sectionIndex) && (
+                                          <span className="px-2 py-1 text-[11px] font-medium bg-purple-50 text-purple-700 rounded">
+                                            ✓ Warning accepted by Victoria
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Bundle Body (collapsible) */}
+                                    {isExpanded && (
+                                      <div className="p-3 space-y-3">
+                                        {/* Issue Bullets (compact, clickable) */}
+                                        <div className="bg-white rounded p-3 border border-slate-300">
+                                          <div className="font-semibold text-[10px] text-slate-600 mb-2 uppercase">Issues (click to jump)</div>
+                                          <ul className="space-y-1">
+                                            {bundle.issues.map((issue: any, idx: number) => {
+                                              // Determine agent for attribution
+                                              const agentId = issue.agentId || normalizeAgentId(issue.agent);
+                                              const agentMeta = agentId ? getAgentMetadata(agentId) : null;
+                                              
+                                              return (
+                                                <li 
+                                                  key={idx} 
+                                                  onClick={() => jumpToSection(bundle.sectionIndex)}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                      e.preventDefault();
+                                                      jumpToSection(bundle.sectionIndex);
+                                                    }
+                                                  }}
+                                                  role="button"
+                                                  tabIndex={0}
+                                                  className="text-xs text-slate-700 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-all hover:scale-[1.01]"
+                                                >
+                                                  <span className={`font-semibold uppercase text-[10px] mr-1 ${
+                                                    issue.severity === 'critical' ? 'text-red-700' :
+                                                    issue.severity === 'high' ? 'text-orange-700' :
+                                                    issue.severity === 'medium' ? 'text-yellow-700' :
+                                                    'text-blue-700'
+                                                  }`}>
+                                                    [{issue.severity}]
+                                                  </span>
+                                                  {issue.description}
+                                                  {agentMeta && (
+                                                    <span className="ml-1.5 px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] rounded font-medium">
+                                                      by {agentMeta.displayName}
+                                                    </span>
+                                                  )}
+                                                  <span className="ml-1 text-blue-600 text-[10px]">→</span>
+                                                </li>
+                                              );
+                                            })}
+                                          </ul>
+                                        </div>
+                                        
+                                        {/* Remediation Area (shown once per section) */}
+                                        {bundle.proposedText && (
+                                          <div className="bg-white rounded p-3 border border-slate-300">
+                                            <div className="flex items-center gap-1.5 mb-2">
+                                              <span className="text-sm">📄</span>
+                                              <span className="font-semibold text-[11px] text-slate-700 uppercase tracking-wide">
+                                                Proposed Compliant Version
+                                              </span>
+                                            </div>
+                                            <textarea
+                                              readOnly
+                                              value={bundle.proposedText}
+                                              rows={8}
+                                              className="w-full text-[11px] font-mono bg-slate-50 border border-slate-300 rounded p-2 text-slate-700 resize-none leading-relaxed"
+                                            />
+                                            <div className="flex gap-2 mt-2">
+                                              <button
+                                                onClick={() => handleCopyProposedFix(
+                                                  `bundle-${bundle.sectionIndex}`, 
+                                                  bundle.proposedText!,
+                                                  `Section ${bundle.sectionIndex + 1}`
+                                                )}
+                                                className={`flex-1 px-2 py-1.5 rounded text-[11px] font-medium transition-all ${
+                                                  copiedIssueKey === `bundle-${bundle.sectionIndex}`
+                                                    ? 'bg-green-100 text-green-800 border border-green-300'
+                                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
+                                                }`}
+                                              >
+                                                {copiedIssueKey === `bundle-${bundle.sectionIndex}` ? '✓ Copied!' : '📋 Copy'}
+                                              </button>
+                                              {bundle.sectionId && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleApplyProposedFix(bundle.sectionId!, bundle.proposedText!);
+                                                  }}
+                                                  className={`px-3 py-1.5 rounded text-[11px] font-semibold transition-all ${
+                                                    appliedFixes[bundle.sectionId]
+                                                      ? 'bg-orange-100 text-orange-800 border border-orange-300 hover:bg-orange-200'
+                                                      : 'bg-blue-100 text-blue-800 border border-blue-300 hover:bg-blue-200'
+                                                  }`}
+                                                  title={appliedFixes[bundle.sectionId] ? 'Restore previous content' : 'Write proposed text into section'}
+                                                >
+                                                  {appliedFixes[bundle.sectionId] ? '↩️ Undo Apply' : `✓ Apply to Section ${bundle.sectionIndex + 1}`}
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {/* Checklist (if applicable) */}
+                                        {bundle.hasChecklist && (
+                                          <div className="bg-white rounded p-3 border border-slate-300">
+                                            <div className="flex items-center gap-1.5 mb-2">
+                                              <span className="text-sm">📋</span>
+                                              <span className="font-semibold text-[11px] text-slate-700 uppercase tracking-wide">
+                                                Checklist / Next Steps
+                                              </span>
+                                            </div>
+                                            <ul className="space-y-1 list-disc list-inside text-xs text-slate-700">
+                                              <li>Gather supporting evidence documentation</li>
+                                              <li>Clarify wording and ensure consistency</li>
+                                              <li>Confirm compliance with internal guidelines</li>
+                                            </ul>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Document-Level Issues (if any) */}
+                      {getDocumentLevelIssues(orchestrationResult).length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="font-bold text-sm text-slate-800 mb-3">Document-Level Issues ({getDocumentLevelIssues(orchestrationResult).length})</h4>
+                          <div className="space-y-2">
+                            {getDocumentLevelIssues(orchestrationResult).map((issue: any, idx: number) => (
+                              <div key={idx} className="p-3 rounded-lg bg-slate-50 border-l-4 border-slate-400 text-xs">
+                                <div className="font-bold mb-1 uppercase text-[10px] text-slate-600">{issue.severity}</div>
+                                <div className="text-slate-700">{issue.description}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Evidence Requests (Collapsible) */}
+                      {orchestrationResult.artifacts?.evidence_requests?.requests && orchestrationResult.artifacts.evidence_requests.requests.length > 0 && (
+                        <details className="mb-4 bg-slate-50 border border-slate-200 rounded-lg">
+                          <summary className="p-3 cursor-pointer font-semibold text-sm text-slate-800 hover:bg-slate-100">
+                            Evidence Requests ({orchestrationResult.artifacts.evidence_requests.requests.length})
+                          </summary>
+                          <div className="p-3 space-y-2 border-t border-slate-200">
+                            {orchestrationResult.artifacts.evidence_requests.requests.map((req: any, idx: number) => (
+                              <div key={idx} className="text-xs text-slate-700 bg-white p-2 rounded border border-slate-200">
+                                <div className="font-bold mb-1">{req.priority || 'Medium'} Priority</div>
+                                <div>{req.request_text}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+
+                      {/* Client Communication (Collapsible) */}
+                      {orchestrationResult.artifacts?.client_communication && (
+                        <details className="mb-4 bg-slate-50 border border-slate-200 rounded-lg">
+                          <summary className="p-3 cursor-pointer font-semibold text-sm text-slate-800 hover:bg-slate-100">
+                            Client Communication Preview
+                          </summary>
+                          <div className="p-3 border-t border-slate-200">
+                            <div className="text-xs">
+                              <div className="font-bold mb-1 text-slate-800">{orchestrationResult.artifacts.client_communication.subject}</div>
+                              <div className="text-slate-600">
+                                {orchestrationResult.artifacts.client_communication.body}
+                              </div>
+                            </div>
+                          </div>
+                        </details>
+                      )}
+
+                      {/* Agent Timeline */}
                       <div className="mb-4">
-                        <h4 className="font-semibold text-sm text-slate-700 mb-2">Top Issues</h4>
-                        <div className="space-y-2">
-                          {orchestrationResult.artifacts.review_issues.issues.slice(0, 2).map((issue: any, idx: number) => (
-                            <div key={idx} className={`p-3 rounded-lg border-l-4 text-xs ${
-                              issue.severity === 'critical' ? 'bg-red-50 border-red-500' :
-                              issue.severity === 'high' ? 'bg-orange-50 border-orange-500' :
-                              'bg-yellow-50 border-yellow-500'
-                            }`}>
-                              <div className="font-bold mb-1 uppercase text-[10px]">{issue.severity}</div>
-                              <div className="text-slate-700 mb-1">{issue.description}</div>
-                              {issue.suggested_fix && (
-                                <div className="text-slate-600 italic">→ {issue.suggested_fix}</div>
-                              )}
+                        <h4 className="font-semibold text-sm text-slate-800 mb-2">Agent Timeline ({orchestrationResult.execution?.steps?.length || 0} steps)</h4>
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {orchestrationResult.execution?.steps?.map((step: any, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs bg-white px-3 py-2 rounded border border-slate-200">
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                step.status === 'completed' || step.status === 'success' ? 'bg-green-500' : 
+                                step.status === 'failed' || step.status === 'error' ? 'bg-red-500' : 
+                                'bg-slate-400'
+                              }`}></span>
+                              <span className="font-mono text-slate-600 flex-1 truncate">{step.agent_id}</span>
+                              <span className="text-slate-500 flex-shrink-0">{step.latency_ms}ms</span>
                             </div>
                           ))}
                         </div>
                       </div>
-                    )}
-                    
-                    {/* First Evidence Request */}
-                    {orchestrationResult.artifacts?.evidence_requests?.requests && orchestrationResult.artifacts.evidence_requests.requests.length > 0 && (
-                      <div className="mb-4">
-                        <h4 className="font-semibold text-sm text-slate-700 mb-2">Evidence Request</h4>
-                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-xs text-slate-700">
-                          {orchestrationResult.artifacts.evidence_requests.requests[0].request_text}
+
+                      {/* Artifacts Counts */}
+                      <div className="mb-4 grid grid-cols-2 gap-2">
+                        <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
+                          <div className="font-semibold text-slate-600">Facts</div>
+                          <div className="text-lg font-bold text-slate-800">{orchestrationResult.artifacts?.facts?.facts?.length || 0}</div>
+                        </div>
+                        <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
+                          <div className="font-semibold text-slate-600">Policy Mappings</div>
+                          <div className="text-lg font-bold text-slate-800">{orchestrationResult.artifacts?.policy_mappings?.mappings?.length || 0}</div>
+                        </div>
+                        <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
+                          <div className="font-semibold text-slate-600">Issues</div>
+                          <div className="text-lg font-bold text-red-600">{orchestrationResult.artifacts?.review_issues?.issues?.length || 0}</div>
+                        </div>
+                        <div className="bg-white px-3 py-2 rounded border border-slate-200 text-xs">
+                          <div className="font-semibold text-slate-600">Evidence Requests</div>
+                          <div className="text-lg font-bold text-slate-800">{orchestrationResult.artifacts?.evidence_requests?.requests?.length || 0}</div>
                         </div>
                       </div>
-                    )}
-                    
-                    {/* Client Communication Preview */}
-                    {orchestrationResult.artifacts?.client_communication && (
-                      <div className="mb-4">
-                        <h4 className="font-semibold text-sm text-slate-700 mb-2">Client Communication</h4>
-                        <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
-                          <div className="font-bold mb-1">{orchestrationResult.artifacts.client_communication.subject}</div>
-                          <div className="text-slate-600">
-                            {orchestrationResult.artifacts.client_communication.body?.substring(0, 200)}
-                            {orchestrationResult.artifacts.client_communication.body?.length > 200 && '...'}
-                          </div>
+
+                      {/* Audit Log */}
+                      {orchestrationResult.artifacts?.audit_log && (
+                        <div className="text-xs text-slate-600 bg-white px-3 py-2 rounded border border-slate-200">
+                          <span className="font-semibold">Audit:</span> {orchestrationResult.artifacts.audit_log.audit_id} @ {new Date(orchestrationResult.artifacts.audit_log.timestamp).toLocaleString()}
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </>
+                  )}
+
+                  {/* Control Buttons */}
+                  <div className="mt-6 space-y-3">
+                    {/* Agents Button with Badge */}
+                    <button
+                      onClick={() => setShowAgentsDrawer(true)}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold text-sm shadow-sm flex items-center justify-center gap-2"
+                    >
+                      <span>🤖 Agents</span>
+                      {agentParticipants.length > 0 && (
+                        <span className="px-2 py-0.5 bg-white text-blue-600 text-xs font-bold rounded-full">
+                          {agentParticipants.length}
+                        </span>
+                      )}
+                    </button>
                     
-                    {/* Audit Log */}
-                    {orchestrationResult.artifacts?.audit_log && (
-                      <div className="text-xs text-slate-600 bg-white px-3 py-2 rounded border border-slate-200">
-                        <span className="font-semibold">Audit:</span> {orchestrationResult.artifacts.audit_log.audit_id} @ {new Date(orchestrationResult.artifacts.audit_log.timestamp).toLocaleString()}
+                    <button
+                      onClick={() => setShowAgentDashboard(true)}
+                      className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-semibold text-sm shadow-sm"
+                    >
+                      📊 Agent Dashboard
+                    </button>
+
+                    {/* Flow Selector */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                      <label className="block text-xs font-semibold text-slate-700 mb-2">
+                        Review Type:
+                      </label>
+                      <div className="space-y-2">
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="radio"
+                            name="flow"
+                            value="compliance-review-v1"
+                            checked={selectedFlowId === 'compliance-review-v1'}
+                            onChange={(e) => setSelectedFlowId(e.target.value)}
+                            disabled={isOrchestrating || isSubmitted}
+                            className="w-3 h-3 text-blue-600 focus:ring-2 focus:ring-slate-400 disabled:opacity-50"
+                          />
+                          <span className="ml-2 text-xs text-slate-700">
+                            Compliance Review
+                          </span>
+                        </label>
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="radio"
+                            name="flow"
+                            value="contract-risk-review-v1"
+                            checked={selectedFlowId === 'contract-risk-review-v1'}
+                            onChange={(e) => setSelectedFlowId(e.target.value)}
+                            disabled={isOrchestrating || isSubmitted}
+                            className="w-3 h-3 text-purple-600 focus:ring-2 focus:ring-slate-400 disabled:opacity-50"
+                          />
+                          <span className="ml-2 text-xs text-slate-700">
+                            Contract Risk Review
+                          </span>
+                        </label>
                       </div>
-                    )}
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
-            <div className="lg:col-span-1">
-              <div className="bg-white border-2 border-slate-300 rounded-xl p-6 sticky top-6">
-                <h3 className="text-xl font-bold text-slate-800 mb-4">Chat & Agents</h3>
-                
-                <div className="bg-slate-50 rounded-lg p-4 mb-4 max-h-[500px] overflow-y-auto">
-                  {messages.map((msg, idx) => (
-                    <div
-                      key={idx}
-                      className={`mb-3 p-3 rounded-lg ${
-                        msg.role === 'agent'
-                          ? msg.agent === 'Compliance Agent'
-                            ? 'bg-red-100 border-2 border-red-400'
-                            : 'bg-blue-100 border border-blue-300'
-                          : 'bg-green-100 border border-green-300'
-                      }`}
-                    >
-                      {msg.agent && (
-                        <div className="flex items-center justify-between mb-1">
-                          <div className={`font-bold text-sm ${
-                            msg.agent === 'Compliance Agent' ? 'text-red-800' : 'text-slate-700'
-                          }`}>
-                            [{msg.agent}]
-                          </div>
-                          
-                          {/* Voice Button - Only show for agent messages if speech is supported */}
-                          {msg.role === 'agent' && isSupported && (
-                            <button
-                              onClick={() => {
-                                if (speakingMessageIndex === idx && isSpeaking) {
-                                  stop();
-                                  setSpeakingMessageIndex(null);
-                                } else {
-                                  stop(); // Stop any current speech
-                                  speak(msg.content, 'english'); // Document page uses English by default
-                                  setSpeakingMessageIndex(idx);
-                                }
-                              }}
-                              className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-all ${
-                                speakingMessageIndex === idx && isSpeaking
-                                  ? 'bg-red-200 text-red-800 hover:bg-red-300'
-                                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                              }`}
-                              aria-label={speakingMessageIndex === idx && isSpeaking ? 'Stop speaking' : 'Play audio'}
-                            >
-                              {speakingMessageIndex === idx && isSpeaking ? (
-                                <>
-                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                                    <rect x="6" y="4" width="4" height="16" rx="1"/>
-                                    <rect x="14" y="4" width="4" height="16" rx="1"/>
-                                  </svg>
-                                  <span>Stop</span>
-                                </>
-                              ) : (
-                                <>
-                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M8 5v14l11-7z"/>
-                                  </svg>
-                                  <span>Listen</span>
-                                </>
+            {/* Sticky Chat Panel at Bottom */}
+            <div 
+              className={`fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] transition-all duration-200 ${
+                isChatExpanded ? 'h-[40vh] max-h-[400px]' : 'h-[50px]'
+              }`}
+            >
+              <div className="flex flex-col h-full max-w-7xl mx-auto px-6">
+                {/* Message History (only when expanded) */}
+                {isChatExpanded && (
+                  <div className="flex-1 overflow-y-auto bg-slate-50 p-4 -mx-6">
+                    <div className="max-w-7xl mx-auto px-6">
+                      {messages.map((msg, idx) => (
+                        <div
+                          key={idx}
+                          className={`mb-3 p-3 rounded-lg ${
+                            msg.role === 'agent'
+                              ? msg.agent === 'Compliance Agent'
+                                ? 'bg-red-100 border-2 border-red-400'
+                                : 'bg-blue-100 border border-blue-300'
+                              : 'bg-green-100 border border-green-300'
+                          }`}
+                        >
+                          {msg.agent && (
+                            <div className="flex items-center justify-between mb-1">
+                              <div className={`font-bold text-sm ${
+                                msg.agent === 'Compliance Agent' ? 'text-red-800' : 'text-slate-700'
+                              }`}>
+                                [{msg.agent}]
+                              </div>
+                              
+                              {/* Voice Button */}
+                              {msg.role === 'agent' && isSupported && (
+                                <button
+                                  onClick={() => {
+                                    if (speakingMessageIndex === idx && isSpeaking) {
+                                      stop();
+                                      setSpeakingMessageIndex(null);
+                                    } else {
+                                      stop();
+                                      speak(msg.content, 'english');
+                                      setSpeakingMessageIndex(idx);
+                                    }
+                                  }}
+                                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-all ${
+                                    speakingMessageIndex === idx && isSpeaking
+                                      ? 'bg-red-200 text-red-800 hover:bg-red-300'
+                                      : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                                  }`}
+                                  aria-label={speakingMessageIndex === idx && isSpeaking ? 'Stop speaking' : 'Play audio'}
+                                >
+                                  {speakingMessageIndex === idx && isSpeaking ? (
+                                    <>
+                                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                        <rect x="6" y="4" width="4" height="16" rx="1"/>
+                                        <rect x="14" y="4" width="4" height="16" rx="1"/>
+                                      </svg>
+                                      <span>Stop</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z"/>
+                                      </svg>
+                                      <span>Listen</span>
+                                    </>
+                                  )}
+                                </button>
                               )}
-                            </button>
+                            </div>
                           )}
+                          <p className={`text-sm ${
+                            msg.agent === 'Compliance Agent' ? 'text-red-800' : 'text-slate-700'
+                          }`}>{msg.content}</p>
                         </div>
-                      )}
-                      <p className={`text-sm ${
-                        msg.agent === 'Compliance Agent' ? 'text-red-800' : 'text-slate-700'
-                      }`}>{msg.content}</p>
+                      ))}
                     </div>
-                  ))}
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && !isAIProcessing && !isListening && handleSendMessage()}
-                      placeholder={isListening ? "Listening..." : "Type your message..."}
-                      disabled={isAIProcessing || isListening}
-                      className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-slate-100"
-                    />
-                    
-                    {/* Talk Button */}
-                    {isRecognitionSupported && (
-                      <button
-                        onClick={() => {
-                          if (isListening) {
-                            stopListening();
-                          } else {
-                            startListening();
-                          }
-                        }}
-                        disabled={isAIProcessing}
-                        className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-                          isListening
-                            ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
-                            : isAIProcessing
-                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                            : 'bg-slate-600 text-white hover:bg-slate-700'
-                        }`}
-                        title={isListening ? 'Stop listening' : 'Start voice input'}
-                      >
-                        {isListening ? (
-                          <div className="flex items-center gap-1.5">
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                              <rect x="6" y="4" width="4" height="16" rx="1"/>
-                              <rect x="14" y="4" width="4" height="16" rx="1"/>
-                            </svg>
-                            <span>Stop</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3z"/>
-                              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                            </svg>
-                            <span>Talk</span>
-                          </div>
-                        )}
-                      </button>
-                    )}
                   </div>
+                )}
+                
+                {/* Input Bar (always visible) */}
+                <div className="flex items-center gap-2 py-2 bg-white border-t border-slate-200">
+                  {/* Toggle Button */}
+                  <button
+                    onClick={() => setIsChatExpanded(!isChatExpanded)}
+                    aria-label={isChatExpanded ? "Collapse chat" : "Expand chat"}
+                    aria-expanded={isChatExpanded}
+                    className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center text-slate-600 font-bold relative"
+                  >
+                    {isChatExpanded ? '▼' : '▲'}
+                    {!isChatExpanded && hasNewChatMessage && (
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-600 rounded-full animate-pulse"></span>
+                    )}
+                  </button>
                   
+                  {/* Input Field */}
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && !isAIProcessing && !isListening && handleSendMessage()}
+                    placeholder={isListening ? "Listening..." : "Type your message or ask a question..."}
+                    disabled={isAIProcessing || isListening}
+                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-slate-100"
+                  />
+                  
+                  {/* Talk Button */}
+                  {isRecognitionSupported && (
+                    <button
+                      onClick={() => {
+                        if (isListening) {
+                          stopListening();
+                        } else {
+                          startListening();
+                        }
+                      }}
+                      disabled={isAIProcessing}
+                      className={`px-3 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-1.5 ${
+                        isListening
+                          ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                          : isAIProcessing
+                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                          : 'bg-slate-600 text-white hover:bg-slate-700'
+                      }`}
+                      title={isListening ? 'Stop listening' : 'Start voice input'}
+                    >
+                      {isListening ? (
+                        <>
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="4" width="4" height="16" rx="1"/>
+                            <rect x="14" y="4" width="4" height="16" rx="1"/>
+                          </svg>
+                          <span className="hidden sm:inline">Stop</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3z"/>
+                            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                          </svg>
+                          <span className="hidden sm:inline">Talk</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  
+                  {/* Send Button */}
                   <button
                     onClick={handleSendMessage}
                     disabled={isAIProcessing || isListening}
-                    className={`w-full px-4 py-2 rounded-lg transition-colors font-semibold ${
+                    className={`px-4 py-2 rounded-lg transition-colors font-semibold ${
                       isAIProcessing || isListening
                         ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                         : 'bg-slate-700 text-white hover:bg-slate-800'
                     }`}
                   >
-                    {isAIProcessing ? 'AI Processing...' : 'Send'}
+                    {isAIProcessing ? 'AI...' : 'Send'}
                   </button>
-                  
-                  {/* Submit Button - Convenient placement for final submission */}
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitted || !canSubmit || isAIProcessing}
-                    className={`w-full px-4 py-2 rounded-lg transition-colors font-semibold shadow-sm ${
-                      isSubmitted || !canSubmit || isAIProcessing
-                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                        : 'bg-green-600 text-white hover:bg-green-700'
-                    }`}
-                  >
-                    {isSubmitted ? '✓ Submitted' : 'Submit Document'}
-                  </button>
-                  
-                  {!canSubmit && !isSubmitted && (
-                    <p className="text-xs text-amber-600 text-center mt-1">
-                      ⚠️ All sections must pass evaluation before submission
-                    </p>
-                  )}
-                  
-                  {isAIProcessing && (
-                    <p className="text-xs text-blue-600 text-center">
-                      🤖 Claude is optimizing your content...
-                    </p>
-                  )}
                 </div>
+                
+                {isAIProcessing && (
+                  <div className="text-xs text-blue-600 text-center pb-1">
+                    🤖 Claude is optimizing your content...
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
+
+      {/* Phase 2-B: Copy Toast Notification */}
+      {showCopyToast && (
+        <div className="fixed top-6 right-6 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-xl border-2 border-green-700 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">✓</span>
+            <span className="font-semibold">Copied to clipboard</span>
+          </div>
+          <div className="text-xs mt-1 opacity-90">
+            Paste into the target section
+          </div>
+        </div>
+      )}
 
       {/* Agent Dashboard Modal */}
       <AgentDashboard 
         isOpen={showAgentDashboard}
         onClose={() => setShowAgentDashboard(false)}
+      />
+      
+      {/* Review Configuration & Agents Drawer (Governed Selection) */}
+      <ReviewConfigDrawer
+        open={showAgentsDrawer}
+        onOpenChange={setShowAgentsDrawer}
+        participants={agentParticipants}
+        reviewConfig={reviewConfig}
+        onConfigChange={setReviewConfig}
+        onRunReview={handleFullComplianceReview}
       />
     </div>
   );
