@@ -6,7 +6,7 @@ import AgentDashboard from '../components/AgentDashboard';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 
-type SectionStatus = 'unevaluated' | 'pass' | 'fail';
+type SectionStatus = 'unreviewed' | 'pass' | 'fail' | 'warning';
 
 interface LogEntry {
   agent: string;
@@ -34,30 +34,22 @@ const FAKE_SECTIONS = [
     id: 1,
     title: 'Investment Background',
     content: 'I am a mid-career professional with a stable income and a growing interest in long-term investing. Over the past several years, I have gradually built exposure to financial markets through mutual funds and employer-sponsored retirement plans. My investment knowledge is largely self-taught, relying on online resources, market news, and informal discussions with peers. I do not follow a strict investment philosophy, but I value diversification and consistency. My primary motivation is to preserve and grow capital over time rather than pursue speculative opportunities or short-term trading gains.',
-    status: 'pass' as SectionStatus,
-    log: [
-      { agent: 'Evaluate', action: 'PASS: All criteria met', timestamp: new Date() }
-    ]
+    status: 'unreviewed' as SectionStatus,
+    log: []
   },
   {
     id: 2,
     title: 'Risk Assessment',
     content: 'I consider myself to have a moderate tolerance for risk, balancing growth potential with capital preservation. While I understand that market volatility is inevitable, I prefer to avoid extreme drawdowns that could significantly impact long-term plans. I am willing to accept moderate fluctuations if they align with a disciplined strategy. My biggest concern relates to market movements are a concern, especially during periods of rapid decline. Therefore, risk management, transparency, and clear downside expectations are important factors in investment decisions.',
-    status: 'fail' as SectionStatus,
-    log: [
-      { agent: 'Evaluate', action: 'FAIL: Too long, unclear risk methodology', timestamp: new Date() },
-      { agent: 'Optimize', action: 'Proposal: Shorten to 100 words, clarify approach', timestamp: new Date() }
-    ]
+    status: 'unreviewed' as SectionStatus,
+    log: []
   },
   {
     id: 3,
     title: 'Technical Strategy',
     content: 'From a technical perspective, my approach is relatively simple and pragmatic. I do not engage heavily in advanced technical analysis, but I follow basic indicators such as trends, asset allocation signals, and rebalancing thresholds. Automation and rule-based processes are preferred to reduce emotional decisions. I value strategies that can be monitored and adjusted periodically rather than actively traded. Clear reporting, performance metrics, and strategy rationale are essential for maintaining confidence in the approach over time.',
-    status: 'fail' as SectionStatus,
-    log: [
-      { agent: 'Evaluate', action: 'FAIL: Missing mandatory disclaimer', timestamp: new Date() },
-      { agent: 'Policy', action: 'Mandatory disclaimer required for compliance', timestamp: new Date() }
-    ]
+    status: 'unreviewed' as SectionStatus,
+    log: []
   }
 ];
 
@@ -76,8 +68,8 @@ export default function DocumentPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'agent',
-      agent: 'Evaluate Agent',
-      content: 'Document evaluation completed:\n✓ Section 1 (Investment Background): PASS\n✗ Section 2 (Risk Assessment): FAIL - Issues detected\n✗ Section 3 (Technical Strategy): FAIL - Issues detected'
+      agent: 'System',
+      content: 'Document loaded. Sections are ready for review. Click "Run Full Review" to analyze a section with the orchestrator.'
     }
   ]);
 
@@ -100,8 +92,8 @@ export default function DocumentPage() {
           id: 1,
           title: section1Title || 'Section 1',
           content: section1Content,
-          status: 'pass' as SectionStatus,
-          log: [{ agent: 'Evaluate', action: 'PASS: All criteria met', timestamp: new Date() }]
+          status: 'unreviewed' as SectionStatus,
+          log: []
         });
       }
       
@@ -110,11 +102,8 @@ export default function DocumentPage() {
           id: 2,
           title: section2Title || 'Section 2',
           content: section2Content,
-          status: 'fail' as SectionStatus,
-          log: [
-            { agent: 'Evaluate', action: 'FAIL: Too long, unclear risk methodology', timestamp: new Date() },
-            { agent: 'Optimize', action: 'Proposal: Shorten to 100 words, clarify approach', timestamp: new Date() }
-          ]
+          status: 'unreviewed' as SectionStatus,
+          log: []
         });
       }
       
@@ -123,11 +112,8 @@ export default function DocumentPage() {
           id: 3,
           title: section3Title || 'Section 3',
           content: section3Content,
-          status: 'fail' as SectionStatus,
-          log: [
-            { agent: 'Evaluate', action: 'FAIL: Missing mandatory disclaimer', timestamp: new Date() },
-            { agent: 'Policy', action: 'Mandatory disclaimer required for compliance', timestamp: new Date() }
-          ]
+          status: 'unreviewed' as SectionStatus,
+          log: []
         });
       }
       
@@ -135,15 +121,11 @@ export default function DocumentPage() {
         setSections(loadedSections);
         
         // Update initial message
-        const sectionMessages = loadedSections.map((sec, idx) => 
-          `${idx === 0 ? '✓' : '✗'} Section ${idx + 1} (${sec.title}): ${idx === 0 ? 'PASS' : 'FAIL - Issues detected'}`
-        ).join('\n');
-        
         setMessages([
           {
             role: 'agent',
-            agent: 'Evaluate Agent',
-            content: `Document evaluation completed:\n${sectionMessages}`
+            agent: 'System',
+            content: `${loadedSections.length} section(s) loaded. Ready for review.`
           }
         ]);
         return;
@@ -165,23 +147,12 @@ export default function DocumentPage() {
         
         // Map defined sections to full section objects with logs
         const customSections: Section[] = definedSections.map((section: any, index: number) => {
-          const isFirstSection = index === 0;
           return {
             id: section.id,
             title: section.title, // Use custom title from segmentation page
             content: section.content,
-            status: isFirstSection ? 'pass' as SectionStatus : 'fail' as SectionStatus,
-            log: isFirstSection 
-              ? [{ agent: 'Evaluate', action: 'PASS: All criteria met', timestamp: new Date() }]
-              : index === 1
-                ? [
-                    { agent: 'Evaluate', action: 'FAIL: Too long, unclear risk methodology', timestamp: new Date() },
-                    { agent: 'Optimize', action: 'Proposal: Shorten to 100 words, clarify approach', timestamp: new Date() }
-                  ]
-                : [
-                    { agent: 'Evaluate', action: 'FAIL: Missing mandatory disclaimer', timestamp: new Date() },
-                    { agent: 'Policy', action: 'Mandatory disclaimer required for compliance', timestamp: new Date() }
-                  ]
+            status: 'unreviewed' as SectionStatus,
+            log: []
           };
         });
         
@@ -191,8 +162,8 @@ export default function DocumentPage() {
         setMessages([
           {
             role: 'agent',
-            agent: 'Evaluate Agent',
-            content: `Document evaluation completed:\n✓ Section 1 (${customSections[0]?.title}): PASS\n✗ Section 2 (${customSections[1]?.title}): FAIL - Issues detected\n✗ Section 3 (${customSections[2]?.title}): FAIL - Issues detected`
+            agent: 'System',
+            content: `${customSections.length} section(s) loaded from manual segmentation. Ready for review.`
           }
         ]);
       } catch (error) {
@@ -208,30 +179,22 @@ export default function DocumentPage() {
           id: 1,
           title: 'Investment Background',
           content: investmentBackground,
-          status: 'pass',
-          log: [
-            { agent: 'Evaluate', action: 'PASS: User input captured', timestamp: new Date() }
-          ]
+          status: 'unreviewed',
+          log: []
         },
         {
           id: 2,
           title: 'Risk Assessment',
           content: riskAssessment,
-          status: 'fail',
-          log: [
-            { agent: 'Evaluate', action: 'FAIL: Requires optimization', timestamp: new Date() },
-            { agent: 'Optimize', action: 'Ready for user refinement', timestamp: new Date() }
-          ]
+          status: 'unreviewed',
+          log: []
         },
         {
           id: 3,
           title: 'Technical Strategy',
           content: technicalStrategy,
-          status: 'fail',
-          log: [
-            { agent: 'Evaluate', action: 'FAIL: Needs additional details', timestamp: new Date() },
-            { agent: 'Policy', action: 'Compliance review required', timestamp: new Date() }
-          ]
+          status: 'unreviewed',
+          log: []
         }
       ];
       
@@ -388,13 +351,13 @@ export default function DocumentPage() {
   const handleGlobalEvaluate = () => {
     const allPass = sections.every(s => s.status === 'pass');
     const anyFail = sections.some(s => s.status === 'fail');
-    const anyUnevaluated = sections.some(s => s.status === 'unevaluated');
+    const anyUnreviewed = sections.some(s => s.status === 'unreviewed');
 
     let status: 'ok' | 'nok' = 'nok';
     let messageContent = '';
 
-    if (anyUnevaluated) {
-      messageContent = 'Global evaluation cannot be completed. Some sections remain unevaluated.';
+    if (anyUnreviewed) {
+      messageContent = 'Global evaluation cannot be completed. Some sections remain unreviewed.';
       status = 'nok';
     } else if (allPass) {
       messageContent = 'Overall document evaluation completed: OK. All sections meet requirements. ✓';
@@ -453,10 +416,31 @@ export default function DocumentPage() {
       
       // Add a chat message about the orchestration
       if (result.ok) {
+        // Derive status for the reviewed section
+        const newStatus = deriveSectionStatus(sectionToReview.id, result);
+        
+        // Update the section status
+        setSections(prev => prev.map(s => 
+          s.id === sectionToReview.id 
+            ? { 
+                ...s, 
+                status: newStatus,
+                log: [
+                  ...s.log,
+                  {
+                    agent: 'Orchestrator',
+                    action: `Review completed: ${newStatus.toUpperCase()}. Decision: ${result.decision.next_action}`,
+                    timestamp: new Date()
+                  }
+                ]
+              }
+            : s
+        ));
+        
         setMessages(prev => [...prev, {
           role: 'agent',
           agent: 'Orchestrator',
-          content: `Full compliance review completed. Decision: ${result.decision.next_action}. ${result.execution.steps.length} agents executed.`
+          content: `Full compliance review completed for "${sectionToReview.title}".\nDecision: ${result.decision.next_action}\nStatus: ${newStatus.toUpperCase()}\n${result.execution.steps.length} agents executed.`
         }]);
       }
     } catch (error: any) {
@@ -472,6 +456,55 @@ export default function DocumentPage() {
   };
 
   const canSubmit = sections.every(s => s.status === 'pass');
+
+  /**
+   * Derive section status from orchestration result artifacts.
+   * Only updates status for sections that were actually analyzed.
+   */
+  const deriveSectionStatus = (sectionId: number, orchestrationResult: any): SectionStatus => {
+    if (!orchestrationResult || !orchestrationResult.ok) {
+      return 'unreviewed';
+    }
+
+    const { artifacts } = orchestrationResult;
+    if (!artifacts || !artifacts.review_issues) {
+      // No issues means section was analyzed and passed
+      return 'pass';
+    }
+
+    const issues = artifacts.review_issues || [];
+    
+    // Check if any issues are for this section (issues may have section_id or other identifiers)
+    const sectionIssues = issues.filter((issue: any) => {
+      // Issues might not have explicit section_id in current implementation
+      // For now, assume all issues in the result apply to the reviewed section
+      return true;
+    });
+
+    if (sectionIssues.length === 0) {
+      return 'pass';
+    }
+
+    // Check severity of issues
+    const hasCritical = sectionIssues.some((issue: any) => 
+      issue.severity === 'critical' || issue.type === 'policy_violation'
+    );
+    
+    if (hasCritical) {
+      return 'fail';
+    }
+
+    const hasHigh = sectionIssues.some((issue: any) => 
+      issue.severity === 'high'
+    );
+
+    if (hasHigh) {
+      return 'warning';
+    }
+
+    // Has only medium or low issues
+    return 'warning';
+  };
 
   const highlightProhibitedTerms = (text: string) => {
     const prohibitedTerm = 'tobacco industry';
@@ -817,6 +850,9 @@ export default function DocumentPage() {
         return 'border-green-500 bg-green-50';
       case 'fail':
         return 'border-red-500 bg-red-50';
+      case 'warning':
+        return 'border-yellow-500 bg-yellow-50';
+      case 'unreviewed':
       default:
         return 'border-slate-300 bg-white';
     }
@@ -828,8 +864,11 @@ export default function DocumentPage() {
         return <span className="px-3 py-1 bg-green-600 text-white text-sm font-semibold rounded-full">✓ PASS</span>;
       case 'fail':
         return <span className="px-3 py-1 bg-red-600 text-white text-sm font-semibold rounded-full">✗ FAIL</span>;
+      case 'warning':
+        return <span className="px-3 py-1 bg-yellow-600 text-white text-sm font-semibold rounded-full">⚠ WARNING</span>;
+      case 'unreviewed':
       default:
-        return <span className="px-3 py-1 bg-slate-300 text-slate-600 text-sm font-semibold rounded-full">UNEVALUATED</span>;
+        return <span className="px-3 py-1 bg-slate-300 text-slate-600 text-sm font-semibold rounded-full">NOT REVIEWED</span>;
     }
   };
 
