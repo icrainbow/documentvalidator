@@ -223,7 +223,6 @@ export default function DocumentPage() {
   }, [transcript]);
 
   const [inputValue, setInputValue] = useState('');
-  const [globalStatus, setGlobalStatus] = useState<'none' | 'ok' | 'nok'>('none');
   const [editingSectionId, setEditingSectionId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState<string>('');
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -262,7 +261,6 @@ export default function DocumentPage() {
     };
 
     setMessages([...messages, newMessage]);
-    setGlobalStatus('none');
   };
 
   const handleModifySection = (sectionId: number) => {
@@ -346,33 +344,6 @@ export default function DocumentPage() {
       };
       setMessages(prevMessages => [...prevMessages, newMessage]);
     }
-  };
-
-  const handleGlobalEvaluate = () => {
-    const allPass = sections.every(s => s.status === 'pass');
-    const anyFail = sections.some(s => s.status === 'fail');
-    const anyUnreviewed = sections.some(s => s.status === 'unreviewed');
-
-    let status: 'ok' | 'nok' = 'nok';
-    let messageContent = '';
-
-    if (anyUnreviewed) {
-      messageContent = 'Global evaluation cannot be completed. Some sections remain unreviewed.';
-      status = 'nok';
-    } else if (allPass) {
-      messageContent = 'Overall document evaluation completed: OK. All sections meet requirements. ✓';
-      status = 'ok';
-    } else {
-      messageContent = 'Overall document evaluation completed: NOK. Some sections need revision.';
-      status = 'nok';
-    }
-
-    setGlobalStatus(status);
-    setMessages([...messages, {
-      role: 'agent',
-      agent: 'Evaluate Agent',
-      content: messageContent
-    }]);
   };
 
   const handleSubmit = () => {
@@ -1039,37 +1010,19 @@ export default function DocumentPage() {
 
               <div className="bg-white border-2 border-slate-300 rounded-xl p-6">
                 <h3 className="text-xl font-bold text-slate-800 mb-4">Document Actions</h3>
-                
-                {globalStatus !== 'none' && (
-                  <div className={`mb-4 p-4 rounded-lg text-center font-bold text-lg ${
-                    globalStatus === 'ok' 
-                      ? 'bg-green-100 text-green-800 border-2 border-green-600' 
-                      : 'bg-red-100 text-red-800 border-2 border-red-600'
-                  }`}>
-                    {globalStatus === 'ok' ? '✓ OK' : '✗ NOK'}
-                  </div>
-                )}
 
                 <div className="space-y-4">
-                  <div className="flex gap-4">
-                    <button
-                      onClick={handleGlobalEvaluate}
-                      className="flex-1 px-6 py-4 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors font-bold text-lg shadow-sm"
-                    >
-                      Global Evaluate
-                    </button>
-                    <button
-                      onClick={handleSubmit}
-                      disabled={isSubmitted || !canSubmit}
-                      className={`flex-1 px-6 py-4 rounded-lg transition-colors font-bold text-lg shadow-sm ${
-                        isSubmitted || !canSubmit
-                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                          : 'bg-slate-700 text-white hover:bg-slate-800'
-                      }`}
-                    >
-                      Submit
-                    </button>
-                  </div>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={isSubmitted || !canSubmit}
+                    className={`w-full px-6 py-4 rounded-lg transition-colors font-bold text-lg shadow-sm ${
+                      isSubmitted || !canSubmit
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-slate-700 text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    Submit
+                  </button>
                   
                   <button
                     onClick={() => setShowAgentDashboard(true)}
