@@ -264,6 +264,7 @@ export default function DocumentPage() {
   const [editingSectionId, setEditingSectionId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState<string>('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [selectedFlowId, setSelectedFlowId] = useState<string>('compliance-review-v1');
   const [orchestrationResult, setOrchestrationResult] = useState<any | null>(null);
   const [isOrchestrating, setIsOrchestrating] = useState(false);
   const [hasComplianceIssue, setHasComplianceIssue] = useState(false);
@@ -432,7 +433,7 @@ export default function DocumentPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          flow_id: 'compliance-review-v1',
+          flow_id: selectedFlowId,
           document_id: 'DOC-' + Date.now(),
           sections: [{
             id: String(sectionToReview.id),
@@ -1038,6 +1039,45 @@ export default function DocumentPage() {
                     📊 Agent Dashboard
                   </button>
                   
+                  {/* Flow Selector */}
+                  <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                    <label className="block text-sm font-semibold text-slate-700 mb-3">
+                      Select Review Type:
+                    </label>
+                    <div className="space-y-2">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="flow"
+                          value="compliance-review-v1"
+                          checked={selectedFlowId === 'compliance-review-v1'}
+                          onChange={(e) => setSelectedFlowId(e.target.value)}
+                          disabled={isOrchestrating || isSubmitted}
+                          className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-slate-400 disabled:opacity-50"
+                        />
+                        <span className="ml-2 text-sm text-slate-700">
+                          Compliance Review
+                          <span className="ml-2 text-xs text-slate-500">(Regulatory & Policy)</span>
+                        </span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="flow"
+                          value="contract-risk-review-v1"
+                          checked={selectedFlowId === 'contract-risk-review-v1'}
+                          onChange={(e) => setSelectedFlowId(e.target.value)}
+                          disabled={isOrchestrating || isSubmitted}
+                          className="w-4 h-4 text-purple-600 focus:ring-2 focus:ring-slate-400 disabled:opacity-50"
+                        />
+                        <span className="ml-2 text-sm text-slate-700">
+                          Contract Risk Review
+                          <span className="ml-2 text-xs text-slate-500">(Legal & Financial)</span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                  
                   <button
                     onClick={handleFullComplianceReview}
                     disabled={isOrchestrating || isSubmitted}
@@ -1047,7 +1087,7 @@ export default function DocumentPage() {
                         : 'bg-blue-600 text-white hover:bg-blue-700'
                     }`}
                   >
-                    {isOrchestrating ? '🔄 Running Review...' : '🔍 Run Full Compliance Review'}
+                    {isOrchestrating ? '🔄 Running Review...' : '🔍 Run Full Review'}
                   </button>
                 </div>
                 {!canSubmit && !isSubmitted && (
@@ -1060,7 +1100,14 @@ export default function DocumentPage() {
                 {orchestrationResult && (
                   <div className="mt-6 bg-slate-50 border-2 border-slate-300 rounded-xl p-6">
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                      <span>🎯</span> Compliance Review Results
+                      <span>🎯</span> Review Results
+                      <span className={`text-xs px-2 py-1 rounded font-normal ${
+                        (orchestrationResult.metadata?.flow_version || selectedFlowId) === 'compliance-review-v1'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-purple-100 text-purple-700'
+                      }`}>
+                        {orchestrationResult.metadata?.flow_version || selectedFlowId}
+                      </span>
                     </h3>
                     
                     {/* Parent Trace ID */}
