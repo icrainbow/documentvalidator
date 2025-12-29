@@ -31,8 +31,20 @@ npm install
 
 ### Development
 
+**Recommended (with auto-cleanup):**
 ```bash
 npm run dev
+```
+This uses a smart dev script that automatically cleans stale cache to prevent "Cannot find module" errors.
+
+**Force dev without cleanup:**
+```bash
+npm run dev:force
+```
+
+**Manual clean + dev:**
+```bash
+npm run dev:clean
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
@@ -50,22 +62,23 @@ npm start
 
 ### "Cannot find module './XXX.js'" Error
 
-This is a known Next.js webpack cache corruption issue that can occur during development, especially after frequent hot-reloads or code changes.
+This is a Next.js webpack cache corruption issue. **This should now be prevented automatically** by the enhanced dev workflow.
 
-**Quick Fix:**
+**✅ Automatic Prevention (NEW):**
 
-```bash
-npm run clean
-npm run dev
-```
+The default `npm run dev` command now includes:
+- Auto-detection of stale cache (cleans every hour automatically)
+- Disabled filesystem cache in dev mode
+- Deterministic module IDs to prevent corruption
+- Smart cleanup script that runs transparently
 
-Or use the combined command:
+**Quick Fix (if error still occurs):**
 
 ```bash
 npm run dev:clean
 ```
 
-**Manual Fix:**
+Or manually:
 
 ```bash
 # Stop the dev server (Ctrl+C)
@@ -76,13 +89,21 @@ npm run dev
 
 **Why This Happens:**
 
-Next.js uses webpack to build and cache modules. During development with hot-reload, the cache can sometimes become corrupted, leading to references to non-existent chunk files (like `./276.js`, `./682.js`, etc.).
+Next.js webpack can create corrupted cache entries during hot-reload. Module references point to non-existent chunk files.
 
-**Prevention:**
+**What We've Done to Fix It:**
 
-The project's `next.config.js` has been optimized to reduce cache corruption by:
-- Using named module IDs instead of hashed IDs
-- Configuring stable filesystem caching
+1. **Disabled webpack filesystem cache** in dev mode (`next.config.js`)
+2. **Smart dev script** auto-cleans stale cache every hour
+3. **Deterministic module IDs** prevent reference corruption
+4. **Reduced watch pressure** with optimized watchOptions
+
+**Available Commands:**
+
+- `npm run dev` - Smart dev with auto-cleanup (recommended)
+- `npm run dev:force` - Raw Next.js dev without auto-cleanup
+- `npm run dev:clean` - Force clean + dev
+- `npm run clean` - Just clean cache
 - Disabling certain aggressive optimizations in dev mode
 
 If the issue persists frequently, try:

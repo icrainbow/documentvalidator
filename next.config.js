@@ -1,31 +1,35 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Improve webpack caching stability
-  webpack: (config, { dev }) => {
+  webpack: (config, { dev, isServer }) => {
     if (dev) {
-      // Reduce memory pressure and improve cache stability in dev mode
-      config.cache = {
-        type: 'filesystem',
-        compression: false,
-        // Increase cache invalidation threshold
-        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      };
+      // Disable filesystem cache entirely in dev to prevent corruption
+      config.cache = false;
       
-      // Optimize chunk splitting to prevent module not found errors
+      // Use deterministic IDs to prevent module not found errors
       config.optimization = {
         ...config.optimization,
-        moduleIds: 'named',
-        chunkIds: 'named',
+        moduleIds: 'deterministic',
+        chunkIds: 'deterministic',
+      };
+      
+      // Reduce memory pressure
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: ['**/node_modules', '**/.git', '**/.next'],
+        aggregateTimeout: 300,
       };
     }
     return config;
   },
   
-  // Disable certain optimizations that can cause cache issues
+  // Disable experimental features that can cause cache issues
   experimental: {
-    // Disable SWC minification in dev (can cause cache corruption)
     swcMinify: false,
   },
+  
+  // Disable turbopack (uses webpack for stability)
+  // turbo is still experimental and can cause cache issues
 }
 
 module.exports = nextConfig

@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "bash scripts/smart-dev.sh",
+    "dev:force": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "clean": "bash scripts/clean-cache.sh",
-    "dev:clean": "npm run clean && npm run dev"
+    "dev:clean": "npm run clean && npm run dev:force"
   },
   "dependencies": {
     "react": "^18.2.0",
