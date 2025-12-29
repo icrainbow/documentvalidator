@@ -498,56 +498,38 @@ export default function ChatEntryPage() {
     const hasCompletedChat = topicCompleted.every(c => c);
     const hasUploadedFile = !!uploadedFile;
 
-    // If user has BOTH chat content and uploaded file - automatically merge
+    // Case 1: User uploaded document but didn't answer questions
+    // -> Go directly to manual segmentation page
+    if (hasUploadedFile && !hasCompletedChat) {
+      router.push('/sectioning');
+      return;
+    }
+
+    // Case 2: User has chat input but no document
+    // -> Store chat content and go to document page
+    if (hasCompletedChat && !hasUploadedFile) {
+      sessionStorage.setItem('investmentBackground', finalTopicTexts[0]);
+      sessionStorage.setItem('riskAssessment', finalTopicTexts[1]);
+      sessionStorage.setItem('technicalStrategy', finalTopicTexts[2]);
+      router.push('/document');
+      return;
+    }
+
+    // Case 3: User has both chat input and document
+    // -> Merge chat content as appendix to document, then go to sectioning page
     if (hasCompletedChat && hasUploadedFile) {
       await handleAutomaticMerge();
       return;
     }
 
-    // Otherwise proceed with single source
-    if (hasUploadedFile) {
-      handleFileEvaluation();
-    } else if (hasCompletedChat) {
-      handleChatEvaluation();
-    } else {
-      setMessages([...messages, {
-        role: 'system',
-        content: 'Please upload a document or complete all three profile sections before proceeding to evaluation.'
-      }]);
-    }
-  };
-
-  const handleFileEvaluation = () => {
-    if (!uploadedFile) return;
-    
-    const fileName = uploadedFile.name.toLowerCase();
-    
-    if (fileName === 'badformat.word' || fileName.includes('badformat')) {
-      const explanationMessage: { role: 'user' | 'system'; content: string; agentId?: string; traceId?: string } = {
-        role: 'system' as const,
-        content: '[Evaluate Agent]:\nThe uploaded document lacks reliable structural markers.\nRedirecting to manual section definition tool.'
-      };
-      setMessages(prev => [...prev, explanationMessage]);
-      
-      setTimeout(() => {
-        router.push('/sectioning');
-      }, 1500);
-    } else {
-      router.push('/document');
-    }
-  };
-
-  const handleChatEvaluation = () => {
-    sessionStorage.setItem('investmentBackground', finalTopicTexts[0]);
-    sessionStorage.setItem('riskAssessment', finalTopicTexts[1]);
-    sessionStorage.setItem('technicalStrategy', finalTopicTexts[2]);
-    router.push('/document');
+    // Case 4: Nothing provided
+    setMessages([...messages, {
+      role: 'system',
+      content: 'Please upload a document or complete all three profile sections before proceeding to evaluation.'
+    }]);
   };
 
   const handleAutomaticMerge = async () => {
-    const fileName = uploadedFile?.name.toLowerCase() || '';
-    const isBadFormat = fileName === 'badformat.word' || fileName.includes('badformat');
-
     setMessages(prev => [...prev, {
       role: 'system',
       content: '🤖 Combining your conversation with the uploaded document... This may take a moment.'
@@ -582,41 +564,31 @@ export default function ChatEntryPage() {
       sessionStorage.setItem('section3_title', result.section3_title || 'Technical Strategy');
       sessionStorage.setItem('section3_content', result.section3_content);
 
+      // Also store backward compatible keys for sectioning page
+      sessionStorage.setItem('investmentBackground', finalTopicTexts[0]);
+      sessionStorage.setItem('riskAssessment', finalTopicTexts[1]);
+      sessionStorage.setItem('technicalStrategy', finalTopicTexts[2]);
+
       setMessages(prev => [...prev, {
         role: 'system',
-        content: '✓ Successfully combined your conversation with the document.'
+        content: '✓ Successfully combined your conversation with the document. Redirecting to manual sectioning page...'
       }]);
 
       setIsProcessing(false);
 
-      // Route based on document format
-      if (isBadFormat) {
-        setMessages(prev => [...prev, {
-          role: 'system',
-          content: '[Evaluate Agent]:\nThe uploaded document lacks reliable structural markers.\nRedirecting to manual section definition tool with your combined content.'
-        }]);
-        
-        setTimeout(() => {
-          router.push('/sectioning');
-        }, 1500);
-      } else {
-        setTimeout(() => {
-          // Store for document page
-          sessionStorage.setItem('investmentBackground', result.section1_content);
-          sessionStorage.setItem('riskAssessment', result.section2_content);
-          sessionStorage.setItem('technicalStrategy', result.section3_content);
-          router.push('/document');
-        }, 1000);
-      }
+      // Always go to sectioning page when both document and chat exist
+      setTimeout(() => {
+        router.push('/sectioning');
+      }, 1000);
     } catch (error) {
       setMessages(prev => [...prev, {
         role: 'system',
         content: '⚠️ Error merging content. Proceeding with document only...'
       }]);
       setIsProcessing(false);
-      // Fallback to document evaluation
+      // Fallback to sectioning page
       setTimeout(() => {
-        handleFileEvaluation();
+        router.push('/sectioning');
       }, 1000);
     }
   };
