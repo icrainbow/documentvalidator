@@ -10,7 +10,7 @@ interface MapPolicyInput {
 interface MapPolicyOutput {
   mappings: PolicyMapping[];
   flagged_count: number;
-  highest_risk_level: 'low' | 'medium' | 'high' | 'critical';
+  highest_risk_level: 'low' | 'medium' | 'high' | 'critical' | 'non_standard';
 }
 
 export const mapPolicyHandler: AgentHandler<MapPolicyInput, MapPolicyOutput> = async (input, context) => {
@@ -23,7 +23,7 @@ export const mapPolicyHandler: AgentHandler<MapPolicyInput, MapPolicyOutput> = a
 
       if (matchedPolicies.length > 0) {
         // Determine risk level based on fact category and matched policies
-        let riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'low';
+        let riskLevel: 'low' | 'medium' | 'high' | 'critical' | 'non_standard' = 'low';
 
         // Critical risks
         if (fact.category === 'risk' && matchedPolicies.some(p => p.severity === 'critical')) {
@@ -45,14 +45,25 @@ export const mapPolicyHandler: AgentHandler<MapPolicyInput, MapPolicyOutput> = a
         mappings.push({
           fact,
           policy_rules: matchedPolicies,
+          policy_rule: matchedPolicies[0], // Primary policy rule
           risk_level: riskLevel,
           reason,
         });
       } else {
-        // No policy match - still record it
+        // No policy match - still record it with a default policy
+        const defaultPolicy = {
+          id: 'INFO-000',
+          title: 'Informational Fact',
+          category: 'documentation' as const,
+          requirement_text: 'No specific policy requirement',
+          keywords: [],
+          severity: 'low' as const,
+        };
+        
         mappings.push({
           fact,
           policy_rules: [],
+          policy_rule: defaultPolicy,
           risk_level: 'low',
           reason: 'No specific policy match, informational fact only',
         });
@@ -65,15 +76,15 @@ export const mapPolicyHandler: AgentHandler<MapPolicyInput, MapPolicyOutput> = a
     ).length;
 
     // Find highest risk level
-    const riskLevels: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 };
-    let highestRiskLevel: 'low' | 'medium' | 'high' | 'critical' = 'low';
+    const riskLevels: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3, non_standard: 2 };
+    let highestRiskLevel: 'low' | 'medium' | 'high' | 'critical' | 'non_standard' = 'low';
     let highestRiskValue = 0;
 
     mappings.forEach(m => {
-      const value = riskLevels[m.risk_level];
+      const value = riskLevels[m.risk_level] || 0;
       if (value > highestRiskValue) {
         highestRiskValue = value;
-        highestRiskLevel = m.risk_level;
+        highestRiskLevel = m.risk_level as 'low' | 'medium' | 'high' | 'critical' | 'non_standard';
       }
     });
 

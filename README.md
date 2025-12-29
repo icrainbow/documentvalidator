@@ -94,6 +94,129 @@ If the issue persists frequently, try:
 
 ## Application Flows
 
+## Orchestration Flows
+
+This demo includes two multi-agent orchestration workflows that can be invoked via the `/api/orchestrate` endpoint.
+
+### Flow 1: compliance-review-v1 (Regulatory Compliance)
+
+**Purpose**: Evaluate documents for regulatory and policy compliance violations.
+
+**Decision Outcomes**:
+- `rejected` - Critical policy violations prevent approval
+- `request_more_info` - High/medium issues require additional information or evidence
+- `ready_to_send` - Document approved (with or without minor advisory notes)
+
+**Agent Sequence**:
+1. `extract-facts-agent` - Extract entities, amounts, dates, risks
+2. `map-policy-agent` - Map facts to internal policy rules
+3. `redteam-review-agent` - Adversarial review for violations
+4. `[conditional]` `request-evidence-agent` - Generate evidence requests if needed
+5. `draft-client-comms-agent` - Draft compliance summary for client
+6. `write-audit-agent` - Log compliance review decision
+
+**Example Usage**:
+```bash
+curl -X POST http://localhost:3002/api/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_id": "compliance-review-v1",
+    "document_id": "DOC-001",
+    "sections": [{"id": "sec1", "title": "Investment Strategy", "content": "..."}]
+  }'
+```
+
+---
+
+### Flow 2: contract-risk-review-v1 (Contractual Risk Assessment)
+
+**Purpose**: Assess legal and financial risk exposure in contracts and agreements.
+
+**Decision Outcomes**:
+- `escalate_legal` - Critical legal risks (unlimited liability, missing signatures) require legal counsel
+- `negotiate_terms` - High financial exposure or non-standard terms should be negotiated
+- `acceptable_risk` - Minor risks identified but within tolerance
+- `ready_to_sign` - Contract terms are standard and acceptable
+
+**Agent Sequence**:
+1. `extract-facts-agent` - Extract parties, obligations, liability clauses, payment terms (hint: `extractionFocus: 'contractual'`)
+2. `map-policy-agent` - Map terms to contract standards templates (hint: `matchingStrategy: 'contract_template'`)
+3. `redteam-review-agent` - Adversarial contract review for one-sided terms (hint: `reviewMode: 'contract_risk'`)
+4. `[conditional]` `request-evidence-agent` - Generate negotiation points and evidence requests if needed
+5. `draft-client-comms-agent` - Draft contract risk summary
+6. `write-audit-agent` - Log contract review decision
+
+**Example Usage**:
+```bash
+curl -X POST http://localhost:3002/api/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_id": "contract-risk-review-v1",
+    "document_id": "CONTRACT-001",
+    "sections": [{"id": "sec1", "title": "Service Agreement", "content": "..."}],
+    "options": {
+      "client_name": "Legal Team",
+      "reviewer": "Contract Review System"
+    }
+  }'
+```
+
+**Key Differences from Compliance Review**:
+| Aspect | Compliance Review | Contract Risk Review |
+|--------|------------------|---------------------|
+| Focus | Regulatory violations | Contractual risk exposure |
+| Risk Types | Prohibited content, KYC/AML | Liability, indemnification, payment terms |
+| Decision Outcomes | rejected / request_more_info / ready_to_send | escalate_legal / negotiate_terms / acceptable_risk / ready_to_sign |
+| Blocking Conditions | Critical policy violations | Unlimited liability, missing signatures |
+| Agent Corpus | Policy rules (tobacco, AML, etc.) | Contract standards (indemnification, termination, IP) |
+
+---
+
+### Testing Orchestration Flows
+
+**List available flows**:
+```bash
+curl http://localhost:3002/api/orchestrate
+```
+
+**Test contract risk review** (see `scripts/test-contract-flow.ts`):
+```bash
+npx ts-node scripts/test-contract-flow.ts
+```
+
+**Expected Response Structure**:
+```json
+{
+  "ok": true,
+  "parent_trace_id": "orch_...",
+  "mode": "fake",
+  "decision": {
+    "next_action": "escalate_legal",
+    "reason": "1 critical risk(s)...",
+    "confidence": 1.0,
+    "recommended_actions": ["Forward to legal...", "..."],
+    "blocking_issues": ["Unlimited liability clause"]
+  },
+  "artifacts": {
+    "facts": {...},
+    "policy_mappings": {...},
+    "review_issues": {...},
+    "evidence_requests": {...},
+    "client_communication": {...},
+    "audit_log": {...}
+  },
+  "execution": {
+    "steps": [...],
+    "total_latency_ms": 250,
+    "total_tokens": 0
+  }
+}
+```
+
+---
+
+## Application Flows
+
 ### Flow 1: Chat-Only Input (User-Provided Content)
 
 1. **Home Page** - Answer 3 questions in chat:

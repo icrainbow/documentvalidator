@@ -75,7 +75,7 @@ export interface OrchestrateResponse {
   };
   
   decision: {
-    next_action: 'request_more_info' | 'ready_to_send' | 'rejected' | 'approved';
+    next_action: string; // e.g., 'request_more_info' | 'ready_to_send' | 'rejected' | 'approved' | 'escalate_legal' | 'negotiate_terms' | 'acceptable_risk' | 'ready_to_sign'
     reason: string;
     confidence: number; // 0.0 - 1.0
     recommended_actions: string[];
@@ -152,5 +152,6 @@ export interface FlowDefinition {
   mainSequence: PlanStep[];
   conditionalSteps: PlanStep[];
   finalizationSteps: PlanStep[];
+  decisionAnalyzer?: (context: OrchestrationContext) => OrchestrateResponse['decision'];
 }
 

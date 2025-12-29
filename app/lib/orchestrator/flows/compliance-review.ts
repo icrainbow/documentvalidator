@@ -4,6 +4,7 @@
  */
 
 import { FlowDefinition, OrchestrationContext } from '../types';
+import { analyzeComplianceAndDecide } from '../analyzers/compliance-analyzer';
 
 export const COMPLIANCE_REVIEW_FLOW: FlowDefinition = {
   id: 'compliance-review-v1',
@@ -166,11 +167,14 @@ export const COMPLIANCE_REVIEW_FLOW: FlowDefinition = {
       },
     },
   ],
+  
+  // Attach compliance-specific decision analyzer
+  decisionAnalyzer: analyzeComplianceAndDecide,
 };
 
 // Helper function to map next_action to audit final_decision
 function mapNextActionToFinalDecision(
-  action: 'request_more_info' | 'ready_to_send' | 'rejected' | 'approved'
+  action: string
 ): 'approved' | 'rejected' | 'needs_revision' | 'pending_evidence' {
   switch (action) {
     case 'approved':

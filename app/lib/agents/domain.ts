@@ -38,8 +38,9 @@ export interface PolicyRule {
 export interface PolicyMapping {
   fact: Fact; // The fact being mapped
   policy_rules: PolicyRule[]; // Matched policies
-  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  risk_level: 'low' | 'medium' | 'high' | 'critical' | 'non_standard';
   reason: string; // Why this mapping was made
+  policy_rule: PolicyRule; // Primary policy rule (for backward compatibility)
 }
 
 // ============================================================================
@@ -48,7 +49,7 @@ export interface PolicyMapping {
 
 export interface RedTeamIssue {
   id: string; // Unique issue identifier
-  type: 'policy_violation' | 'logical_error' | 'formatting' | 'tone' | 'missing_info';
+  type: 'policy_violation' | 'logical_error' | 'formatting' | 'tone' | 'missing_info' | 'unlimited_liability' | 'missing_signature' | 'financial_exposure' | 'termination_clause' | 'jurisdiction_issue';
   severity: 'critical' | 'high' | 'medium' | 'low';
   description: string; // What's wrong
   affected_text?: string; // The problematic text
