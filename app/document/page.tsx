@@ -1311,6 +1311,26 @@ export default function DocumentPage() {
                   >
                     {isAIProcessing ? 'AI Processing...' : 'Send'}
                   </button>
+                  
+                  {/* Submit Button - Convenient placement for final submission */}
+                  <button
+                    onClick={handleSubmit}
+                    disabled={isSubmitted || !canSubmit || isAIProcessing}
+                    className={`w-full px-4 py-2 rounded-lg transition-colors font-semibold shadow-sm ${
+                      isSubmitted || !canSubmit || isAIProcessing
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
+                  >
+                    {isSubmitted ? '✓ Submitted' : 'Submit Document'}
+                  </button>
+                  
+                  {!canSubmit && !isSubmitted && (
+                    <p className="text-xs text-amber-600 text-center mt-1">
+                      ⚠️ All sections must pass evaluation before submission
+                    </p>
+                  )}
+                  
                   {isAIProcessing && (
                     <p className="text-xs text-blue-600 text-center">
                       🤖 Claude is optimizing your content...

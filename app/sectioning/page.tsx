@@ -107,7 +107,11 @@ export default function SectioningPage() {
       }
 
       // Build the displayed document text with user summaries appended
-      if (investmentBg || riskAssessment || technicalStrategy) {
+      const hasUserInput = (investmentBg && investmentBg.trim()) || 
+                          (riskAssessment && riskAssessment.trim()) || 
+                          (technicalStrategy && technicalStrategy.trim());
+      
+      if (hasUserInput) {
         let combinedText = FULL_DOCUMENT_TEXT;
         
         // Append a separator
@@ -115,17 +119,17 @@ export default function SectioningPage() {
         combinedText += 'USER INPUT SUMMARY (From Chat Conversation)\n\n';
         combinedText += '='.repeat(80) + '\n\n';
 
-        if (investmentBg) {
+        if (investmentBg && investmentBg.trim()) {
           combinedText += 'Investment Background (User Profile):\n\n';
           combinedText += investmentBg + '\n\n';
         }
 
-        if (riskAssessment) {
+        if (riskAssessment && riskAssessment.trim()) {
           combinedText += 'Risk Assessment (User Profile):\n\n';
           combinedText += riskAssessment + '\n\n';
         }
 
-        if (technicalStrategy) {
+        if (technicalStrategy && technicalStrategy.trim()) {
           combinedText += 'Technical Strategy (User Profile):\n\n';
           combinedText += technicalStrategy + '\n\n';
         }
