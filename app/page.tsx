@@ -471,13 +471,19 @@ export default function ChatEntryPage() {
 
   const handleUpload = () => {
     // Trigger file input click
+    console.log('Upload button clicked, triggering file input...');
     fileInputRef.current?.click();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('File input change triggered');
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
 
+    console.log('File selected:', file.name);
     setUploadedFile(file);
 
     // Show upload confirmation message
@@ -486,7 +492,7 @@ export default function ChatEntryPage() {
       content: `[System]:\nDocument "${file.name}" uploaded successfully.\nClick "Evaluate" to proceed.`
     };
     
-    setMessages([...messages, uploadMessage]);
+    setMessages(prev => [...prev, uploadMessage]);
 
     // Reset file input
     if (fileInputRef.current) {
