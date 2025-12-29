@@ -199,6 +199,9 @@ export default function DocumentPage() {
 
   // PRIORITY 1: Load from new unified storage format if docKey exists
   useEffect(() => {
+    // SSR guard
+    if (typeof window === 'undefined') return;
+    
     console.log("[document] Priority 1 useEffect triggered, docKey:", docKey, "loadedFromStorage:", loadedFromStorage);
     
     // Skip if already loaded to prevent resetting section statuses

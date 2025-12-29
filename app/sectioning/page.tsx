@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import AgentDashboard from '../components/AgentDashboard';
 import { parseDocxBySections, ParsedSection } from '../lib/docxParser';
 
 interface Rectangle {
@@ -258,7 +257,6 @@ export default function SectioningPage() {
   const [selectedSectionIds, setSelectedSectionIds] = useState<number[]>([]);
   const [sectionsSource, setSectionsSource] = useState<Section[]>([]);
   const [displayedDocumentText, setDisplayedDocumentText] = useState<string>(FULL_DOCUMENT_TEXT);
-  const [showAgentDashboard, setShowAgentDashboard] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isParsingFile, setIsParsingFile] = useState(false);
 
@@ -739,12 +737,6 @@ export default function SectioningPage() {
               >
                 ✓ Confirm Sections ({selectedSectionIds.length})
               </button>
-              <button
-                onClick={() => setShowAgentDashboard(true)}
-                className="px-6 py-2 rounded font-semibold transition-colors bg-slate-600 text-white hover:bg-slate-700 shadow-sm"
-              >
-                📊 Agent Dashboard
-              </button>
               <div className="ml-auto text-slate-700 font-semibold">
                 Sections: {confirmedSections.length} / {MAX_SECTIONS}
               </div>
@@ -947,12 +939,6 @@ export default function SectioningPage() {
           </div>
         </div>
       </div>
-
-      {/* Agent Dashboard Modal */}
-      <AgentDashboard 
-        isOpen={showAgentDashboard}
-        onClose={() => setShowAgentDashboard(false)}
-      />
     </div>
   );
 }
