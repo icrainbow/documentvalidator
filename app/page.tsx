@@ -604,7 +604,7 @@ export default function ChatEntryPage() {
             <div className="border-b border-slate-200 p-6 sm:p-8">
               <div className="flex items-center gap-4 mb-3">
                 {/* Document Search Icon */}
-                <div className="w-16 h-16 flex-shrink-0">
+                <div className="w-12 h-12 flex-shrink-0">
                   <svg viewBox="0 0 120 120" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
                     <defs>
                       {/* Gradient for document */}
