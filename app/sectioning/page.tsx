@@ -51,6 +51,83 @@ const PREDEFINED_SECTIONS: Section[] = [
   }
 ];
 
+// Maximum sections allowed for demo
+const MAX_SECTIONS = 5;
+
+/**
+ * Demo-only parser: generates exactly 5 predefined sections.
+ * Future-proof: replace this function body with real parser/API call.
+ * @param text - full document text
+ * @returns Array of exactly 5 section definitions
+ */
+function parseDocumentInto5Sections(text: string): Section[] {
+  const sectionDefinitions = [
+    { title: 'Overview & Scope', keywords: ['overview', 'scope', 'purpose', 'objective'] },
+    { title: 'Investment Strategy & Restricted Areas', keywords: ['investment', 'strategy', 'restricted', 'prohibited', 'allocation'] },
+    { title: 'Liability & Indemnification', keywords: ['liability', 'indemnification', 'responsibility', 'risk'] },
+    { title: 'Termination & Governing Law', keywords: ['termination', 'governing', 'law', 'jurisdiction', 'legal'] },
+    { title: 'Signatures & Annexes', keywords: ['signature', 'annex', 'appendix', 'exhibit', 'attachment'] }
+  ];
+
+  const sections: Section[] = [];
+  const lowerText = text.toLowerCase();
+
+  for (let i = 0; i < 5; i++) {
+    const def = sectionDefinitions[i];
+    
+    // Try keyword-based extraction (simple demo logic)
+    let content = '';
+    let startIndex = -1;
+    
+    // Find first keyword occurrence
+    for (const kw of def.keywords) {
+      const idx = lowerText.indexOf(kw);
+      if (idx !== -1) {
+        startIndex = idx;
+        break;
+      }
+    }
+    
+    // Extract ~250-300 chars if keyword found
+    if (startIndex !== -1) {
+      const endIndex = Math.min(startIndex + 280, text.length);
+      content = text.substring(startIndex, endIndex).trim();
+      // Clean up: if content is too short or doesn't make sense, use placeholder
+      if (content.length < 50) {
+        content = '';
+      }
+    }
+    
+    // Fallback to placeholder if no match or extraction failed
+    if (!content) {
+      content = getPlaceholderContent(i);
+    }
+    
+    sections.push({
+      id: Date.now() + i,
+      title: def.title,
+      content: content,
+      selected: false
+    });
+  }
+
+  return sections;
+}
+
+/**
+ * Get hardcoded placeholder content for section index.
+ */
+function getPlaceholderContent(sectionIndex: number): string {
+  const placeholders = [
+    'This section provides an overview and defines the scope of the agreement. It outlines the purpose, parties involved, and the general framework under which the document operates. Key objectives and boundaries are established to ensure clarity and mutual understanding.',
+    'Investment strategy focuses on diversified portfolios with careful consideration of asset allocation, risk tolerance, and time horizons. Restricted areas include investments in sectors deemed high-risk, non-compliant with regulatory requirements, or inconsistent with institutional guidelines. Prohibited activities are clearly defined to prevent exposure to unacceptable risk levels.',
+    'Liability provisions outline responsibilities, obligations, and indemnification clauses for all parties. This section establishes the legal framework for accountability, defines limits of liability, and specifies conditions under which indemnification may be claimed. Insurance requirements and breach consequences are detailed.',
+    'Termination clauses specify conditions under which the agreement may be ended by either party, including notice periods, breach conditions, and mutual consent scenarios. Governing law establishes the jurisdiction and legal framework that will apply to the interpretation and enforcement of this agreement.',
+    'Signatures and annexes complete the formal documentation. This section includes signature blocks for all authorized parties, dates of execution, and references to attached exhibits, schedules, and appendices that form an integral part of this agreement.'
+  ];
+  return placeholders[sectionIndex] || 'Content placeholder for section ' + (sectionIndex + 1) + '.';
+}
+
 export default function SectioningPage() {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -140,7 +217,7 @@ export default function SectioningPage() {
   }, []); // Run once on mount
 
   const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-    if (dragCount >= 10) return; // Max 10 sections
+    if (dragCount >= MAX_SECTIONS) return; // Max sections
     
     const container = containerRef.current;
     if (!container) return;
@@ -213,27 +290,41 @@ export default function SectioningPage() {
 
   const handleAddSection = () => {
     if (rectangles.length === 0) return;
+    if (confirmedSections.length >= MAX_SECTIONS) return;
     
+    // Parse document to get all 5 section definitions
+    const allSections = parseDocumentInto5Sections(displayedDocumentText);
+    
+    // Get the next section based on current count
     const nextSectionIndex = confirmedSections.length;
-    // Allow up to 10 sections
-    if (nextSectionIndex < 10) {
-      // Generate a new section with default title and placeholder content
-      const newSection: Section = {
-        id: Date.now(),
-        title: `Section ${nextSectionIndex + 1}`,
-        content: `Content from selected area ${nextSectionIndex + 1}. This represents the text content that would be extracted from the highlighted region in the document. In a real implementation, this would contain the actual text from the selected area.`,
-        selected: false
-      };
-      
-      setConfirmedSections([...confirmedSections, newSection]);
-      setDragCount(dragCount + 1);
-      
-      // Mark the last rectangle as confirmed
-      const updatedRects = rectangles.map((r, idx) => 
-        idx === rectangles.length - 1 ? { ...r, confirmed: true } : r
-      );
-      setRectangles(updatedRects);
-    }
+    const newSection = allSections[nextSectionIndex];
+    
+    setConfirmedSections([...confirmedSections, newSection]);
+    setDragCount(dragCount + 1);
+    
+    // Mark the last rectangle as confirmed
+    const updatedRects = rectangles.map((r, idx) => 
+      idx === rectangles.length - 1 ? { ...r, confirmed: true } : r
+    );
+    setRectangles(updatedRects);
+  };
+
+  const handleAutoParse = () => {
+    if (confirmedSections.length >= MAX_SECTIONS) return;
+    
+    // Generate all 5 sections at once
+    const allSections = parseDocumentInto5Sections(displayedDocumentText);
+    
+    setConfirmedSections(allSections);
+    setDragCount(MAX_SECTIONS);
+    
+    // Clear rectangles and current drawing state
+    setRectangles([]);
+    setCurrentRect(null);
+    setIsDrawing(false);
+    
+    // Auto-select all sections for easy confirmation
+    setSelectedSectionIds(allSections.map(s => s.id));
   };
 
   const handleEditTitle = (sectionId: number) => {
@@ -327,6 +418,12 @@ export default function SectioningPage() {
 
     if (selectedSections.length === 0) return;
 
+    // Clear stale section keys first (1 through 10)
+    for (let i = 1; i <= 10; i++) {
+      sessionStorage.removeItem(`section${i}_title`);
+      sessionStorage.removeItem(`section${i}_content`);
+    }
+
     // Store the selected sections in sessionStorage
     selectedSections.forEach((section, index) => {
       const sectionNum = index + 1;
@@ -393,10 +490,21 @@ export default function SectioningPage() {
                 ✕ Reset
               </button>
               <button
-                onClick={handleAddSection}
-                disabled={rectangles.length === 0 || dragCount >= 10 || rectangles[rectangles.length - 1]?.confirmed}
+                onClick={handleAutoParse}
+                disabled={confirmedSections.length >= MAX_SECTIONS}
                 className={`px-6 py-2 rounded font-semibold transition-colors shadow-md ${
-                  rectangles.length === 0 || dragCount >= 10 || rectangles[rectangles.length - 1]?.confirmed
+                  confirmedSections.length >= MAX_SECTIONS
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-slate-700 text-white hover:bg-slate-800'
+                }`}
+              >
+                🔍 Auto Parse
+              </button>
+              <button
+                onClick={handleAddSection}
+                disabled={rectangles.length === 0 || dragCount >= MAX_SECTIONS || rectangles[rectangles.length - 1]?.confirmed}
+                className={`px-6 py-2 rounded font-semibold transition-colors shadow-md ${
+                  rectangles.length === 0 || dragCount >= MAX_SECTIONS || rectangles[rectangles.length - 1]?.confirmed
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     : 'bg-slate-700 text-white hover:bg-slate-800'
                 }`}
@@ -432,7 +540,7 @@ export default function SectioningPage() {
                 📊 Agent Dashboard
               </button>
               <div className="ml-auto text-slate-700 font-semibold">
-                Sections: {confirmedSections.length} / 10
+                Sections: {confirmedSections.length} / {MAX_SECTIONS}
               </div>
             </div>
           </div>
@@ -443,7 +551,7 @@ export default function SectioningPage() {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <h2 className="text-xl font-bold text-slate-800 mb-2">Full Document</h2>
             <p className="text-sm text-slate-600 mb-4">
-              Drag to select text regions. You can create up to 10 sections in any order. Sections can overlap.
+              Drag to select text regions. You can create up to {MAX_SECTIONS} sections in any order. Sections can overlap.
             </p>
             <div
               ref={containerRef}
@@ -516,7 +624,8 @@ export default function SectioningPage() {
               <ul className="list-disc list-inside space-y-1">
                 <li>Click and drag to create a selection rectangle</li>
                 <li>Click "Add Section" to confirm the selection</li>
-                <li>Repeat for up to 3 sections</li>
+                <li>Repeat for up to {MAX_SECTIONS} sections</li>
+                <li>Or click "🔍 Auto Parse" to instantly create all {MAX_SECTIONS} sections</li>
                 <li>Click "Confirm Sections" when ready</li>
               </ul>
             </div>
@@ -625,7 +734,7 @@ export default function SectioningPage() {
             {confirmedSections.length > 0 && (
               <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded">
                 <p className="text-sm text-slate-700 text-center">
-                  <strong>💡 Tip:</strong> You can create up to 10 sections. Drag rectangles anywhere on the document - they can overlap or be in any order. Select sections and click "✓ Confirm Sections" to proceed.
+                  <strong>💡 Tip:</strong> You can create up to {MAX_SECTIONS} sections. Drag rectangles anywhere on the document - they can overlap or be in any order. Select sections and click "✓ Confirm Sections" to proceed.
                 </p>
               </div>
             )}
