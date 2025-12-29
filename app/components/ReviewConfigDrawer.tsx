@@ -12,6 +12,7 @@ import ContractProfilePanel from './ContractProfilePanel';
 import { recommendAgentBundle } from '../lib/reviewProfileMapping';
 import { validateAgentFeasibility } from '../lib/agentFeasibilityValidator';
 import { getClientProfile, DEFAULT_CLIENT_PROFILE, type ClientProfile } from '../lib/demo/clientProfiles';
+import { getAgentDisplayName } from '../lib/agentDisplayNames';
 
 interface ReviewConfigDrawerProps {
   open: boolean;
@@ -32,6 +33,9 @@ export default function ReviewConfigDrawer({
   onConfigChange,
   onRunReview
 }: ReviewConfigDrawerProps) {
+  // TAB STATE: Default to 'config' as requested
+  const [activeTab, setActiveTab] = useState<'overview' | 'runs' | 'config' | 'timeline'>('config');
+  
   // Drawer owns visibilityMode state (Stage 8.1)
   const [visibilityMode, setVisibilityMode] = useState<VisibilityMode>('reviewer');
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('none');
@@ -42,6 +46,9 @@ export default function ReviewConfigDrawer({
   const [contractId, setContractId] = useState('');
   const [clientProfile, setClientProfile] = useState<ClientProfile>(DEFAULT_CLIENT_PROFILE);
   const [contractIdHint, setContractIdHint] = useState('');
+  
+  // Agent Runs state (for Details expansion)
+  const [expandedAgentIndex, setExpandedAgentIndex] = useState<number | null>(null);
 
   const visibility = getVisibilityConfig(visibilityMode);
   
@@ -434,8 +441,60 @@ export default function ReviewConfigDrawer({
               </div>
             )}
             
-            {/* 1) Review Overview (Sticky inside drawer) */}
-            <div className="bg-gradient-to-r from-blue-50 to-slate-50 border-2 border-blue-200 rounded-lg p-5">
+            {/* TAB NAVIGATION */}
+            <div className="flex gap-2 border-b-2 border-slate-200 pb-0 mb-6">
+              <button
+                onClick={() => setActiveTab('overview')}
+                className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                  activeTab === 'overview'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                📊 Overview
+              </button>
+              <button
+                onClick={() => setActiveTab('runs')}
+                className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                  activeTab === 'runs'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                🤖 Agent Runs
+                {participants.length > 0 && (
+                  <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
+                    {participants.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('config')}
+                className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                  activeTab === 'config'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                ⚙️ Configuration
+              </button>
+              <button
+                onClick={() => setActiveTab('timeline')}
+                className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                  activeTab === 'timeline'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                📅 Timeline
+              </button>
+            </div>
+            
+            {/* TAB CONTENT: Overview */}
+            {activeTab === 'overview' && (
+              <div className="space-y-6">
+                {/* Dashboard Summary (from participants data) */}
+                <div className="bg-gradient-to-r from-blue-50 to-slate-50 border-2 border-blue-200 rounded-lg p-5">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-bold text-slate-800">Review Overview</h3>
@@ -476,7 +535,210 @@ export default function ReviewConfigDrawer({
                   ↻ Reset to Default
                 </button>
               </div>
+                
+                {/* Participant Summary */}
+                {participants.length > 0 && (
+                  <div className="bg-white border-2 border-slate-200 rounded-lg p-4">
+                    <h3 className="text-sm font-bold text-slate-700 mb-3">Agent Participation</h3>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold text-blue-600">{participants.length}</div>
+                        <div className="text-xs text-slate-600">Agents Run</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-slate-800">
+                          {participants.reduce((sum, p) => sum + p.counts.issuesTotal, 0)}
+                        </div>
+                        <div className="text-xs text-slate-600">Issues Found</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-green-600">
+                          {participants.reduce((sum, p) => sum + p.counts.proposedTexts, 0)}
+                        </div>
+                        <div className="text-xs text-slate-600">Fixes Proposed</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+            )}
+            
+            {/* TAB CONTENT: Agent Runs */}
+            {activeTab === 'runs' && (
+              <div className="space-y-4">
+                {participants.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500">
+                    <div className="text-4xl mb-3">🤖</div>
+                    <p className="font-semibold">No agent runs yet</p>
+                    <p className="text-sm mt-1">Run a review to see agent execution results</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wide">
+                      Agent Execution Results
+                    </h3>
+                    {participants.map((participant, index) => {
+                      const isExpanded = expandedAgentIndex === index;
+                      const displayName = getAgentDisplayName(participant.agentId);
+                      
+                      return (
+                        <div
+                          key={participant.agentId}
+                          className="border-2 border-slate-200 bg-white rounded-lg overflow-hidden"
+                        >
+                          {/* Agent Card - Collapsed State */}
+                          <div
+                            onClick={() => setExpandedAgentIndex(isExpanded ? null : index)}
+                            className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="mt-1">
+                                {participant.counts.critical > 0 || participant.counts.high > 0 ? (
+                                  <span className="text-red-600 font-bold text-lg">✗</span>
+                                ) : participant.counts.issuesTotal > 0 ? (
+                                  <span className="text-yellow-600 font-bold text-lg">⚠</span>
+                                ) : (
+                                  <span className="text-green-600 font-bold text-lg">✓</span>
+                                )}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-4 mb-2">
+                                  <div className="font-bold text-slate-800">{displayName}</div>
+                                  <div className="text-xs text-slate-600 shrink-0">
+                                    {isExpanded ? '▲' : '▼'} Details
+                                  </div>
+                                </div>
+                                
+                                {/* What it checked */}
+                                <div className="text-sm text-slate-700 mb-1">
+                                  <span className="font-semibold">What it checked:</span>{' '}
+                                  {participant.roleType === 'compliance' && 'Prohibited terms & policy rules'}
+                                  {participant.roleType === 'evaluation' && 'Section completeness & disclaimers'}
+                                  {participant.roleType === 'optimization' && 'Content quality & wording improvements'}
+                                  {participant.roleType === 'orchestration' && 'Workflow coordination & execution flow'}
+                                  {participant.roleType === 'client-facing' && 'Evidence gaps & information requests'}
+                                </div>
+                                
+                                {/* Key findings - concise */}
+                                <div className="text-sm text-slate-700 flex flex-wrap gap-2">
+                                  {participant.counts.issuesTotal > 0 ? (
+                                    <>
+                                      {participant.counts.critical > 0 && (
+                                        <span className="px-2 py-0.5 bg-red-100 text-red-800 text-xs font-semibold rounded">
+                                          {participant.counts.critical} Critical
+                                        </span>
+                                      )}
+                                      {participant.counts.high > 0 && (
+                                        <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs font-semibold rounded">
+                                          {participant.counts.high} High
+                                        </span>
+                                      )}
+                                      {participant.counts.medium > 0 && (
+                                        <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded">
+                                          {participant.counts.medium} Medium
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-green-700 font-semibold text-xs">✓ No issues detected</span>
+                                  )}
+                                  
+                                  {participant.counts.proposedTexts > 0 && (
+                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-semibold rounded">
+                                      {participant.counts.proposedTexts} Fix{participant.counts.proposedTexts > 1 ? 'es' : ''} Proposed
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Expanded Details Section */}
+                          {isExpanded && (
+                            <div className="px-4 pb-3 border-t-2 border-slate-200 bg-slate-50 space-y-3 pt-3">
+                              <div>
+                                <div className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">
+                                  🐛 Debug Information
+                                </div>
+                                <div className="bg-white border border-slate-300 rounded p-3 space-y-1 text-xs font-mono">
+                                  <div>
+                                    <span className="text-slate-600">System Name:</span>{' '}
+                                    <span className="text-slate-900 font-semibold">{participant.agentId}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-600">Role Type:</span>{' '}
+                                    <span className="text-slate-900">{participant.roleType}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-600">Issues Total:</span>{' '}
+                                    <span className="text-slate-900">{participant.counts.issuesTotal}</span>
+                                  </div>
+                                  {participant.counts.checklists > 0 && (
+                                    <div>
+                                      <span className="text-slate-600">Checklists Generated:</span>{' '}
+                                      <span className="text-slate-900">{participant.counts.checklists}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* TAB CONTENT: Configuration */}
+            {activeTab === 'config' && (
+              <div className="space-y-6">
+                {/* Review Overview moved from above */}
+                <div className="bg-gradient-to-r from-blue-50 to-slate-50 border-2 border-blue-200 rounded-lg p-5">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-800">Review Configuration</h3>
+                      <p className="text-sm text-slate-600 mt-1">Profile: <span className="font-semibold">{reviewConfig.profileId}</span></p>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-bold">
+                        {getActiveAgentsCount()} Agents
+                      </div>
+                      <div className="px-3 py-1 bg-slate-600 text-white rounded-full text-sm font-bold">
+                        {getTotalChecksCount()} Checks
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4 p-3 bg-white rounded border border-slate-200">
+                    <div className="text-xs font-semibold text-slate-700 mb-1">Dependency Chain:</div>
+                    <div className="text-sm text-slate-800 font-medium">{getDependencyChain()}</div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <button
+                      onClick={onRunReview}
+                      disabled={isGated}
+                      className={`flex-1 px-4 py-2 rounded-lg transition-colors font-semibold text-sm ${
+                        isGated
+                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                      title={isGated ? 'Validate agent feasibility first' : 'Run full review'}
+                    >
+                      🔄 Re-run Review
+                    </button>
+                    <button
+                      onClick={handleResetToRecommended}
+                      className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors font-semibold text-sm"
+                    >
+                      ↻ Reset to Default
+                    </button>
+                  </div>
+                </div>
 
             {/* Contract Profile Panel (Stage 8.3 - only in Explainability) */}
             {visibility.showContractInput && (
@@ -852,25 +1114,42 @@ export default function ReviewConfigDrawer({
               </div>
             )}
             
-            {/* System Components (Non-configurable) */}
-            <details className="group">
-              <summary className="cursor-pointer p-4 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-150 transition-colors">
-                <span className="font-semibold text-slate-700">
-                  System Components (Non-configurable)
-                  <span className="ml-2 text-slate-500 text-sm">▼</span>
-                </span>
-              </summary>
-              <div className="mt-2 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
-                <div>
-                  <h5 className="font-bold text-slate-700 text-sm">Orchestrator</h5>
-                  <p className="text-xs text-slate-600">Coordinates agent execution and manages workflow dependencies</p>
-                </div>
-                <div>
-                  <h5 className="font-bold text-slate-700 text-sm">Trace Logger</h5>
-                  <p className="text-xs text-slate-600">Records execution traces for audit and explainability</p>
+                {/* System Components (Non-configurable) */}
+                <details className="group">
+                  <summary className="cursor-pointer p-4 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-150 transition-colors">
+                    <span className="font-semibold text-slate-700">
+                      System Components (Non-configurable)
+                      <span className="ml-2 text-slate-500 text-sm">▼</span>
+                    </span>
+                  </summary>
+                  <div className="mt-2 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                    <div>
+                      <h5 className="font-bold text-slate-700 text-sm">Orchestrator</h5>
+                      <p className="text-xs text-slate-600">Coordinates agent execution and manages workflow dependencies</p>
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-slate-700 text-sm">Trace Logger</h5>
+                      <p className="text-xs text-slate-600">Records execution traces for audit and explainability</p>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            )}
+            
+            {/* TAB CONTENT: Timeline */}
+            {activeTab === 'timeline' && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wide">
+                  Execution Timeline
+                </h3>
+                
+                <div className="text-center py-12 text-slate-500">
+                  <div className="text-4xl mb-3">📅</div>
+                  <p className="font-semibold">Timeline not available</p>
+                  <p className="text-sm mt-1">Event timeline will be added in a future update</p>
                 </div>
               </div>
-            </details>
+            )}
           </div>
         </div>
       </div>

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import AgentDashboard from '../components/AgentDashboard';
 import ReviewConfigDrawer from '../components/ReviewConfigDrawer';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -446,7 +445,6 @@ export default function DocumentPage() {
   const [isOrchestrating, setIsOrchestrating] = useState(false);
   const [hasComplianceIssue, setHasComplianceIssue] = useState(false);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
-  const [showAgentDashboard, setShowAgentDashboard] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [executedActionIds, setExecutedActionIds] = useState<Set<string>>(new Set());
   const [hasNewChatMessage, setHasNewChatMessage] = useState(false);
@@ -2219,12 +2217,6 @@ export default function DocumentPage() {
                 ← Back to Main Page
               </button>
               <button
-                onClick={() => setShowAgentDashboard(true)}
-                className="px-8 py-4 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors font-bold text-lg shadow-sm"
-              >
-                📊 Agent Dashboard
-              </button>
-              <button
                 onClick={handleDownloadPDF}
                 className="px-8 py-4 bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors font-bold text-lg shadow-sm"
               >
@@ -2988,13 +2980,6 @@ export default function DocumentPage() {
                         </span>
                       )}
                     </button>
-                    
-                    <button
-                      onClick={() => setShowAgentDashboard(true)}
-                      className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-semibold text-sm shadow-sm"
-                    >
-                      📊 Agent Dashboard
-                    </button>
 
                     {/* Flow Selector */}
                     <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
@@ -3221,11 +3206,6 @@ export default function DocumentPage() {
       )}
 
       {/* Agent Dashboard Modal */}
-      <AgentDashboard 
-        isOpen={showAgentDashboard}
-        onClose={() => setShowAgentDashboard(false)}
-      />
-      
       {/* Review Configuration & Agents Drawer (Governed Selection) */}
       <ReviewConfigDrawer
         open={showAgentsDrawer}
