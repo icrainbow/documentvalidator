@@ -53,11 +53,15 @@ export class MockReflectionProvider implements ReflectionProvider {
 }
 
 /**
- * Claude provider: Phase 1.7 implementation (placeholder for Phase 1.6)
+ * Claude provider: fetch-based implementation (Phase 1.7)
+ * Uses direct fetch to Claude API (matching llmReviewExecutor.ts pattern)
  */
 export class ClaudeReflectionProvider implements ReflectionProvider {
   name = 'claude';
   private apiKey: string;
+  private readonly MAX_TOKENS = 512;
+  private readonly MODEL = 'claude-sonnet-4-20250514'; // Match llmReviewExecutor.ts
+  private readonly TIMEOUT_MS = 15000; // 15 seconds
   
   constructor(apiKey: string) {
     if (!apiKey) {
@@ -67,25 +71,76 @@ export class ClaudeReflectionProvider implements ReflectionProvider {
   }
   
   async run(payload: Record<string, any>, prompt: string): Promise<string> {
-    // Phase 1.6 placeholder: safe fallback (will implement in Phase 1.7)
-    console.warn('[Flow2/Reflection/Claude] Provider not yet fully implemented; returning safe fallback');
+    console.log('[Flow2/Reflection/Claude] Calling Claude API');
+    const startTime = Date.now();
     
-    // Return safe fallback JSON (do NOT throw to avoid breaking graph)
-    if (payload.replanCount >= 1) {
+    try {
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.TIMEOUT_MS);
+      
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: this.MODEL,
+          max_tokens: this.MAX_TOKENS,
+          temperature: 0.3, // Low for structured output
+          messages: [{
+            role: 'user',
+            content: prompt
+          }]
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown' }));
+        throw new Error(`Claude API returned ${response.status}: ${JSON.stringify(errorData)}`);
+      }
+      
+      const data = await response.json();
+      const duration = Date.now() - startTime;
+      
+      console.log(`[Flow2/Reflection/Claude] Success (${duration}ms)`);
+      
+      // Extract text from response (match llmReviewExecutor pattern)
+      if (data.content && data.content[0] && data.content[0].type === 'text') {
+        return data.content[0].text;
+      }
+      
+      throw new Error('Unexpected response format from Claude');
+      
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      console.error(`[Flow2/Reflection/Claude] Error after ${duration}ms:`, error.message);
+      
+      // SAFE FALLBACK: Return deterministic mock response
+      // DO NOT throw - this would break the graph
+      if (payload.replanCount >= 1) {
+        console.warn('[Flow2/Reflection/Claude] Fallback: replan limit reached');
+        return JSON.stringify({
+          should_replan: false,
+          reason: 'Claude unavailable; replan limit reached; require human decision.',
+          new_plan: ['ask_human_for_scope'],
+          confidence: 0.6,
+        });
+      }
+      
+      console.warn('[Flow2/Reflection/Claude] Fallback: continuing with current plan');
       return JSON.stringify({
         should_replan: false,
-        reason: 'Claude provider placeholder; require human decision.',
-        new_plan: ['ask_human_for_scope'],
-        confidence: 0.6,
+        reason: 'Claude API unavailable; continuing with current plan.',
+        new_plan: ['skip'],
+        confidence: 0.5,
       });
     }
-    
-    return JSON.stringify({
-      should_replan: false,
-      reason: 'Claude provider placeholder; continuing with current plan.',
-      new_plan: ['skip'],
-      confidence: 0.5,
-    });
   }
 }
 
