@@ -626,11 +626,11 @@ export default function DocumentPage() {
     if (!isFlow2) return;
     
     const scenarioParam = searchParams.get('scenario');
-    if (scenarioParam && scenarioParam !== flow2ActiveScenario) {
+    if (scenarioParam) {
       console.log('[Flow2] Setting active scenario from URL:', scenarioParam);
       setFlow2ActiveScenario(scenarioParam);
     }
-  }, [isFlow2, searchParams, flow2ActiveScenario]);
+  }, [isFlow2, searchParams]);
   
   // Auto-save session on state changes
   useEffect(() => {
