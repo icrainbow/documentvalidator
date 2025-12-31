@@ -156,6 +156,42 @@ export default function GraphTrace({ trace }: GraphTraceProps) {
         )}
       </div>
       
+      {/* Demo Helper: Quick Navigation */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-slate-600">Quick Jump:</span>
+          <button
+            onClick={() => {
+              const reflectNode = events.findIndex(e => e.node && e.node.includes('reflect'));
+              if (reflectNode >= 0) {
+                document.getElementById(`trace-event-${reflectNode}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }}
+            className="px-3 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium hover:bg-purple-200 transition-colors"
+          >
+            → Reflection Node
+          </button>
+          <button
+            onClick={() => {
+              const routingNode = events.findIndex(e => e.node && e.node.includes('routing'));
+              if (routingNode >= 0) {
+                document.getElementById(`trace-event-${routingNode}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              } else {
+                // Fallback: scroll to risk_triage which makes routing decision
+                const triageNode = events.findIndex(e => e.node && e.node.includes('triage'));
+                if (triageNode >= 0) {
+                  document.getElementById(`trace-event-${triageNode}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }
+            }}
+            className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium hover:bg-blue-200 transition-colors"
+          >
+            → Routing Decision
+          </button>
+          <span className="text-xs text-slate-500 ml-auto">({events.length} nodes)</span>
+        </div>
+      </div>
+      
       {/* Node Execution Timeline */}
       <div className="bg-white border-2 border-slate-200 rounded-lg p-4">
         <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -170,6 +206,7 @@ export default function GraphTrace({ trace }: GraphTraceProps) {
           {events.map((event, idx) => (
             <div
               key={idx}
+              id={`trace-event-${idx}`}
               className={`border-2 rounded-lg p-3 ${STATUS_STYLES[event.status]}`}
             >
               <div className="flex items-start justify-between mb-2">

@@ -1,0 +1,38 @@
+Investment Strategy Overview
+
+This document outlines our recommended investment approach for high-net-worth individuals seeking diversified portfolio growth.
+
+## Section 1: Investment Background
+
+Our investment philosophy is grounded in modern portfolio theory and risk-adjusted returns. We recommend a diversified approach across asset classes including equities, fixed income, and alternative investments. The target allocation should align with the client's risk tolerance and investment horizon.
+
+For clients with a 10+ year investment horizon, we suggest a 70/30 equity-to-fixed income ratio. This allocation has historically provided optimal risk-adjusted returns while maintaining sufficient liquidity for unexpected needs.
+
+## Section 2: Risk Assessment
+
+Risk management is central to our investment strategy. We evaluate client risk tolerance through comprehensive questionnaires and scenario analysis. Key risk factors include market volatility, interest rate changes, and geopolitical events.
+
+Our risk mitigation strategies include portfolio diversification, regular rebalancing, and the use of hedging instruments when appropriate. We monitor portfolio volatility and adjust allocations as market conditions evolve.
+
+## Section 3: Asset Allocation Strategy
+
+The recommended asset allocation consists of:
+- 50% Large-cap equities (domestic and international)
+- 20% Small/mid-cap equities for growth potential
+- 20% Investment-grade bonds for stability and income
+- 10% Alternative investments (REITs, commodities) for diversification
+
+This allocation is designed to capture market upside while providing downside protection through fixed income holdings. Quarterly rebalancing ensures the portfolio remains aligned with target allocations.
+
+## Section 4: Tax Considerations
+
+Tax-efficient investing is crucial for maximizing after-tax returns. We recommend utilizing tax-advantaged accounts where possible and implementing tax-loss harvesting strategies to offset capital gains.
+
+For high-income clients, municipal bonds may offer attractive after-tax yields. We also consider the timing of capital gains realization to minimize tax liability. Estate planning considerations should be integrated into the overall investment strategy.
+
+## Section 5: Performance Monitoring
+
+We provide quarterly performance reports comparing portfolio returns to relevant benchmarks. Key metrics include total return, risk-adjusted return (Sharpe ratio), and tracking error versus benchmarks.
+
+Annual reviews allow for strategic adjustments based on changing client circumstances, market conditions, and tax law changes. We maintain transparent communication and provide detailed explanations of all investment decisions and their rationale.
+
