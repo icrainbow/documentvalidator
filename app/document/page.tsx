@@ -621,6 +621,17 @@ export default function DocumentPage() {
     }
   }, [docKey, loadedFromStorage, searchParams]);
   
+  // Flow2: Read scenario parameter from URL and pre-select it
+  useEffect(() => {
+    if (!isFlow2) return;
+    
+    const scenarioParam = searchParams.get('scenario');
+    if (scenarioParam && scenarioParam !== flow2ActiveScenario) {
+      console.log('[Flow2] Setting active scenario from URL:', scenarioParam);
+      setFlow2ActiveScenario(scenarioParam);
+    }
+  }, [isFlow2, searchParams, flow2ActiveScenario]);
+  
   // Auto-save session on state changes
   useEffect(() => {
     // Only save if we have a sessionId
