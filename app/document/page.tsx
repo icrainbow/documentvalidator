@@ -6,6 +6,7 @@ import ReviewConfigDrawer from '../components/ReviewConfigDrawer';
 import Flow2UploadPanel from '../components/flow2/Flow2UploadPanel';
 import Flow2PastePanel from '../components/flow2/Flow2PastePanel';
 import Flow2DocumentsList from '../components/flow2/Flow2DocumentsList';
+import Flow2RightPanel from '../components/flow2/Flow2RightPanel';
 import HumanGatePanel from '../components/flow2/HumanGatePanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -3042,7 +3043,9 @@ function DocumentPageContent() {
                 </div>
               )}
               
-              {sections.map((section, index) => (
+              {/* Flow1 ONLY: Render document sections */}
+              {!isFlow2 && (
+                sections.map((section, index) => (
                 <div
                   key={section.id}
                   id={`sec-${index + 1}`}
@@ -3176,10 +3179,26 @@ function DocumentPageContent() {
                     )}
                   </div>
                 </div>
-              ))}
+              ))
+              )}
               </div>
 
               {/* Right Column: Review Results Panel */}
+              {isFlow2 ? (
+                // FLOW2: Clean, minimal right panel
+                <Flow2RightPanel
+                  flow2Documents={flow2Documents}
+                  isOrchestrating={isOrchestrating}
+                  orchestrationResult={orchestrationResult}
+                  isDegraded={isDegraded}
+                  degradedReason={degradedReason}
+                  onRunReview={handleGraphKycReview}
+                  onRetry={handleFlow2Retry}
+                  onOpenAgents={() => setShowAgentsDrawer(true)}
+                  agentParticipants={agentParticipants}
+                />
+              ) : (
+                // FLOW1: Original right panel with all features
               <div className="sticky top-6 h-[calc(100vh-4rem)] overflow-y-auto">
                 <div className="bg-white border-2 border-slate-300 rounded-xl p-6">
                   
@@ -3837,6 +3856,7 @@ function DocumentPageContent() {
                       </div>
                         </div>
               </div>
+              )}
             </div>
 
             {/* Sticky Chat Panel at Bottom */}
