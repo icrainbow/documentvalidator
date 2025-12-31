@@ -56,6 +56,41 @@ npm run build
 npm start
 ```
 
+## Demo
+
+### Quick Demo Startup
+
+**Recommended: Use the demo script (clean start with reflection enabled):**
+```bash
+./scripts/demo-up.sh
+```
+
+This automatically:
+- Kills any processes on port 3000
+- Sets demo-friendly environment variables (mock reflection, rerun mode)
+- Starts the dev server
+
+### Demo URLs
+
+- **Flow1 (Scope Planning):** [http://localhost:3000/document?flow=1](http://localhost:3000/document?flow=1)
+- **Flow2 (Graph KYC + Reflection):** [http://localhost:3000/document?flow=2&scenario=crosscheck](http://localhost:3000/document?flow=2&scenario=crosscheck)
+
+### Comprehensive Demo Documentation
+
+We provide a complete demo runbook with talk tracks, checklists, and troubleshooting:
+
+- **[📖 Demo Runbook](docs/demo/DEMO_RUNBOOK.md)** - 8-10 minute walkthrough with talk track
+- **[✅ Demo Checklist](docs/demo/DEMO_CHECKLIST.md)** - 10-minute pre-flight verification
+- **[🔧 Demo Troubleshooting](docs/demo/DEMO_TROUBLESHOOTING.md)** - 2-minute fixes for common issues
+- **[💬 Demo Talk Track](docs/demo/DEMO_SCRIPT_TALK_TRACK.md)** - Key messaging and FAQ answers
+- **[📋 Demo Guide (Detailed)](docs/demo/DEMO.md)** - Original detailed demo documentation
+
+**Recommended demo flow:**
+1. Run checklist (10 min before demo)
+2. Follow runbook for 8-10 min live demo
+3. Use talk track for Q&A
+4. Refer to troubleshooting if issues arise
+
 ## Application Flows
 
 ## Troubleshooting
