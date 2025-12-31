@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { parseDocxBySections, ParsedSection } from '../lib/docxParser';
+import { structureDocument, saveStructuringTrace } from '../lib/documentStructuringAgent';
 
 interface Rectangle {
   id: number;
@@ -462,19 +463,22 @@ export default function SectioningPage() {
     
     // Check if we have an uploaded .docx file to parse
     if (uploadedFile && (uploadedFile.name.endsWith('.docx') || uploadedFile.type.includes('wordprocessingml'))) {
-      console.log('[sectioning] Using REAL .docx parser for:', uploadedFile.name);
+      console.log('[sectioning] 🤖 Invoking Document Structuring Agent for:', uploadedFile.name);
       setIsParsingFile(true);
       
       try {
-        const parseResult = await parseDocxBySections(uploadedFile);
-        console.log('[sectioning] ✓ Parse complete:', parseResult.totalSections, 'sections detected');
+        // Use Document Structuring Agent for agentic decision-making
+        const structuringResult = await structureDocument(uploadedFile);
+        
+        console.log('[sectioning] ✓ Structuring complete:', structuringResult.totalSections, 'sections detected');
+        console.log('[sectioning] Strategy used:', structuringResult.trace.finalDecision.strategy);
         console.log('[sectioning] Detected sections:');
-        parseResult.sections.forEach((s, i) => {
+        structuringResult.sections.forEach((s, i) => {
           console.log(`  [${i + 1}] "${s.title}" (${s.paragraphCount} paragraphs)`);
         });
         
         // Convert ParsedSection to Section interface
-        allSections = parseResult.sections.map((ps: ParsedSection, idx) => ({
+        allSections = structuringResult.sections.map((ps: ParsedSection, idx) => ({
           id: Date.now() + idx,
           title: ps.title,
           content: ps.content,
@@ -482,14 +486,24 @@ export default function SectioningPage() {
         }));
         
         // Update displayed document text with extracted text
-        if (parseResult.rawText) {
-          setDisplayedDocumentText(parseResult.rawText);
+        if (structuringResult.rawText) {
+          setDisplayedDocumentText(structuringResult.rawText);
+        }
+        
+        // Save structuring trace for later display in Agent Panel
+        const docId = `doc_${Date.now()}`;
+        saveStructuringTrace(docId, structuringResult.trace);
+        
+        // Store docId in sessionStorage for retrieval on document page
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('current_doc_id', docId);
         }
         
         console.log('[sectioning] Converted to', allSections.length, 'Section objects');
+        console.log('[sectioning] Agent trace saved for document ID:', docId);
       } catch (error) {
-        console.error('[sectioning] Parse error:', error);
-        alert(`Failed to parse document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error('[sectioning] Structuring error:', error);
+        alert(`Failed to structure document: ${error instanceof Error ? error.message : 'Unknown error'}`);
         setIsParsingFile(false);
         return;
       }

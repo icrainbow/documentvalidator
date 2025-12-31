@@ -3,10 +3,22 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ReviewConfigDrawer from '../components/ReviewConfigDrawer';
+import Flow2UploadPanel from '../components/flow2/Flow2UploadPanel';
+import Flow2PastePanel from '../components/flow2/Flow2PastePanel';
+import Flow2DocumentsList from '../components/flow2/Flow2DocumentsList';
+import HumanGatePanel from '../components/flow2/HumanGatePanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { computeParticipants } from '../lib/computeParticipants';
 import { normalizeAgentId, getAgentMetadata } from '../lib/agentRegistry';
+import { 
+  createEmptyQueue, 
+  addToDirtyQueue, 
+  clearDirtyQueue
+} from '../lib/dirtyQueue';
+import type { DirtyQueue } from '../lib/types/scopePlanning';
+import { DEMO_SCENARIOS, getDemoScenario, type Flow2Document } from '../lib/graphKyc/demoData';
+import { HumanGateState } from '../lib/flow2/types';
 import { 
   loadReviewSession, 
   saveReviewSession, 
@@ -177,6 +189,10 @@ export default function DocumentPage() {
   // Extract docKey SYNCHRONOUSLY from URL - critical for Priority 1 loading
   const docKey = searchParams.get("docKey");
   console.log("[document] URL docKey from searchParams:", docKey);
+  
+  // Flow routing: "1" (default) = batch review, "2" = LangGraph KYC
+  const flowMode = searchParams.get("flow") || "1";
+  const isFlow2 = flowMode === "2";
   
   const { speak, stop, isSpeaking, isSupported } = useSpeech();
   const { 
@@ -485,6 +501,45 @@ export default function DocumentPage() {
   // Review configuration state - for governed agent selection
   const [reviewConfig, setReviewConfig] = useState<ReviewConfig>(getDefaultReviewConfig());
 
+  // Batch review trace state - for scope planning visualization (Stage 4)
+  const [batchReviewTrace, setBatchReviewTrace] = useState<{
+    scopePlan: any | null; // ScopePlanApi
+    globalCheckResults: any[] | null; // GlobalCheckResult[]
+    timing: {
+      scopePlanningMs: number;
+      reviewMs: number;
+      globalChecksMs: number;
+      totalMs: number;
+      llmAttempted: boolean;
+      llmSucceeded: boolean;
+    } | null;
+    fallbacks?: string[];
+    degraded?: boolean;
+    dirtyQueueSnapshot: any | null; // DirtyQueue snapshot at time of review
+  } | null>(null);
+
+  // Phase 5: Dirty queue state - tracks user edits for batch review (Flow1 only)
+  const [dirtyQueue, setDirtyQueue] = useState<DirtyQueue>(createEmptyQueue());
+  const [sectionContentBeforeEdit, setSectionContentBeforeEdit] = useState<Record<number, string>>({});
+
+  // Flow2: ISOLATED state (NEVER touches Flow1 sections/dirtyQueue)
+  const [flow2Documents, setFlow2Documents] = useState<Flow2Document[]>([]);
+  const [flow2ActiveScenario, setFlow2ActiveScenario] = useState<string>('');
+  const [graphReviewTrace, setGraphReviewTrace] = useState<any | null>(null);
+  const [graphTopics, setGraphTopics] = useState<any[]>([]);
+  const [conflicts, setConflicts] = useState<any[]>([]);
+  const [coverageGaps, setCoverageGaps] = useState<any[]>([]);
+  const [humanGateData, setHumanGateData] = useState<any | null>(null);
+  
+  // MILESTONE C: New state for workspace + degraded mode
+  const [humanGateState, setHumanGateState] = useState<HumanGateState | null>(null);
+  const [isDegraded, setIsDegraded] = useState(false);
+  const [degradedReason, setDegradedReason] = useState('');
+  
+  // Workspace limits
+  const MAX_FLOW2_DOCUMENTS = 10;
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
   // Clear new message flag when chat is expanded
   useEffect(() => {
     if (isChatExpanded && hasNewChatMessage) {
@@ -637,6 +692,14 @@ export default function DocumentPage() {
 
       // If no compliance issues, proceed with save
       setHasComplianceIssue(false);
+      
+      // Phase 5: Add to dirty queue if content changed
+      const previousContent = sectionContentBeforeEdit[sectionId] || '';
+      if (previousContent !== editContent) {
+        console.log('[document/Phase5] Adding section', sectionId, 'to dirty queue');
+        setDirtyQueue((prev: DirtyQueue) => addToDirtyQueue(prev, sectionId, previousContent, editContent));
+      }
+      
       setSections(prevSections => prevSections.map(s => {
         if (s.id === sectionId) {
           // After manual edit, status should be 'unreviewed' until re-reviewed
@@ -695,6 +758,12 @@ export default function DocumentPage() {
       const section = sections.find(s => s.id === sectionId);
       setEditingSectionId(sectionId);
       setEditContent(section?.content || '');
+      
+      // Phase 5: Store content before edit for dirty queue calculation
+      setSectionContentBeforeEdit(prev => ({
+        ...prev,
+        [sectionId]: section?.content || ''
+      }));
       
       setSections(prevSections => prevSections.map(s => {
         if (s.id === sectionId) {
@@ -803,6 +872,87 @@ export default function DocumentPage() {
     return results;
   };
 
+  /**
+   * Phase 5: Batch review API integration
+   * 
+   * Attempts to call batch_review API if dirtyQueue has entries.
+   * Returns non-null on success, null on failure or no dirty sections.
+   * 
+   * @returns { issues, remediations, trace } on success, null otherwise
+   */
+  const runBatchReviewIfPossible = async (): Promise<null | { 
+    issues: any[]; 
+    remediations: any[]; 
+    trace: any 
+  }> => {
+    // No dirty sections => skip batch review
+    if (!dirtyQueue || dirtyQueue.entries.length === 0) {
+      console.log('[document/Phase5] No dirty sections, skipping batch review');
+      return null;
+    }
+
+    console.log('[document/Phase5] Attempting batch review with', dirtyQueue.entries.length, 'dirty sections');
+
+    try {
+      const documentId = docKey || `doc-${Date.now()}`;
+      
+      // Convert sections to API format (with string IDs)
+      const apiSections = sections.map(s => ({
+        id: `section-${s.id}`,
+        title: s.title,
+        content: s.content,
+        order: s.id // Use numeric id as order
+      }));
+
+      // Snapshot dirty queue before review
+      const queueSnapshot = { ...dirtyQueue };
+
+      const response = await fetch('/api/orchestrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'batch_review',
+          documentId,
+          dirtyQueue,
+          sections: apiSections,
+          config: reviewConfig
+        })
+      });
+
+      if (!response.ok) {
+        console.warn('[document/Phase5] Batch review API returned non-2xx:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      console.log('[document/Phase5] Batch review succeeded:', data);
+
+      // Populate batch review trace for UI
+      setBatchReviewTrace({
+        scopePlan: data.scopePlan || null,
+        globalCheckResults: data.globalCheckResults || null,
+        timing: data.timing || null,
+        fallbacks: data.fallbacks,
+        degraded: data.degraded,
+        dirtyQueueSnapshot: queueSnapshot
+      });
+
+      // Clear dirty queue after successful review
+      setDirtyQueue(clearDirtyQueue());
+      setSectionContentBeforeEdit({});
+
+      return {
+        issues: data.issues || [],
+        remediations: data.remediations || [],
+        trace: data
+      };
+    } catch (error) {
+      console.error('[document/Phase5] Batch review failed:', error);
+      console.warn('[document/Phase5] Falling back to existing review logic');
+      return null;
+    }
+  };
+
   const handleFullComplianceReview = async () => {
     setIsOrchestrating(true);
     setOrchestrationResult(null);
@@ -810,7 +960,78 @@ export default function DocumentPage() {
     console.log("[document] Starting full review of all", sections.length, "sections");
     
     try {
-      // Demo: Review all sections locally
+      // Phase 5: Try batch review first if dirty sections exist
+      const batchResult = await runBatchReviewIfPossible();
+      
+      if (batchResult) {
+        console.log('[document/Phase5] Using batch review results');
+        
+        // Update currentIssues with batch review results
+        setCurrentIssues(batchResult.issues);
+        
+        // Create orchestration result for UI compatibility
+        const mockResult = {
+          ok: true,
+          parent_trace_id: `batch-${Date.now()}`,
+          mode: 'batch_review',
+          artifacts: {
+            review_issues: {
+              issues: batchResult.issues,
+              total_count: batchResult.issues.length
+            },
+            remediations: batchResult.remediations
+          },
+          decision: {
+            next_action: batchResult.issues.some((i: any) => i.severity === 'FAIL') ? 'rejected' : 
+                         batchResult.issues.some((i: any) => i.severity === 'WARNING') ? 'request_more_info' : 
+                         'ready_to_send',
+            reason: `Batch review completed: ${batchResult.issues.length} issue(s) found.`
+          },
+          execution: {
+            steps: []
+          }
+        };
+        
+        setOrchestrationResult(mockResult);
+        
+        // Update section statuses based on issues
+        setSections(prev => prev.map(s => {
+          const sectionKey = `section-${s.id}`;
+          const sectionIssues = batchResult.issues.filter((i: any) => i.sectionId === sectionKey);
+          
+          let status: SectionStatus = 'pass';
+          if (sectionIssues.some((i: any) => i.severity === 'FAIL')) {
+            status = 'fail';
+          } else if (sectionIssues.some((i: any) => i.severity === 'WARNING')) {
+            status = 'warning';
+          }
+          
+          return {
+            ...s,
+            status,
+            log: [
+              ...s.log,
+              {
+                agent: 'Batch Review',
+                action: `Batch review: ${status.toUpperCase()}. ${sectionIssues.length} issue(s) found.`,
+                timestamp: new Date()
+              }
+            ]
+          };
+        }));
+        
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          agent: 'Batch Review Agent',
+          content: `✓ Batch review completed.\n\nReviewed: ${batchResult.trace.scopePlan?.sectionsToReview?.length || 0} section(s)\nTotal issues: ${batchResult.issues.length}\n\nScope: ${batchResult.trace.scopePlan?.reviewMode || 'unknown'}`
+        }]);
+        
+        setIsOrchestrating(false);
+        return; // Exit early, batch review succeeded
+      }
+      
+      // Fallback: Demo review all sections locally (existing logic)
+      console.log('[document] Falling back to demo review logic');
       const reviewResults = demoRunFullReview(sections);
       console.log("[document] Review results:", reviewResults);
       
@@ -909,6 +1130,432 @@ export default function DocumentPage() {
     } finally {
       setIsOrchestrating(false);
     }
+  };
+
+  /**
+   * Flow2: Load Demo Scenario
+   * 
+   * ISOLATED: Only writes to flow2Documents, never touches sections/dirtyQueue.
+   */
+  const handleLoadDemoScenario = () => {
+    // GUARD: Only works in Flow2 mode
+    if (!isFlow2) {
+      console.warn('[Flow2] Cannot load demo in Flow1 mode');
+      return;
+    }
+    
+    if (!flow2ActiveScenario) {
+      console.warn('[Flow2] No scenario selected');
+      return;
+    }
+    
+    const scenario = getDemoScenario(flow2ActiveScenario);
+    if (!scenario) {
+      console.error('[Flow2] Invalid scenario ID:', flow2ActiveScenario);
+      return;
+    }
+    
+    console.log('[Flow2] Loading demo scenario:', scenario.name);
+    
+    // ISOLATED WRITE: Only touches Flow2 state
+    setFlow2Documents(scenario.documents);
+    
+    // Clear previous Flow2 results
+    setGraphReviewTrace(null);
+    setGraphTopics([]);
+    setConflicts([]);
+    setCoverageGaps([]);
+    setCurrentIssues([]);
+    setOrchestrationResult(null);
+    
+    // Notify user
+    setMessages(prev => [...prev, {
+      role: 'agent',
+      agent: 'Demo Loader',
+      content: `✓ Loaded demo scenario: ${scenario.name}\n\n${scenario.description}\n\nExpected routing: ${scenario.expected.path.toUpperCase()} (risk ${scenario.expected.minRiskScore}-${scenario.expected.maxRiskScore})\n\nDocuments loaded: ${scenario.documents.length}\n\nClick "🕸️ Run Graph KYC Review" to execute.`
+    }]);
+  };
+
+  /**
+   * MILESTONE C: Flow2 Workspace Handlers
+   * All handlers are ISOLATED to Flow2 state only.
+   * NEVER call setSections, setDirtyQueue, or setBatchReviewTrace.
+   */
+  
+  const handleFlow2Upload = (docs: Flow2Document[]) => {
+    if (!isFlow2) return; // GUARD
+    
+    // Check limits
+    if (flow2Documents.length + docs.length > MAX_FLOW2_DOCUMENTS) {
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: `⚠️ Cannot add ${docs.length} document(s). Maximum ${MAX_FLOW2_DOCUMENTS} documents allowed in workspace.`
+      }]);
+      return;
+    }
+    
+    // ISOLATED WRITE: Only Flow2 state
+    setFlow2Documents(prev => [...prev, ...docs]);
+    setMessages(prev => [...prev, {
+      role: 'agent',
+      agent: 'System',
+      content: `✓ Added ${docs.length} document(s) to Flow2 workspace. Total: ${flow2Documents.length + docs.length}`
+    }]);
+  };
+  
+  const handleFlow2PasteAdd = (doc: Flow2Document) => {
+    if (!isFlow2) return; // GUARD
+    
+    if (flow2Documents.length >= MAX_FLOW2_DOCUMENTS) {
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: `⚠️ Workspace full. Maximum ${MAX_FLOW2_DOCUMENTS} documents allowed.`
+      }]);
+      return;
+    }
+    
+    // ISOLATED WRITE: Only Flow2 state
+    setFlow2Documents(prev => [...prev, doc]);
+    setMessages(prev => [...prev, {
+      role: 'agent',
+      agent: 'System',
+      content: `✓ Added "${doc.filename}" to Flow2 workspace.`
+    }]);
+  };
+  
+  const handleFlow2RemoveDocument = (docId: string) => {
+    if (!isFlow2) return; // GUARD
+    
+    // ISOLATED WRITE: Only Flow2 state
+    const doc = flow2Documents.find(d => d.doc_id === docId);
+    setFlow2Documents(prev => prev.filter(d => d.doc_id !== docId));
+    
+    if (doc) {
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: `🗑️ Removed "${doc.filename}" from workspace.`
+      }]);
+    }
+  };
+  
+  const handleFlow2ClearWorkspace = () => {
+    if (!isFlow2) return; // GUARD
+    
+    // Clear ALL Flow2-only state (NEVER touch Flow1 state)
+    const docCount = flow2Documents.length;
+    setFlow2Documents([]); // ISOLATED WRITE
+    setFlow2ActiveScenario('');
+    setGraphReviewTrace(null);
+    setGraphTopics([]);
+    setConflicts([]);
+    setCoverageGaps([]);
+    setCurrentIssues([]);
+    setHumanGateState(null);
+    setHumanGateData(null);
+    setIsDegraded(false);
+    setDegradedReason('');
+    
+    setMessages(prev => [...prev, {
+      role: 'agent',
+      agent: 'System',
+      content: `🧹 Flow2 workspace cleared (${docCount} document(s) removed).`
+    }]);
+  };
+
+  /**
+   * Flow2: Handle Graph KYC Review
+   * 
+   * STRICT: Uses flow2Documents ONLY, never reads sections in Flow2 mode.
+   * Populates graphReviewTrace for UI visualization.
+   */
+  const handleGraphKycReview = async () => {
+    // GUARD: Only works in Flow2 mode
+    if (!isFlow2) {
+      console.warn('[Flow2] handleGraphKycReview called but not in Flow2 mode');
+      return;
+    }
+    
+    // GUARD: Require flow2Documents
+    if (flow2Documents.length === 0) {
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: '⚠️ Please load documents first.\n\nUpload files or paste content using the panels above, or load a demo scenario.'
+      }]);
+      return;
+    }
+    
+    setIsOrchestrating(true);
+    setOrchestrationResult(null);
+    setGraphReviewTrace(null);
+    setIsDegraded(false); // MILESTONE C: Clear degraded state
+    setDegradedReason('');
+    
+    console.log('[Flow2] Starting Graph KYC review with', flow2Documents.length, 'documents');
+    
+    try {
+      // ISOLATED: Use flow2Documents ONLY (never read sections in Flow2)
+      const documents = flow2Documents.map(d => ({
+        name: d.filename,
+        content: d.text
+      }));
+      
+      const requestBody: any = {
+        mode: 'langgraph_kyc',
+        documents,
+        runId: `flow2_${Date.now()}`
+      };
+      
+      // MILESTONE C: If humanGateState exists, we're resuming
+      if (humanGateState) {
+        requestBody.humanDecision = {
+          gate: humanGateState.gateId,
+          decision: 'approve_edd', // This will be set by handleHumanGateSubmit
+          signer: 'Resume'
+        };
+        requestBody.resumeToken = humanGateState.resumeToken;
+      }
+      
+      const response = await fetch('/api/orchestrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      
+      // MILESTONE C: Check for non-2xx (proper error handling)
+      if (!response.ok) {
+        let errorMessage = `API returned ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (parseError) {
+          // Ignore parse error, use status code message
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const data = await response.json();
+      console.log('[Flow2] Graph KYC review response:', data);
+      
+      // MILESTONE C: Check if human gate required
+      if (data.humanGate && data.humanGate.required) {
+        // ISOLATED WRITE: Only Flow2 state
+        setHumanGateState({
+          gateId: data.humanGate.gateId || data.humanGate.prompt.substring(0, 20),
+          prompt: data.humanGate.prompt,
+          options: data.humanGate.options || ['approve_edd', 'request_docs', 'reject'],
+          context: data.humanGate.context,
+          resumeToken: data.resumeToken || ''
+        });
+        setGraphReviewTrace(data.graphReviewTrace || null);
+        setGraphTopics(data.topicSections || []);
+        
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          agent: 'Human Gate',
+          content: `⏸️ Review paused: ${data.humanGate.prompt}\n\nPlease make a decision to continue.`
+        }]);
+        
+        setIsOrchestrating(false);
+        return;
+      }
+      
+      // Normal completion path
+      // Update issues
+      setCurrentIssues(data.issues || []);
+      
+      // Update graph trace
+      setGraphReviewTrace(data.graphReviewTrace || null);
+      
+      // Update Flow2-specific state (ISOLATED WRITES)
+      setGraphTopics(data.topicSections || []);
+      setConflicts(data.conflicts || []);
+      setCoverageGaps(data.coverageGaps || []);
+      
+      // Clear human gate if it was set
+      setHumanGateState(null);
+      setHumanGateData(null);
+      
+      // Create orchestration result for UI compatibility
+      const mockResult = {
+        ok: true,
+        parent_trace_id: data.graphReviewTrace?.summary?.runId || `graph-${Date.now()}`,
+        mode: 'langgraph_kyc',
+        artifacts: {
+          review_issues: {
+            issues: data.issues || [],
+            total_count: (data.issues || []).length
+          }
+        },
+        decision: {
+          next_action: (data.issues || []).some((i: any) => i.severity === 'FAIL') ? 'rejected' : 'ready_to_send',
+          reason: `Graph KYC review completed: ${(data.issues || []).length} issue(s) found.`
+        },
+        execution: {
+          steps: []
+        }
+      };
+      
+      setOrchestrationResult(mockResult);
+      
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'Graph KYC Agent',
+        content: `✓ Graph KYC review completed.\n\nPath: ${data.graphReviewTrace?.summary?.path || 'unknown'}\nRisk Score: ${data.graphReviewTrace?.summary?.riskScore || 0}\nTotal issues: ${(data.issues || []).length}`
+      }]);
+      
+    } catch (error: any) {
+      console.error('[Flow2] Graph KYC review error:', error);
+      
+      // MILESTONE C: Enter degraded mode
+      setIsDegraded(true);
+      setDegradedReason(error.message || 'Unknown error');
+      
+      // Set minimal safe trace
+      setGraphReviewTrace({
+        events: [{
+          node: 'error_handler',
+          status: 'failed',
+          reason: error.message,
+          startedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString()
+        }],
+        summary: {
+          path: 'fast',
+          riskScore: 0,
+          coverageMissingCount: 0,
+          conflictCount: 0
+        },
+        degraded: true
+      });
+      
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: `❌ Graph KYC review failed: ${error.message}`
+      }]);
+    } finally {
+      setIsOrchestrating(false);
+    }
+  };
+
+  /**
+   * MILESTONE C: Handle human gate decision submission
+   */
+  const handleHumanGateSubmit = async (selectedOption: string, signer: string) => {
+    if (!isFlow2 || !humanGateState) return; // GUARD
+    
+    setIsOrchestrating(true);
+    setIsDegraded(false); // Clear degraded state
+    
+    try {
+      const documents = flow2Documents.map(d => ({
+        name: d.filename,
+        content: d.text
+      }));
+      
+      const response = await fetch('/api/orchestrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'langgraph_kyc',
+          documents,
+          humanDecision: {
+            gate: humanGateState.gateId,
+            decision: selectedOption,
+            signer
+          },
+          resumeToken: humanGateState.resumeToken
+        })
+      });
+      
+      if (!response.ok) {
+        let errorMessage = `API returned ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (parseError) {
+          // Ignore
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const data = await response.json();
+      
+      // Update Flow2 state (ISOLATED)
+      setGraphReviewTrace(data.graphReviewTrace || null);
+      setGraphTopics(data.topicSections || []);
+      setConflicts(data.conflicts || []);
+      setCoverageGaps(data.coverageGaps || []);
+      setCurrentIssues(data.issues || []);
+      
+      // Clear human gate
+      setHumanGateState(null);
+      setHumanGateData(null);
+      
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'Human Gate',
+        content: `✓ Decision recorded: ${selectedOption.replace(/_/g, ' ').toUpperCase()} (by ${signer})\n\nReview completed.`
+      }]);
+      
+      // Create orchestration result
+      const mockResult = {
+        ok: true,
+        parent_trace_id: data.graphReviewTrace?.summary?.runId || `graph-${Date.now()}`,
+        mode: 'langgraph_kyc',
+        artifacts: {
+          review_issues: {
+            issues: data.issues || [],
+            total_count: (data.issues || []).length
+          }
+        },
+        decision: {
+          next_action: (data.issues || []).some((i: any) => i.severity === 'FAIL') ? 'rejected' : 'ready_to_send',
+          reason: `Graph KYC review completed after human decision: ${(data.issues || []).length} issue(s) found.`
+        },
+        execution: {
+          steps: []
+        }
+      };
+      
+      setOrchestrationResult(mockResult);
+      
+    } catch (error: any) {
+      console.error('[Flow2] Human gate submit error:', error);
+      setIsDegraded(true);
+      setDegradedReason(error.message || 'Unknown error');
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: `❌ Failed to submit decision: ${error.message}`
+      }]);
+    } finally {
+      setIsOrchestrating(false);
+    }
+  };
+  
+  /**
+   * MILESTONE C: Handle human gate cancellation (resets Flow2)
+   */
+  const handleHumanGateCancel = () => {
+    if (!isFlow2) return; // GUARD
+    
+    // Clear ALL Flow2-only state (same as clear workspace)
+    handleFlow2ClearWorkspace();
+  };
+  
+  /**
+   * MILESTONE C: Retry Flow2 review after degraded error
+   */
+  const handleFlow2Retry = () => {
+    if (!isFlow2) return; // GUARD
+    setIsDegraded(false);
+    setDegradedReason('');
+    handleGraphKycReview();
   };
 
   // OLD: const canSubmit = sections.every(s => s.status === 'pass');
@@ -2172,6 +2819,13 @@ export default function DocumentPage() {
     }
   };
 
+  // MILESTONE C: Clear human gate state when switching away from Flow2
+  useEffect(() => {
+    if (!isFlow2 && humanGateState) {
+      setHumanGateState(null);
+    }
+  }, [isFlow2, humanGateState]);
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -2232,6 +2886,149 @@ export default function DocumentPage() {
             <div className="grid grid-cols-1 lg:grid-cols-[60%_40%] gap-6 pb-[450px]">
               {/* Left Column: Sections */}
               <div className="space-y-4">
+              
+              {/* MILESTONE C: Flow2 Workspace (Upload + Paste + Docs List) */}
+              {isFlow2 && (
+                <div className="mb-6 space-y-4">
+                  <Flow2UploadPanel 
+                    onDocumentsLoaded={handleFlow2Upload}
+                    disabled={flow2Documents.length >= MAX_FLOW2_DOCUMENTS || isOrchestrating}
+                  />
+                  
+                  <Flow2PastePanel
+                    onDocumentAdded={handleFlow2PasteAdd}
+                    disabled={flow2Documents.length >= MAX_FLOW2_DOCUMENTS || isOrchestrating}
+                  />
+                  
+                  {flow2Documents.length > 0 && (
+                    <Flow2DocumentsList
+                      documents={flow2Documents}
+                      onRemove={handleFlow2RemoveDocument}
+                      onClearAll={handleFlow2ClearWorkspace}
+                    />
+                  )}
+                </div>
+              )}
+              
+              {/* MILESTONE C: Flow2 Human Gate Panel */}
+              {isFlow2 && humanGateState && (
+                <HumanGatePanel
+                  gateId={humanGateState.gateId}
+                  prompt={humanGateState.prompt}
+                  options={humanGateState.options}
+                  context={humanGateState.context}
+                  onSubmit={handleHumanGateSubmit}
+                  onCancel={handleHumanGateCancel}
+                  isSubmitting={isOrchestrating}
+                />
+              )}
+              
+              {/* MILESTONE C: Flow2 Degraded Mode Banner */}
+              {isFlow2 && isDegraded && (
+                <div className="mb-4 bg-red-50 border-2 border-red-400 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">❌</span>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-red-800 mb-1">
+                        Review Failed
+                      </h3>
+                      <p className="text-sm text-red-700 mb-2">
+                        Graph execution encountered an error.
+                      </p>
+                      {degradedReason && (
+                        <p className="text-xs text-red-600 mb-3 font-mono bg-red-100 p-2 rounded">
+                          {degradedReason}
+                        </p>
+                      )}
+                      <button
+                        onClick={handleFlow2Retry}
+                        disabled={isOrchestrating}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-sm disabled:opacity-50"
+                      >
+                        🔄 Retry Review
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Flow2: Demo Scenario Loader (ISOLATED - only visible in Flow2) */}
+              {isFlow2 && (
+                <div className="mb-6 bg-purple-50 border-2 border-purple-300 rounded-lg p-5">
+                  <h3 className="font-bold text-purple-800 mb-3 flex items-center gap-2">
+                    <span className="text-xl">🎯</span>
+                    Demo Scenarios (Flow2 Testing)
+                  </h3>
+                  <div className="flex gap-3 items-end mb-3">
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-purple-700 mb-1">
+                        Select Test Scenario
+                      </label>
+                      <select 
+                        value={flow2ActiveScenario}
+                        onChange={(e) => setFlow2ActiveScenario(e.target.value)}
+                        className="w-full px-3 py-2 border-2 border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        aria-label="Select demo scenario for testing"
+                      >
+                        <option value="">Choose a test scenario...</option>
+                        {DEMO_SCENARIOS.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} (→ {s.expected.path})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button 
+                      onClick={handleLoadDemoScenario}
+                      disabled={!flow2ActiveScenario}
+                      className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+                        flow2ActiveScenario
+                          ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-md'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Load Sample KYC Pack
+                    </button>
+                  </div>
+                  {flow2ActiveScenario && getDemoScenario(flow2ActiveScenario) && (
+                    <div className="p-3 bg-purple-100 rounded border border-purple-300">
+                      <p className="text-sm text-purple-800">
+                        <span className="font-semibold">Description:</span>{' '}
+                        {getDemoScenario(flow2ActiveScenario)?.description}
+                      </p>
+                      <p className="text-xs text-purple-700 mt-1">
+                        {getDemoScenario(flow2ActiveScenario)?.documents.length} documents will be loaded
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Flow2: Loaded Documents Display (ISOLATED - only visible when flow2Documents exist) */}
+              {isFlow2 && flow2Documents.length > 0 && (
+                <div className="mb-6 bg-white border-2 border-purple-300 rounded-lg p-5">
+                  <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <span className="text-lg">📄</span>
+                    Loaded Documents ({flow2Documents.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {flow2Documents.map((doc, idx) => (
+                      <div key={idx} className="bg-slate-50 border border-slate-300 rounded-lg p-3">
+                        <div className="font-semibold text-sm text-slate-800 mb-1">
+                          {doc.filename}
+                        </div>
+                        <div className="text-xs text-slate-600">
+                          {doc.doc_type_hint} • {doc.text.length} chars
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 p-2 bg-green-50 border border-green-300 rounded text-xs text-green-800">
+                    ✓ Ready for review. Click "🕸️ Run Graph KYC Review" on the right to execute.
+                  </div>
+                </div>
+              )}
+              
               {sections.map((section, index) => (
                 <div
                   key={section.id}
@@ -2454,7 +3251,7 @@ export default function DocumentPage() {
                     {/* Actions Row - Enhanced for better prominence */}
                     <div className="flex flex-col gap-2">
                       <button
-                        onClick={handleFullComplianceReview}
+                        onClick={isFlow2 ? handleGraphKycReview : handleFullComplianceReview}
                         disabled={
                           isOrchestrating || 
                           isSubmitted || 
@@ -2465,6 +3262,8 @@ export default function DocumentPage() {
                           isSubmitted || 
                           (reviewConfig.validationStatus === 'required' || reviewConfig.validationStatus === 'failed')
                             ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                            : isFlow2
+                            ? 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
                             : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg'
                         }`}
                         title={
@@ -2475,7 +3274,7 @@ export default function DocumentPage() {
                             : ''
                         }
                       >
-                        {isOrchestrating ? '🔄 Running Review...' : '🔍 Run Full Review'}
+                        {isOrchestrating ? '🔄 Running Review...' : isFlow2 ? '🕸️ Run Graph KYC Review' : '🔍 Run Full Review'}
                       </button>
                       
                       {documentStatus.status === 'REQUIRES_SIGN_OFF' && !signOff && (
@@ -3216,7 +4015,12 @@ export default function DocumentPage() {
         participants={agentParticipants}
         reviewConfig={reviewConfig}
         onConfigChange={setReviewConfig}
-        onRunReview={handleFullComplianceReview}
+        onRunReview={isFlow2 ? handleGraphKycReview : handleFullComplianceReview}
+        batchReviewTrace={batchReviewTrace}
+        currentSections={sections}
+        graphReviewTrace={graphReviewTrace}
+        conflicts={conflicts.length > 0 ? conflicts : null}
+        coverageGaps={coverageGaps.length > 0 ? coverageGaps : null}
       />
     </div>
   );

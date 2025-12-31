@@ -37,6 +37,11 @@ const AGENT_DISPLAY_NAME_MAP: Record<string, string> = {
   // Client-facing
   clientInfo: 'Evidence & Information Requests',
   
+  // Document Structuring
+  doc_structuring_v1: 'Document Structuring Agent',
+  doc_structuring_llm_v1: 'Document Structuring Agent (Agentic)',
+  structure_quality_evaluator: 'Structure Quality Evaluator',
+  
   // Legacy/aliases
   'Compliance Agent': 'Policy & Compliance Scan',
   'Evaluation Agent': 'Risk Summary & Recommendation',

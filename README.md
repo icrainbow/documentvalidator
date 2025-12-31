@@ -236,6 +236,133 @@ npx ts-node scripts/test-contract-flow.ts
 
 ---
 
+## Flow2: LangGraph KYC Review with Reflection
+
+Flow2 implements a graph-based KYC document review system with an optional self-reflection feature that dynamically adjusts review scope based on intermediate results.
+
+### Core Features
+
+- **Topic-based Review**: Organizes KYC documents by topics (client_identity, source_of_wealth, risk_profile, etc.)
+- **Risk Triage**: Routes to fast/crosscheck/escalate/human_gate paths based on risk score
+- **Parallel Execution**: Runs conflict detection, gap analysis, and policy checks concurrently
+- **Self-Reflection**: Optional node that analyzes review progress and can trigger reruns or scope changes
+
+### Reflection Feature
+
+The reflection node runs after parallel checks and can propose:
+
+- `skip` - Continue with current results (default)
+- `rerun_batch_review` - Re-execute parallel checks once (max 1 replan)
+- `section_review` - Focus on specific topic (implementation pending, falls back to human gate)
+- `ask_human_for_scope` - Request human decision
+- `tighten_policy` - Apply stricter checks (implementation pending)
+
+### Usage
+
+**Basic Flow2 Review** (no reflection):
+```bash
+curl -X POST http://localhost:3000/api/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "langgraph_kyc",
+    "documents": [{"name": "client_profile.txt", "content": "Client: John Doe..."}]
+  }'
+```
+
+**Enable Reflection**:
+```bash
+curl -X POST http://localhost:3000/api/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "langgraph_kyc",
+    "documents": [{"name": "client_profile.txt", "content": "..."}],
+    "features": {"reflection": true}
+  }'
+```
+
+### Provider Configuration (Server-Side)
+
+**Mock Provider** (default, deterministic):
+```bash
+export REFLECTION_PROVIDER=mock
+npm run dev
+```
+
+**Claude Provider** (requires API key):
+```bash
+export REFLECTION_PROVIDER=claude
+export ANTHROPIC_API_KEY=sk-ant-...
+npm run dev
+```
+
+### Testing
+
+**Unit Tests** (no server):
+```bash
+npm run test:api tests/api/reflectionProvider.test.ts
+npm run test:api tests/api/reflect.test.ts
+npm run test:api tests/api/executor.test.ts
+```
+
+**API Tests** (server via globalSetup):
+```bash
+npm run test:api tests/api/orchestrate.reflection.test.ts
+```
+
+**E2E Tests** (with reflection):
+```bash
+npx playwright test -c playwright.reflection.config.ts
+```
+
+**Test Mode** (deterministic routing for tests):
+```bash
+# Force specific routing decisions
+export REFLECTION_TEST_MODE=rerun    # Forces rerun_batch_review
+export REFLECTION_TEST_MODE=human    # Forces ask_human_for_scope
+export REFLECTION_TEST_MODE=section  # Forces section_review
+
+npm run test:api
+```
+
+⚠️ **REFLECTION_TEST_MODE is for testing only.** Do not use in production.
+
+### Trace Visualization
+
+Reflection decisions appear in the **Graph Trace** tab of the Agent drawer:
+
+- **reflect_and_replan** node: Shows reasoning, confidence score, and next_action decision
+- **routing_decision** node: Shows routing choice if flow was rerouted
+- **Rerun evidence**: When rerun occurs, parallel check nodes appear twice (first pass + rerun)
+
+### Response Structure
+
+```typescript
+{
+  issues: Issue[],
+  topicSections: TopicSection[],
+  conflicts: Conflict[],
+  coverageGaps: Coverage[],
+  graphReviewTrace: {
+    events: GraphTraceEvent[],  // Includes reflect_and_replan events
+    summary: {
+      path: 'fast' | 'crosscheck' | 'escalate' | 'human_gate',
+      riskScore: number,
+      coverageMissingCount: number,
+      conflictCount: number
+    }
+  },
+  humanGate?: {  // If human decision required
+    required: boolean,
+    prompt: string,
+    options: string[],
+    context?: string
+  },
+  resumeToken?: string  // For resuming after human gate
+}
+```
+
+---
+
 ## Application Flows
 
 ### Flow 1: Chat-Only Input (User-Provided Content)

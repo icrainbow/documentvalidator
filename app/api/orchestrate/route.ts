@@ -1,20 +1,407 @@
 /**
  * Orchestrate API Endpoint
  * POST /api/orchestrate - Execute multi-agent compliance review workflow
+ * 
+ * Stage 3.5: Enhanced with batch_review mode
+ * Flow2: Added langgraph_kyc mode
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { orchestrate } from '../../lib/orchestrator/orchestrate';
 import { OrchestrateRequest } from '../../lib/orchestrator/types';
+import { planReviewScope, validateScopePlan } from '../../lib/scopePlanner';
+import { runGlobalChecks, getGlobalChecksSummary } from '../../lib/globalChecks';
+import { callClaudeForReview } from '../../lib/llmReviewExecutor';
+import {
+  validateSectionIds,
+  sectionsToScopePlannerFormat,
+  normalizeScopePlanForApi,
+  type ScopePlanApi,
+} from '../../lib/sectionIdNormalizer';
+import type {
+  DirtyQueue,
+  ScopePlan,
+  GlobalCheckResult,
+} from '../../lib/types/scopePlanning';
+import type { Section, Issue, Remediation } from '../../lib/types/review';
+import type { ReviewConfig } from '../../lib/reviewConfig';
 
-export async function POST(request: NextRequest) {
+// Flow2 imports
+import { runGraphKycReview } from '../../lib/graphKyc/orchestrator';
+import type { GraphState } from '../../lib/graphKyc/types';
+
+/**
+ * Request for batch review mode
+ */
+interface BatchReviewRequest {
+  mode: 'batch_review';
+  documentId: string;
+  dirtyQueue: DirtyQueue;
+  sections: Section[];
+  config?: ReviewConfig;
+}
+
+/**
+ * Response for batch review mode
+ */
+interface BatchReviewResponse {
+  issues: Issue[];
+  remediations?: Remediation[];
+  reviewedAt: string;
+  runId: string;
+  scopePlan?: ScopePlanApi;
+  globalCheckResults?: GlobalCheckResult[];
+  timing?: {
+    scopePlanningMs: number;
+    reviewMs: number;
+    globalChecksMs: number;
+    totalMs: number;
+    llmAttempted: boolean;
+    llmSucceeded: boolean;
+  };
+  fallbacks?: string[];
+  degraded?: boolean;
+}
+
+/**
+ * Create minimal fallback scope plan (section-only, dirty sections only, compliance only)
+ * NEVER escalates scope.
+ */
+function createFallbackScopePlan(sanitizedQueue: DirtyQueue, sections: Section[]): ScopePlan {
+  const dirtySectionIds = sanitizedQueue.entries.map(e => e.sectionId).sort((a, b) => a - b);
+  
+  return {
+    reviewMode: 'section-only',
+    reasoning: 'Fallback: reviewing only dirty sections with minimal agents (scope planning unavailable)',
+    sectionsToReview: dirtySectionIds,
+    relatedSectionsToCheck: [],
+    agentsToInvoke: ['compliance'], // Minimal: compliance only
+    globalChecks: [], // No global checks in fallback (fail-safe)
+    estimatedDuration: `${dirtySectionIds.length * 5}-${dirtySectionIds.length * 10} seconds`,
+    confidence: 0.5, // Low confidence for fallback
+  };
+}
+
+/**
+ * Handle batch_review mode with scope planning and fallbacks
+ */
+async function handleBatchReview(
+  request: NextRequest,
+  body: BatchReviewRequest
+): Promise<NextResponse> {
+  const startTime = Date.now();
+  const fallbacks: string[] = [];
+  let degraded = false;
+  
   try {
-    const body: OrchestrateRequest = await request.json();
-    
-    // Validate required fields
-    if (!body.flow_id) {
+    // ============================================================
+    // STEP 1: VALIDATE INPUT
+    // ============================================================
+    if (!body.documentId) {
       return NextResponse.json(
-        { error: 'flow_id is required' },
+        { error: 'documentId is required' },
+        { status: 400 }
+      );
+    }
+    
+    if (!body.sections || !Array.isArray(body.sections) || body.sections.length === 0) {
+      return NextResponse.json(
+        { error: 'sections array is required and must not be empty' },
+        { status: 400 }
+      );
+    }
+    
+    if (!body.dirtyQueue) {
+      return NextResponse.json(
+        { error: 'dirtyQueue is required for batch_review mode' },
+        { status: 400 }
+      );
+    }
+    
+    console.log(`[orchestrate/batch] Starting batch review for document ${body.documentId}`);
+    console.log(`[orchestrate/batch] Dirty sections:`, body.dirtyQueue.entries.map(e => e.sectionId));
+    
+    // ============================================================
+    // STEP 2: VALIDATE AND SANITIZE SECTION IDS
+    // ============================================================
+    const idValidation = validateSectionIds(body.dirtyQueue, body.sections);
+    if (!idValidation.valid) {
+      console.warn('[orchestrate/batch] Invalid section IDs detected:', idValidation.errors);
+      fallbacks.push(`Sanitized dirtyQueue: ${idValidation.errors.join('; ')}`);
+      degraded = true;
+    }
+    
+    // Use sanitized queue (invalid entries removed)
+    const sanitizedQueue = idValidation.sanitizedQueue;
+    
+    if (sanitizedQueue.entries.length === 0) {
+      console.warn('[orchestrate/batch] No valid dirty sections after sanitization');
+      return NextResponse.json({
+        issues: [],
+        remediations: [],
+        reviewedAt: new Date().toISOString(),
+        runId: `batch-empty-${Date.now()}`,
+        scopePlan: {
+          reviewMode: 'section-only',
+          reasoning: 'No valid dirty sections to review',
+          sectionsToReview: [],
+          relatedSectionsToCheck: [],
+          agentsToInvoke: [],
+          globalChecks: [],
+          estimatedDuration: '0s',
+          confidence: 1.0,
+        } as ScopePlanApi,
+        globalCheckResults: [],
+        timing: {
+          scopePlanningMs: 0,
+          reviewMs: 0,
+          globalChecksMs: 0,
+          totalMs: Date.now() - startTime,
+          llmAttempted: false,
+          llmSucceeded: false,
+        },
+        fallbacks: [`All dirty sections invalid: ${idValidation.errors.join('; ')}`],
+        degraded: true,
+      } as BatchReviewResponse);
+    }
+    
+    // ============================================================
+    // STEP 3: PLAN REVIEW SCOPE
+    // ============================================================
+    const scopeStart = Date.now();
+    let scopePlan: ScopePlan;
+    
+    try {
+      const scopePlanningResult = planReviewScope({
+        dirtyQueue: sanitizedQueue,
+        allSections: sectionsToScopePlannerFormat(body.sections),
+      });
+      scopePlan = scopePlanningResult.scopePlan;
+      
+      // Validate scope plan
+      const validation = validateScopePlan(scopePlan, body.sections.length);
+      if (!validation.valid) {
+        console.error('[orchestrate/batch] Invalid scope plan:', validation.errors);
+        fallbacks.push(`Invalid scope plan: ${validation.errors.join('; ')}. Using fallback.`);
+        degraded = true;
+        
+        // FALLBACK: minimal conservative scope (section-only, dirty sections only)
+        scopePlan = createFallbackScopePlan(sanitizedQueue, body.sections);
+      }
+    } catch (error) {
+      console.error('[orchestrate/batch] Scope planning failed:', error);
+      fallbacks.push(`Scope planning failed: ${error instanceof Error ? error.message : 'Unknown error'}. Using fallback.`);
+      degraded = true;
+      
+      // FALLBACK: minimal conservative scope
+      scopePlan = createFallbackScopePlan(sanitizedQueue, body.sections);
+    }
+    
+    const scopePlanningMs = Date.now() - scopeStart;
+    
+    console.log('[orchestrate/batch] Scope plan:', scopePlan.reviewMode);
+    console.log('[orchestrate/batch] Sections to review:', scopePlan.sectionsToReview);
+    console.log('[orchestrate/batch] Global checks:', scopePlan.globalChecks);
+    
+    // ============================================================
+    // STEP 4: EXECUTE LLM REVIEW
+    // ============================================================
+    const reviewStart = Date.now();
+    let agentResult: { issues: Issue[]; remediations?: Remediation[] };
+    let llmAttempted = false;
+    let llmSucceeded = false;
+    
+    try {
+      // Determine executor mode based on scope plan
+      let executorMode: 'section' | 'document';
+      if (scopePlan.reviewMode === 'section-only') {
+        executorMode = 'section';
+      } else {
+        // cross-section or full-document → use document mode
+        executorMode = 'document';
+      }
+      
+      // Build sections array for review
+      let sectionsToReview: Section[];
+      if (scopePlan.reviewMode === 'full-document') {
+        sectionsToReview = body.sections;
+      } else {
+        // section-only or cross-section
+        const allTargetIds = [
+          ...scopePlan.sectionsToReview,
+          ...scopePlan.relatedSectionsToCheck,
+        ];
+        const targetStringIds = allTargetIds.map(id => `section-${id}`);
+        sectionsToReview = body.sections.filter(s => targetStringIds.includes(s.id));
+      }
+      
+      console.log('[orchestrate/batch] Calling LLM executor:', executorMode, 'mode');
+      llmAttempted = true;
+      
+      agentResult = await callClaudeForReview(
+        sectionsToReview,
+        executorMode,
+        undefined, // no single sectionId for batch
+        body.config
+      );
+      
+      llmSucceeded = true;
+      console.log('[orchestrate/batch] LLM review succeeded:', agentResult.issues.length, 'issues');
+    } catch (error) {
+      console.error('[orchestrate/batch] LLM review failed:', error);
+      fallbacks.push(`LLM review failed: ${error instanceof Error ? error.message : 'Unknown error'}. Returning empty issues.`);
+      degraded = true;
+      
+      // FALLBACK: empty issues (fail-safe, still run global checks)
+      agentResult = { issues: [], remediations: [] };
+    }
+    
+    const reviewMs = Date.now() - reviewStart;
+    
+    // ============================================================
+    // STEP 5: RUN GLOBAL CHECKS
+    // ============================================================
+    let globalCheckResults: GlobalCheckResult[] = [];
+    let checksStart = Date.now();
+    let globalChecksMs = 0;
+    
+    if (scopePlan.globalChecks && scopePlan.globalChecks.length > 0) {
+      console.log('[orchestrate/batch] Running', scopePlan.globalChecks.length, 'global check(s)');
+      
+      const { results, failedChecks } = runGlobalChecks(
+        scopePlan.globalChecks,
+        sectionsToScopePlannerFormat(body.sections)
+      );
+      
+      globalCheckResults = results;
+      globalChecksMs = Date.now() - checksStart;
+      
+      if (failedChecks.length > 0) {
+        fallbacks.push(`Some global checks failed: ${failedChecks.join(', ')}`);
+        degraded = true;
+      }
+      
+      const checksSummary = getGlobalChecksSummary(globalCheckResults);
+      console.log('[orchestrate/batch] Global checks:', checksSummary.overallStatus);
+    }
+    
+    // ============================================================
+    // STEP 6: ASSEMBLE RESPONSE
+    // ============================================================
+    const totalMs = Date.now() - startTime;
+    
+    const response: BatchReviewResponse = {
+      issues: agentResult.issues,
+      remediations: agentResult.remediations,
+      reviewedAt: new Date().toISOString(),
+      runId: `batch-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      scopePlan: normalizeScopePlanForApi(scopePlan),
+      globalCheckResults,
+      timing: {
+        scopePlanningMs,
+        reviewMs,
+        globalChecksMs,
+        totalMs,
+        llmAttempted,
+        llmSucceeded,
+      },
+      fallbacks: fallbacks.length > 0 ? fallbacks : undefined,
+      degraded: degraded || undefined,
+    };
+    
+    console.log(`[orchestrate/batch] Batch review completed: ${response.issues.length} issues, ${totalMs}ms total`);
+    if (degraded) {
+      console.warn('[orchestrate/batch] Response includes fallback behavior:', fallbacks);
+    }
+    
+    return NextResponse.json(response);
+  } catch (error: any) {
+    console.error('[orchestrate/batch] Fatal error:', error);
+    return NextResponse.json(
+      {
+        error: 'Batch review failed',
+        details: error.message || 'Unknown error',
+        issues: [],
+        remediations: [],
+        reviewedAt: new Date().toISOString(),
+        runId: `error-${Date.now()}`,
+        fallbacks: ['Fatal error during batch review'],
+        degraded: true,
+      } as BatchReviewResponse,
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Flow2: Handle LangGraph KYC mode
+ */
+async function handleLangGraphKyc(
+  request: NextRequest,
+  body: LangGraphKycRequest
+): Promise<NextResponse> {
+  console.log('[Flow2/API] Handling LangGraph KYC request');
+  
+  try {
+    // Validate
+    if (!body.documents || body.documents.length === 0) {
+      return NextResponse.json(
+        { error: 'documents array is required for langgraph_kyc mode' },
+        { status: 400 }
+      );
+    }
+    
+    // Build graph state
+    const graphState: GraphState = {
+      documents: body.documents,
+      dirtyTopics: body.dirtyTopics as any,
+      humanDecision: body.humanDecision
+    };
+    
+    // Phase 0 + 1: Parse features (default OFF)
+    const features = {
+      reflection: body.features?.reflection || false,
+      negotiation: body.features?.negotiation || false,
+      memory: body.features?.memory || false,
+    };
+    
+    console.log('[Flow2/API] Features:', features);
+    
+    // Execute graph (pass runId, resumeToken, and features)
+    const result = await runGraphKycReview(
+      graphState,
+      body.runId,
+      body.resumeToken,
+      features
+    );
+    
+    return NextResponse.json(result, { status: 200 });
+  } catch (error: any) {
+    console.error('[Flow2/API] LangGraph KYC error:', error);
+    
+    // MILESTONE C: Return proper non-2xx on failure (NOT 200 with degraded flag)
+    return NextResponse.json(
+      {
+        error: 'Graph execution failed',
+        message: error.message || 'Unknown error',
+        degraded: true // Optional flag for debugging
+      },
+      { status: 500 } // Proper error status
+    );
+  }
+}
+
+/**
+ * Flow1: Handle legacy orchestration mode
+ */
+async function handleLegacyOrchestration(
+  request: NextRequest,
+  body: any
+): Promise<NextResponse> {
+  // Validate required fields for Flow1
+  if (!body.flow_id) {
+    return NextResponse.json(
+      { error: 'flow_id is required' },
         { status: 400 }
       );
     }
@@ -51,11 +438,56 @@ export async function POST(request: NextRequest) {
     }
     
     // Execute orchestration
-    const response = await orchestrate(body);
+  const response = await orchestrate(body as OrchestrateRequest);
     
     return NextResponse.json(response, {
       status: response.ok ? 200 : 500,
     });
+}
+
+/**
+ * STRICT MODE DISPATCH
+ * 
+ * Uses switch statement to ensure no handler ordering dependencies.
+ * Each case returns immediately (no fallthrough).
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body: any = await request.json();
+    
+    // Determine mode (with backward compatibility for legacy)
+    let mode = body.mode;
+    if (!mode) {
+      // Legacy: infer mode from presence of flow_id/document_id
+      if (body.flow_id && body.document_id) {
+        mode = 'legacy';
+      } else {
+        return NextResponse.json(
+          { error: 'mode field is required. Valid modes: langgraph_kyc, batch_review, or provide flow_id for legacy mode' },
+          { status: 400 }
+        );
+      }
+    }
+    
+    // STRICT SWITCH: Each case returns immediately
+    switch (mode) {
+      case 'langgraph_kyc':
+        return await handleLangGraphKyc(request, body as LangGraphKycRequest);
+      
+      case 'batch_review':
+        // Flow1 batch review - UNCHANGED
+        return await handleBatchReview(request, body as BatchReviewRequest);
+      
+      case 'legacy':
+        // Flow1 legacy orchestration - UNCHANGED
+        return await handleLegacyOrchestration(request, body);
+      
+      default:
+        return NextResponse.json(
+          { error: `Unknown mode: ${mode}. Valid modes: langgraph_kyc, batch_review, legacy` },
+          { status: 400 }
+        );
+    }
   } catch (error: any) {
     console.error('Error in /api/orchestrate POST:', error);
     return NextResponse.json(
@@ -226,4 +658,21 @@ export async function GET() {
  *   }
  * }
  */
+
+/**
+ * Flow2: LangGraph KYC Request
+ */
+interface LangGraphKycRequest {
+  mode: 'langgraph_kyc';
+  documents: { name: string; content: string }[];
+  dirtyTopics?: string[];
+  humanDecision?: any;
+  runId?: string; // For resume
+  resumeToken?: string; // For resume
+  features?: { // Phase 0: Feature flags (default OFF)
+    reflection?: boolean;
+    negotiation?: boolean;
+    memory?: boolean;
+  };
+}
 

@@ -13,6 +13,12 @@ import { recommendAgentBundle } from '../lib/reviewProfileMapping';
 import { validateAgentFeasibility } from '../lib/agentFeasibilityValidator';
 import { getClientProfile, DEFAULT_CLIENT_PROFILE, type ClientProfile } from '../lib/demo/clientProfiles';
 import { getAgentDisplayName } from '../lib/agentDisplayNames';
+import { loadStructuringTrace } from '../lib/documentStructuringAgent';
+import type { EnhancedStructuringTrace } from '../lib/types/structuring';
+import ScopePlanningTrace, { type BatchReviewTrace } from './ScopePlanningTrace';
+import GraphTrace from './GraphTrace'; // Flow2
+import ConflictPanel from './ConflictPanel'; // Flow2 Milestone B
+import GapPanel from './GapPanel'; // Flow2 Milestone B
 
 interface ReviewConfigDrawerProps {
   open: boolean;
@@ -21,6 +27,11 @@ interface ReviewConfigDrawerProps {
   reviewConfig: ReviewConfig;
   onConfigChange: (config: ReviewConfig) => void;
   onRunReview: () => void;
+  batchReviewTrace?: BatchReviewTrace | null; // Stage 4: Scope planning trace
+  currentSections?: any[]; // Stage 4: For section title lookup (any to avoid type conflicts)
+  graphReviewTrace?: any | null; // Flow2: Graph trace
+  conflicts?: any[] | null; // Flow2: Conflicts (Milestone A - props only, UI in Milestone B)
+  coverageGaps?: any[] | null; // Flow2: Coverage gaps (Milestone A - props only, UI in Milestone B)
 }
 
 type SelectionMode = 'none' | 'evaluation' | 'rewrite';  // Note: compliance NOT included (always locked)
@@ -31,10 +42,21 @@ export default function ReviewConfigDrawer({
   participants,
   reviewConfig,
   onConfigChange,
-  onRunReview
+  onRunReview,
+  batchReviewTrace,
+  currentSections = [],
+  graphReviewTrace,
+  conflicts = null, // Flow2: Safe default
+  coverageGaps = null // Flow2: Safe default
 }: ReviewConfigDrawerProps) {
+  // Flow2: Safe guards for new props
+  const safeConflicts = conflicts ?? [];
+  const safeCoverageGaps = coverageGaps ?? [];
   // TAB STATE: Default to 'config' as requested
-  const [activeTab, setActiveTab] = useState<'overview' | 'runs' | 'config' | 'timeline'>('config');
+  // Stage 4: Add 'planning' tab for scope planning trace
+  // Flow2: Add 'graph' tab for graph trace
+  // Milestone B: Add 'conflicts' and 'gaps' tabs
+  const [activeTab, setActiveTab] = useState<'overview' | 'planning' | 'graph' | 'conflicts' | 'gaps' | 'runs' | 'config' | 'timeline'>('config');
   
   // Drawer owns visibilityMode state (Stage 8.1)
   const [visibilityMode, setVisibilityMode] = useState<VisibilityMode>('reviewer');
@@ -49,6 +71,9 @@ export default function ReviewConfigDrawer({
   
   // Agent Runs state (for Details expansion)
   const [expandedAgentIndex, setExpandedAgentIndex] = useState<number | null>(null);
+  
+  // Document Structuring Agent trace
+  const [structuringTrace, setStructuringTrace] = useState<EnhancedStructuringTrace | null>(null);
 
   const visibility = getVisibilityConfig(visibilityMode);
   
@@ -65,6 +90,20 @@ export default function ReviewConfigDrawer({
       });
     }
   }, []);
+  
+  // Load Document Structuring Agent trace when drawer opens
+  useEffect(() => {
+    if (open && typeof window !== 'undefined') {
+      const docId = sessionStorage.getItem('current_doc_id');
+      if (docId) {
+        const trace = loadStructuringTrace(docId);
+        if (trace) {
+          setStructuringTrace(trace);
+          console.log('[ReviewConfigDrawer] Loaded structuring trace:', trace);
+        }
+      }
+    }
+  }, [open]);
 
   // Self-healing: on drawer open or config load (Stage 8.10)
   useEffect(() => {
@@ -453,6 +492,58 @@ export default function ReviewConfigDrawer({
               >
                 📊 Overview
               </button>
+              {/* Stage 4: Scope Planning tab - only show if batch review trace exists (Flow1) */}
+              {batchReviewTrace && batchReviewTrace.scopePlan && (
+                <button
+                  onClick={() => setActiveTab('planning')}
+                  className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                    activeTab === 'planning'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  🎯 Scope Planning
+                </button>
+              )}
+              {/* Flow2: Graph Trace tab - only show if graph review trace exists */}
+              {graphReviewTrace && (
+                <button
+                  onClick={() => setActiveTab('graph')}
+                  className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                    activeTab === 'graph'
+                      ? 'border-purple-600 text-purple-600'
+                      : 'border-transparent text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  🕸️ Graph Trace
+                </button>
+              )}
+              {/* Flow2 Milestone B: Conflicts tab - only show when conflicts exist */}
+              {safeConflicts.length > 0 && (
+                <button
+                  onClick={() => setActiveTab('conflicts')}
+                  className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                    activeTab === 'conflicts'
+                      ? 'border-red-600 text-red-600'
+                      : 'border-transparent text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  ⚔️ Conflicts ({safeConflicts.length})
+                </button>
+              )}
+              {/* Flow2 Milestone B: Gaps tab - only show when coverage gaps exist */}
+              {safeCoverageGaps.length > 0 && (
+                <button
+                  onClick={() => setActiveTab('gaps')}
+                  className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                    activeTab === 'gaps'
+                      ? 'border-orange-600 text-orange-600'
+                      : 'border-transparent text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  🧾 Gaps/EDD ({safeCoverageGaps.length})
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('runs')}
                 className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
@@ -493,6 +584,164 @@ export default function ReviewConfigDrawer({
             {/* TAB CONTENT: Overview */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
+                {/* Document Structuring Agent Trace (LLM-Enhanced) */}
+                {structuringTrace && (
+                  <div className="bg-gradient-to-r from-green-50 to-teal-50 border-2 border-green-300 rounded-lg p-5">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                          <span>🤖</span>
+                          <span>{structuringTrace.agentName}</span>
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Completed in {structuringTrace.totalDurationMs}ms · {structuringTrace.attempts.length} attempt{structuringTrace.attempts.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <div className="px-3 py-1 bg-green-600 text-white rounded-full text-sm font-bold">
+                        {structuringTrace.finalDecision.totalSections} Sections
+                      </div>
+                    </div>
+
+                    {/* Strategy Attempts with LLM Evaluation */}
+                    <div className="mb-4 space-y-3">
+                      {structuringTrace.attempts.map((attempt: any, idx: number) => {
+                        const isAccepted = attempt.agentDecision === 'accept';
+                        const isFallback = attempt.agentDecision === 'fallback';
+                        
+                        return (
+                          <div key={idx} className="bg-white rounded-lg border-2 border-slate-200 overflow-hidden">
+                            {/* Attempt Header */}
+                            <div className={`p-3 ${isAccepted ? 'bg-green-100' : isFallback ? 'bg-yellow-100' : 'bg-slate-50'}`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg">
+                                    {isAccepted ? '✅' : isFallback ? '⚠️' : '🔄'}
+                                  </span>
+                                  <span className="font-semibold text-sm text-slate-800">
+                                    Attempt {attempt.attemptNumber}: {attempt.strategy}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-slate-600">
+                                  {attempt.parseResult.sectionsDetected} section{attempt.parseResult.sectionsDetected !== 1 ? 's' : ''}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="p-3 space-y-2">
+                              {/* Parse Result */}
+                              <div className="text-xs">
+                                <div className="font-semibold text-slate-700">📊 Parse Result:</div>
+                                <div className="text-slate-600 ml-4 mt-1">
+                                  {attempt.parseResult.sectionsDetected} sections detected ({attempt.parseDurationMs}ms)
+                                  {attempt.parseResult.sampleTitles.length > 0 && (
+                                    <div className="mt-1 text-[11px] text-slate-500">
+                                      Sample: {attempt.parseResult.sampleTitles.map((t: string) => `"${t}"`).join(', ')}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* LLM Evaluation */}
+                              {attempt.evaluation && (
+                                <div className="text-xs border-t pt-2">
+                                  <div className="font-semibold text-slate-700 flex items-center gap-1">
+                                    🤖 {attempt.fallbackTriggered ? 'Deterministic Evaluation' : 'LLM Evaluation'}:
+                                    <span className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      attempt.evaluation.llmDecision === 'ACCEPT'
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-red-500 text-white'
+                                    }`}>
+                                      {attempt.evaluation.llmDecision}
+                                    </span>
+                                    <span className="ml-1 text-slate-500 font-normal">
+                                      (confidence: {Math.round(attempt.evaluation.llmConfidence * 100)}%)
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="text-slate-600 ml-4 mt-1">
+                                    <div className="italic">💭 "{attempt.evaluation.llmReasoning}"</div>
+                                    
+                                    {/* Quality Signals */}
+                                    {!attempt.fallbackTriggered && (
+                                      <div className="mt-2 p-2 bg-slate-50 rounded text-[11px]">
+                                        <div className="font-semibold text-slate-700 mb-1">📈 Quality Signals:</div>
+                                        <div className="space-y-0.5">
+                                          <div>• Title Quality: <span className="font-medium">{attempt.evaluation.qualitySignals.titleQuality}</span></div>
+                                          <div>• Content Distribution: <span className="font-medium">{attempt.evaluation.qualitySignals.contentDistribution}</span></div>
+                                          <div>• Section Count: <span className="font-medium">{attempt.evaluation.qualitySignals.sectionCount}</span></div>
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Recommended Next Strategy */}
+                                    {attempt.evaluation.recommendedNextStrategy && (
+                                      <div className="mt-2 text-blue-700">
+                                        ➡️ Recommended: Try "{attempt.evaluation.recommendedNextStrategy}"
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Agent Decision */}
+                              <div className="text-xs border-t pt-2">
+                                <div className="font-semibold text-slate-700">⚙️ Agent Decision: 
+                                  <span className={`ml-2 uppercase ${
+                                    isAccepted ? 'text-green-700' : isFallback ? 'text-yellow-700' : 'text-blue-700'
+                                  }`}>
+                                    {attempt.agentDecision}
+                                  </span>
+                                </div>
+                                <div className="text-slate-600 ml-4 mt-1">
+                                  {attempt.agentReasoning}
+                                </div>
+                              </div>
+
+                              {/* Fallback Info */}
+                              {attempt.fallbackTriggered && attempt.fallbackReason && (
+                                <div className="text-xs bg-yellow-50 border border-yellow-200 rounded p-2">
+                                  <span className="font-semibold text-yellow-800">⚠️ Fallback:</span>
+                                  <span className="text-yellow-700 ml-1">{attempt.fallbackReason}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Final Decision */}
+                    <div className="p-4 bg-white rounded-lg border-2 border-green-400">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xl">🎯</span>
+                        <div className="flex-1">
+                          <div className="font-semibold text-sm text-slate-800 mb-2">
+                            Final Decision
+                          </div>
+                          <div className="text-xs space-y-1">
+                            <div className="text-slate-700">
+                              <span className="font-medium">Strategy:</span> {structuringTrace.finalDecision.strategy}
+                            </div>
+                            <div className="text-slate-700">
+                              <span className="font-medium">Sections:</span> {structuringTrace.finalDecision.totalSections}
+                            </div>
+                            <div className="text-slate-600 mt-2">
+                              <span className="font-medium">Acceptance Criteria:</span>
+                              <div className="ml-4 mt-1">{structuringTrace.finalDecision.acceptanceCriteria}</div>
+                            </div>
+                            {structuringTrace.finalDecision.llmInfluence && (
+                              <div className="text-blue-700 mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                                <span className="font-medium">🤖 LLM Influence:</span>
+                                <div className="ml-4 mt-1">{structuringTrace.finalDecision.llmInfluence}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Dashboard Summary (from participants data) */}
                 <div className="bg-gradient-to-r from-blue-50 to-slate-50 border-2 border-blue-200 rounded-lg p-5">
               <div className="flex items-start justify-between mb-4">
@@ -562,6 +811,33 @@ export default function ReviewConfigDrawer({
                 )}
               </div>
             </div>
+            )}
+            
+            {/* Stage 4: Scope Planning Tab Content (Flow1) */}
+            {activeTab === 'planning' && batchReviewTrace && (
+              <ScopePlanningTrace
+                trace={batchReviewTrace}
+                allSections={currentSections}
+              />
+            )}
+            
+            {/* Flow2: Graph Trace Tab Content */}
+            {activeTab === 'graph' && graphReviewTrace && (
+              <GraphTrace trace={graphReviewTrace} />
+            )}
+            
+            {/* Flow2 Milestone B: Conflicts Tab Content */}
+            {activeTab === 'conflicts' && (
+              <div className="p-6">
+                <ConflictPanel conflicts={safeConflicts} />
+              </div>
+            )}
+            
+            {/* Flow2 Milestone B: Gaps Tab Content */}
+            {activeTab === 'gaps' && (
+              <div className="p-6">
+                <GapPanel gaps={safeCoverageGaps} />
+              </div>
             )}
             
             {/* TAB CONTENT: Agent Runs */}

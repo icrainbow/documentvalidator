@@ -20,6 +20,40 @@ export class MockReflectionProvider implements ReflectionProvider {
   name = 'mock';
   
   async run(payload: Record<string, any>, prompt: string): Promise<string> {
+    // TEST MODE: Allow env var to force specific routing decision
+    const testMode = process.env.REFLECTION_TEST_MODE; // 'rerun' | 'human' | 'section' | undefined
+    
+    if (testMode) {
+      console.log(`[MockReflectionProvider] TEST MODE: ${testMode}`);
+      
+      if (testMode === 'rerun') {
+        return JSON.stringify({
+          should_replan: true,
+          reason: '[TEST] Forcing rerun',
+          new_plan: ['rerun_batch_review'],
+          confidence: 0.9,
+        });
+      }
+      
+      if (testMode === 'human') {
+        return JSON.stringify({
+          should_replan: false,
+          reason: '[TEST] Forcing human gate',
+          new_plan: ['ask_human_for_scope'],
+          confidence: 0.8,
+        });
+      }
+      
+      if (testMode === 'section') {
+        return JSON.stringify({
+          should_replan: false,
+          reason: '[TEST] Forcing section review',
+          new_plan: ['switch_to_section_review'],
+          confidence: 0.7,
+        });
+      }
+    }
+    
     // PRESERVE EXACT LOGIC from reflect.ts lines 85-110
     
     // If replan limit reached, force human gate

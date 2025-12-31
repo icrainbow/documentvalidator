@@ -5,6 +5,9 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/.playwright/
 
 # next.js
 /.next/
@@ -32,3 +35,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+# Summary/artifact docs (temporary)
+*_IMPLEMENTATION_SUMMARY.md
+*_SUMMARY.md
+TESTING.md
+
+# Playwright artifacts
+/test-results/
+/playwright-report/
+/.playwright/
