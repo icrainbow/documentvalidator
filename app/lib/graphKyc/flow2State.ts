@@ -27,6 +27,7 @@ export interface FeatureFlags {
   reflection: boolean;
   negotiation: boolean;
   memory: boolean;
+  remote_skills?: boolean; // Phase 2: Opt-in remote transport
 }
 
 export interface ReflectionState {

@@ -2989,9 +2989,10 @@ export default function DocumentPage() {
                         ))}
                       </select>
                     </div>
-                    <button 
+                    <button
                       onClick={handleLoadDemoScenario}
                       disabled={!flow2ActiveScenario}
+                      data-testid="flow2-load-sample-button"
                       className={`px-6 py-2 rounded-lg font-semibold transition-all ${
                         flow2ActiveScenario
                           ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-md'
@@ -3268,6 +3269,7 @@ export default function DocumentPage() {
                           isSubmitted || 
                           (reviewConfig.validationStatus === 'required' || reviewConfig.validationStatus === 'failed')
                         }
+                        data-testid={isFlow2 ? "flow2-run-graph-review" : "flow1-run-review"}
                         className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
                           isOrchestrating || 
                           isSubmitted || 
@@ -3784,6 +3786,7 @@ export default function DocumentPage() {
                     {/* Agents Button with Badge */}
                     <button
                       onClick={() => setShowAgentsDrawer(true)}
+                      data-testid="agent-panel-button"
                       className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold text-sm shadow-sm flex items-center justify-center gap-2"
                     >
                       <span>🤖 Agents</span>

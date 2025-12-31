@@ -19,6 +19,8 @@ import ScopePlanningTrace, { type BatchReviewTrace } from './ScopePlanningTrace'
 import GraphTrace from './GraphTrace'; // Flow2
 import ConflictPanel from './ConflictPanel'; // Flow2 Milestone B
 import GapPanel from './GapPanel'; // Flow2 Milestone B
+import SkillsPanel from './SkillsPanel'; // Phase A
+import type { SkillDef } from '../lib/skills/types'; // Phase A
 
 interface ReviewConfigDrawerProps {
   open: boolean;
@@ -56,7 +58,11 @@ export default function ReviewConfigDrawer({
   // Stage 4: Add 'planning' tab for scope planning trace
   // Flow2: Add 'graph' tab for graph trace
   // Milestone B: Add 'conflicts' and 'gaps' tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'planning' | 'graph' | 'conflicts' | 'gaps' | 'runs' | 'config' | 'timeline'>('config');
+  // Phase A: Add 'skills' tab for skill catalog + invocations
+  const [activeTab, setActiveTab] = useState<'overview' | 'planning' | 'graph' | 'conflicts' | 'gaps' | 'skills' | 'runs' | 'config' | 'timeline'>('config');
+  
+  // Phase A: Skill catalog state
+  const [skillCatalog, setSkillCatalog] = useState<SkillDef[]>([]);
   
   // Drawer owns visibilityMode state (Stage 8.1)
   const [visibilityMode, setVisibilityMode] = useState<VisibilityMode>('reviewer');
@@ -76,6 +82,22 @@ export default function ReviewConfigDrawer({
   const [structuringTrace, setStructuringTrace] = useState<EnhancedStructuringTrace | null>(null);
 
   const visibility = getVisibilityConfig(visibilityMode);
+  
+  // Phase A: Fetch skill catalog on mount
+  useEffect(() => {
+    async function fetchSkillCatalog() {
+      try {
+        const response = await fetch('/api/skills');
+        if (response.ok) {
+          const data = await response.json();
+          setSkillCatalog(data.skills || []);
+        }
+      } catch (error) {
+        console.error('[Skills] Failed to fetch catalog:', error);
+      }
+    }
+    fetchSkillCatalog();
+  }, []);
   
   // FIX 1: Initialize with default client profile on mount
   useEffect(() => {
@@ -544,6 +566,20 @@ export default function ReviewConfigDrawer({
                   🧾 Gaps/EDD ({safeCoverageGaps.length})
                 </button>
               )}
+              {/* Phase A: Skills tab - always show if graph trace exists */}
+              {graphReviewTrace && (
+                <button
+                  onClick={() => setActiveTab('skills')}
+                  data-testid="skills-tab-button"
+                  className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                    activeTab === 'skills'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  ⚡ Skills
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('runs')}
                 className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
@@ -837,6 +873,16 @@ export default function ReviewConfigDrawer({
             {activeTab === 'gaps' && (
               <div className="p-6">
                 <GapPanel gaps={safeCoverageGaps} />
+              </div>
+            )}
+            
+            {/* Phase A: Skills Tab Content */}
+            {activeTab === 'skills' && (
+              <div className="p-6">
+                <SkillsPanel 
+                  catalog={skillCatalog} 
+                  invocations={graphReviewTrace?.skillInvocations || []} 
+                />
               </div>
             )}
             

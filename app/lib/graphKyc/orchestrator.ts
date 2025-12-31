@@ -5,13 +5,15 @@
  * Coordinates: topic assembly → triage → execution → reflection (Phase 1) → human gate + resume.
  */
 
-import type { GraphState, GraphReviewResponse, GraphTraceEvent } from './types';
+import type { GraphState, GraphReviewResponse, GraphTraceEvent, TopicSection } from './types';
 import { assembleTopics } from './topicAssembler';
 import { triageRisk } from './riskTriage';
 import { executeParallelChecks } from './executor';
 import { graphResumeStore } from './resumeStore';
 import { createDefaultFlow2State, addTrace, type Flow2State } from './flow2State';
 import { reflectAndReplan } from './reflect';
+import { invokeSkill } from '../skills/skillDispatcher';
+import type { SkillInvocation } from '../skills/types';
 
 /**
  * Run LangGraph KYC review
@@ -27,9 +29,10 @@ export async function runGraphKycReview(
   state: GraphState,
   runId?: string,
   resumeToken?: string,
-  features?: { reflection?: boolean; negotiation?: boolean; memory?: boolean }
+  features?: { reflection?: boolean; negotiation?: boolean; memory?: boolean; remote_skills?: boolean }
 ): Promise<GraphReviewResponse> {
   const events: GraphTraceEvent[] = [];
+  const skillInvocations: SkillInvocation[] = []; // Phase A: Initialize skill invocations array
   const startTime = Date.now();
   
   // Phase 0: Initialize Flow2 state with feature flags
@@ -37,10 +40,19 @@ export async function runGraphKycReview(
   flow2State.features.reflection = features?.reflection || false;
   flow2State.features.negotiation = features?.negotiation || false;
   flow2State.features.memory = features?.memory || false;
+  flow2State.features.remote_skills = features?.remote_skills || false; // Phase 2
   flow2State.humanDecision = state.humanDecision;
   flow2State.dirtyTopics = state.dirtyTopics as any;
   
   console.log('[Flow2] Features:', flow2State.features);
+  
+  // Create skill invocation context (single source for trace)
+  const skillContext = {
+    trace: { skillInvocations },
+    runId: runId || 'flow2-run',
+    transport: 'local' as const,
+    features: flow2State.features // Phase 2: Pass features for transport selection
+  };
   
   try {
     // ============================================================
@@ -113,10 +125,11 @@ export async function runGraphKycReview(
           summary: {
             path: storedState.triageResult.routePath as any,
             riskScore: storedState.triageResult.riskScore,
-            riskBreakdown: storedState.triageResult.riskBreakdown,
+            riskBreakdown: storedState.triageResult.riskBreakdown as any,
             coverageMissingCount: execution.coverageGaps.filter(g => g.status === 'missing').length,
             conflictCount: execution.conflicts.length
-          }
+          },
+          skillInvocations // Phase A: Include skill invocations in trace
         }
       };
     }
@@ -127,7 +140,13 @@ export async function runGraphKycReview(
     
     // Step 1: Assemble topics
     console.log('[Flow2] Step 1: Assembling topics from', state.documents.length, 'documents');
-    const topicSections = assembleTopics(state.documents);
+    
+    // Phase A: Wrap with skill dispatcher
+    const topicSections = await invokeSkill<TopicSection[]>(
+      'kyc.topic_assemble',
+      { __result: assembleTopics(state.documents) }, // Pass actual result for transparent wrapper
+      skillContext
+    );
     
     events.push({
       node: 'topic_assembler',
@@ -141,7 +160,13 @@ export async function runGraphKycReview(
     
     // Step 2: Triage risk
     console.log('[Flow2] Step 2: Triaging risk');
-    const triage = triageRisk(topicSections);
+    
+    // Phase A: Wrap with skill dispatcher
+    const triage = await invokeSkill(
+      'risk.triage',
+      { __result: triageRisk(topicSections) }, // Pass actual result for transparent wrapper
+      skillContext
+    );
     
     events.push({
       node: 'risk_triage',
@@ -281,7 +306,8 @@ export async function runGraphKycReview(
             riskBreakdown: triage.riskBreakdown,
             coverageMissingCount: 0,
             conflictCount: 0
-          }
+          },
+          skillInvocations // Phase A: Include skill invocations in trace
         },
         humanGate: {
           required: true,
@@ -324,7 +350,8 @@ export async function runGraphKycReview(
           riskBreakdown: triage.riskBreakdown, // NEW: Breakdown
           coverageMissingCount: execution.coverageGaps.filter(g => g.status === 'missing').length,
           conflictCount: execution.conflicts.length
-        }
+        },
+        skillInvocations // Phase A: Include skill invocations in trace
       }
     };
   } catch (error) {
@@ -346,7 +373,8 @@ export async function runGraphKycReview(
           coverageMissingCount: 0,
           conflictCount: 0
         },
-        degraded: true
+        degraded: true,
+        skillInvocations // Phase A: Include skill invocations even in error case
       }
     };
   }

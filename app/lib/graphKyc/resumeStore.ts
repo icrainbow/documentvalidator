@@ -6,7 +6,7 @@
  * Max entries: 100
  */
 
-import type { TopicSection, GraphTraceEvent } from '../types/graphKyc';
+import type { TopicSection, GraphTraceEvent } from './types';
 
 export interface StoredRunState {
   runId: string;
@@ -79,7 +79,7 @@ class ResumeStore {
     const now = Date.now();
 
     // Remove expired
-    for (const [runId, state] of this.store.entries()) {
+    for (const [runId, state] of Array.from(this.store.entries())) {
       if (now > state.expiresAt) {
         this.store.delete(runId);
       }

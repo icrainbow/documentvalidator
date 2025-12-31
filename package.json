@@ -17,7 +17,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "test:all": "bash scripts/test-all.sh",
-    "test:report": "playwright show-report test-results/html"
+    "test:report": "playwright show-report test-results/html",
+    "skills:remote:start": "cd skills-remote-server && npx tsx index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

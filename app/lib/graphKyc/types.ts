@@ -119,6 +119,7 @@ export interface GraphReviewResponse {
       conflictCount: number;
     };
     degraded?: boolean;
+    skillInvocations?: any[]; // Phase A: Skill invocation records
   };
   humanGate?: {
     required: boolean;

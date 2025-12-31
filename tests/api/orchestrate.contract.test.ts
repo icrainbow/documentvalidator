@@ -49,6 +49,7 @@ const LangGraphKycResponseSchema = z.object({
       path: z.string(),
       riskScore: z.number(),
     }),
+    skillInvocations: z.array(z.any()).optional(), // Phase A: Add skill invocations
   }),
 });
 

@@ -172,7 +172,7 @@ export const AGENT_REGISTRY: Record<string, AgentMetadata> = {
  * Handles various string formats from issue.agent or issue.agentId
  */
 export function normalizeAgentId(agentLabel: string | undefined): string | null {
-  if (!agentLabel) return null;
+  if (!agentLabel || typeof agentLabel !== 'string') return null;
   
   const normalized = agentLabel.toLowerCase().trim();
   
