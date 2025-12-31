@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ReviewConfigDrawer from '../components/ReviewConfigDrawer';
 import Flow2UploadPanel from '../components/flow2/Flow2UploadPanel';
@@ -182,7 +182,8 @@ const FAKE_SECTIONS = [
 // Force dynamic rendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
-export default function DocumentPage() {
+// Internal component that uses useSearchParams
+function DocumentPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -4037,6 +4038,15 @@ export default function DocumentPage() {
         coverageGaps={coverageGaps.length > 0 ? coverageGaps : null}
       />
     </div>
+  );
+}
+
+// Wrapper component with Suspense boundary for useSearchParams
+export default function DocumentPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <DocumentPageContent />
+    </Suspense>
   );
 }
 

@@ -20,6 +20,7 @@ import GraphTrace from './GraphTrace'; // Flow2
 import ConflictPanel from './ConflictPanel'; // Flow2 Milestone B
 import GapPanel from './GapPanel'; // Flow2 Milestone B
 import SkillsPanel from './SkillsPanel'; // Phase A
+import GraphDefinitionPanel from './GraphDefinitionPanel'; // Phase 3
 import type { SkillDef } from '../lib/skills/types'; // Phase A
 
 interface ReviewConfigDrawerProps {
@@ -59,7 +60,8 @@ export default function ReviewConfigDrawer({
   // Flow2: Add 'graph' tab for graph trace
   // Milestone B: Add 'conflicts' and 'gaps' tabs
   // Phase A: Add 'skills' tab for skill catalog + invocations
-  const [activeTab, setActiveTab] = useState<'overview' | 'planning' | 'graph' | 'conflicts' | 'gaps' | 'skills' | 'runs' | 'config' | 'timeline'>('config');
+  // Phase 3: Add 'graphDef' tab for graph definition
+  const [activeTab, setActiveTab] = useState<'overview' | 'planning' | 'graph' | 'conflicts' | 'gaps' | 'skills' | 'graphDef' | 'runs' | 'config' | 'timeline'>('config');
   
   // Phase A: Skill catalog state
   const [skillCatalog, setSkillCatalog] = useState<SkillDef[]>([]);
@@ -580,6 +582,20 @@ export default function ReviewConfigDrawer({
                   ⚡ Skills
                 </button>
               )}
+              {/* Phase 3: Graph Definition tab - show if graph metadata present */}
+              {graphReviewTrace?.graph && (
+                <button
+                  onClick={() => setActiveTab('graphDef')}
+                  data-testid="graph-definition-tab-button"
+                  className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
+                    activeTab === 'graphDef'
+                      ? 'border-teal-600 text-teal-600'
+                      : 'border-transparent text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  📐 Graph
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('runs')}
                 className={`px-4 py-2 font-semibold text-sm transition-all border-b-2 -mb-[2px] ${
@@ -882,6 +898,17 @@ export default function ReviewConfigDrawer({
                 <SkillsPanel 
                   catalog={skillCatalog} 
                   invocations={graphReviewTrace?.skillInvocations || []} 
+                />
+              </div>
+            )}
+            
+            {/* Phase 3: Graph Definition Tab Content */}
+            {activeTab === 'graphDef' && graphReviewTrace?.graph && (
+              <div className="p-6">
+                <GraphDefinitionPanel
+                  graph={graphReviewTrace.graph}
+                  graphDefinition={graphReviewTrace.graphDefinition}
+                  graphDiff={graphReviewTrace.graphDiff}
                 />
               </div>
             )}

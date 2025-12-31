@@ -5,6 +5,9 @@
  * No dependencies on scopePlanning.ts or review.ts.
  */
 
+// Phase 3: Import graph definition types
+import type { GraphDefinition, GraphDiff } from '../graphs/types';
+
 // Topic-based document structure (not section-based like Flow1)
 export type TopicId = 
   | 'client_identity'
@@ -120,6 +123,14 @@ export interface GraphReviewResponse {
     };
     degraded?: boolean;
     skillInvocations?: any[]; // Phase A: Skill invocation records
+    // Phase 3: Graph definition metadata
+    graph: {
+      graphId: string;
+      version: string;
+      checksum: string;
+    };
+    graphDefinition?: GraphDefinition; // Phase 3: Optional full definition
+    graphDiff?: GraphDiff; // Phase 3: Optional diff for demo
   };
   humanGate?: {
     required: boolean;

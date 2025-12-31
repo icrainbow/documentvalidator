@@ -14,6 +14,48 @@ import { createDefaultFlow2State, addTrace, type Flow2State } from './flow2State
 import { reflectAndReplan } from './reflect';
 import { invokeSkill } from '../skills/skillDispatcher';
 import type { SkillInvocation } from '../skills/types';
+// Phase 3: Import graph artifacts and utilities
+import { flow2GraphV1 } from '../graphs/flow2GraphV1';
+import { flow2GraphV1_0_1 } from '../graphs/flow2GraphV1_0_1';
+import { computeGraphDiff } from '../graphs/graphUtils';
+
+/**
+ * Phase 3: Attach graph metadata to response
+ * 
+ * Always includes: graph metadata (graphId, version, checksum)
+ * Conditionally includes: graphDefinition, graphDiff
+ * 
+ * Gating logic: Include definition when NODE_ENV !== 'production' OR INCLUDE_GRAPH_DEFINITION='true'
+ */
+function attachGraphMetadata(baseTrace: any): any {
+  // Always include graph metadata (minimal overhead)
+  const graphMetadata: any = {
+    graph: {
+      graphId: flow2GraphV1.graphId,
+      version: flow2GraphV1.version,
+      checksum: flow2GraphV1.checksum // Use precomputed checksum (Constraint #2)
+    }
+  };
+  
+  // Include full definition when not in production
+  const shouldIncludeDefinition = 
+    process.env.NODE_ENV !== 'production' || 
+    process.env.INCLUDE_GRAPH_DEFINITION === 'true';
+  
+  if (shouldIncludeDefinition) {
+    graphMetadata.graphDefinition = flow2GraphV1;
+    
+    // Demo: Include diff if comparing versions
+    if (process.env.DEMO_GRAPH_DIFF === 'true') {
+      graphMetadata.graphDiff = computeGraphDiff(flow2GraphV1, flow2GraphV1_0_1);
+    }
+  }
+  
+  return {
+    ...baseTrace,
+    ...graphMetadata
+  };
+}
 
 /**
  * Run LangGraph KYC review
@@ -120,7 +162,7 @@ export async function runGraphKycReview(
         topicSections: storedState.topicSections,
         conflicts: execution.conflicts,
         coverageGaps: execution.coverageGaps,
-        graphReviewTrace: {
+        graphReviewTrace: attachGraphMetadata({
           events,
           summary: {
             path: storedState.triageResult.routePath as any,
@@ -130,7 +172,7 @@ export async function runGraphKycReview(
             conflictCount: execution.conflicts.length
           },
           skillInvocations // Phase A: Include skill invocations in trace
-        }
+        })
       };
     }
     
@@ -298,7 +340,7 @@ export async function runGraphKycReview(
         topicSections,
         conflicts: [], // Empty until human decision
         coverageGaps: [], // Empty until human decision
-        graphReviewTrace: {
+        graphReviewTrace: attachGraphMetadata({
           events,
           summary: {
             path: triage.routePath,
@@ -308,7 +350,7 @@ export async function runGraphKycReview(
             conflictCount: 0
           },
           skillInvocations // Phase A: Include skill invocations in trace
-        },
+        }),
         humanGate: {
           required: true,
           prompt: `KYC review flagged high risk (score: ${triage.riskScore}). Please review and decide:`,
@@ -342,7 +384,7 @@ export async function runGraphKycReview(
       topicSections,
       conflicts: finalExecution.conflicts, // Use final (possibly rerun) conflicts
       coverageGaps: finalExecution.coverageGaps, // Use final (possibly rerun) gaps
-      graphReviewTrace: {
+      graphReviewTrace: attachGraphMetadata({
         events,
         summary: {
           path: triage.routePath,
@@ -352,7 +394,7 @@ export async function runGraphKycReview(
           conflictCount: execution.conflicts.length
         },
         skillInvocations // Phase A: Include skill invocations in trace
-      }
+      })
     };
   } catch (error) {
     console.error('[Flow2] Error during graph execution:', error);
@@ -365,7 +407,7 @@ export async function runGraphKycReview(
     
     return {
       issues: [],
-      graphReviewTrace: {
+      graphReviewTrace: attachGraphMetadata({
         events,
         summary: {
           path: 'fast',
@@ -375,7 +417,7 @@ export async function runGraphKycReview(
         },
         degraded: true,
         skillInvocations // Phase A: Include skill invocations even in error case
-      }
+      })
     };
   }
 }

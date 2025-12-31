@@ -45,3 +45,6 @@ TESTING.md
 /test-results/
 /playwright-report/
 /.playwright/
+
+# Phase 4: Local draft storage
+.local/
