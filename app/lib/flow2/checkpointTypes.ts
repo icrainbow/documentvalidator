@@ -40,6 +40,10 @@ export interface Flow2Checkpoint {
   decision_comment?: string; // Rejection reason or approval note
   decided_at?: string; // ISO timestamp of decision
   decided_by?: string; // Email or identifier of decision maker
+  
+  // Phase 6: Decision audit trail
+  finalized_via?: 'email_link' | 'web_form'; // How decision was submitted
+  token_hint?: string; // Last 8 chars of token (audit trail)
 }
 
 export interface CheckpointMetadata {

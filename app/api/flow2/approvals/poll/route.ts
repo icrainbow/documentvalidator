@@ -6,8 +6,8 @@
  */
 
 import { NextResponse } from 'next/server';
-import { loadCheckpoint, updateCheckpointStatus } from '@/lib/flow2/checkpointStore';
-import { sendReminderEmail } from '@/lib/email/smtpAdapter';
+import { loadCheckpoint, updateCheckpointStatus } from '@/app/lib/flow2/checkpointStore';
+import { sendReminderEmail } from '@/app/lib/email/smtpAdapter';
 
 export const runtime = 'nodejs'; // Required for fs, SMTP
 
@@ -112,16 +112,6 @@ export async function GET(request: Request) {
   // WAITING STATUS (WITH COUNTDOWN)
   // ========================================
   
-  // Update last_polled_at
-  try {
-    await updateCheckpointStatus(run_id, 'paused', {
-      last_polled_at: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('[Poll] Failed to update last_polled_at:', error);
-    // Non-critical
-  }
-  
   // Calculate countdown
   const approvalSentAt = checkpoint.approval_sent_at 
     ? new Date(checkpoint.approval_sent_at)
@@ -143,7 +133,6 @@ export async function GET(request: Request) {
     ok: true,
     run_id,
     status: 'waiting',
-    last_polled_at: new Date().toISOString(),
     approval_sent_at: checkpoint.approval_sent_at,
     elapsed_seconds,
     reminder_sent: checkpoint.reminder_email_sent || false,

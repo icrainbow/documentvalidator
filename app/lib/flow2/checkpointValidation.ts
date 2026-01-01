@@ -112,6 +112,20 @@ export function validateCheckpoint(data: unknown): ValidationResult {
     }
   }
   
+  // Phase 6: Validate finalized_via enum
+  if (checkpoint.finalized_via !== undefined) {
+    if (checkpoint.finalized_via !== 'email_link' && checkpoint.finalized_via !== 'web_form') {
+      errors.push('finalized_via must be either "email_link" or "web_form"');
+    }
+  }
+  
+  // Phase 6: Validate token_hint length
+  if (checkpoint.token_hint !== undefined) {
+    if (typeof checkpoint.token_hint !== 'string' || checkpoint.token_hint.length !== 8) {
+      errors.push('token_hint must be exactly 8 characters');
+    }
+  }
+  
   if (errors.length > 0) {
     return { ok: false, errors };
   }

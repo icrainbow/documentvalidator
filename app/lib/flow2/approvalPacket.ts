@@ -107,7 +107,7 @@ export interface ApprovalPacket {
   created_at: string; // ISO 8601
   paused_at: string; // ISO 8601
   current_node_id: string;
-  status: 'paused' | 'completed' | 'terminated' | 'failed';
+  status: 'paused' | 'resumed' | 'completed' | 'failed'; // All CheckpointStatus values
   
   progress: ApprovalPacketMilestone[];
   warnings: ApprovalPacketWarning[];
@@ -149,13 +149,15 @@ export function buildApprovalPacket(
   const run_short_id = checkpoint.run_id.slice(0, 8);
   const token = checkpoint.approval_token || 'MISSING_TOKEN';
   
+  // Extract trace events once for reuse
+  const traceEvents = (checkpoint.graph_state?.trace || []) as GraphTraceEvent[];
+  
   // Build progress
   const progress: ApprovalPacketMilestone[] = FIXED_MILESTONES.map((milestone) => {
     let status: 'done' | 'pending' | 'warning' = 'pending';
     let evidence: string | undefined;
     
     // Determine status from trace events (fallback chain)
-    const traceEvents = (checkpoint.graph_state?.trace || []) as GraphTraceEvent[];
     const milestoneEvent = traceEvents.find((e: GraphTraceEvent) => e.node === milestone.step_id);
     
     if (milestoneEvent) {
