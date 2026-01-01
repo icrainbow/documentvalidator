@@ -162,5 +162,11 @@ export interface GraphReviewResponse {
     context?: string; // NEW: Optional context for gate
   };
   resumeToken?: string; // NEW: Token for resuming after human gate
+  // Phase 2 HITL: Checkpoint pause/resume fields
+  status?: 'waiting_human' | 'completed'; // Status of execution
+  run_id?: string; // Run ID for checkpoint
+  paused_at_node?: string; // Node where execution paused
+  reason?: string; // Reason for pause
+  checkpoint_metadata?: any; // Metadata about the checkpoint
 }
 

@@ -392,13 +392,16 @@ export async function runGraphKycReview(
           durationMs: 0
         });
         
-        // Return waiting_human response
-        return attachGraphMetadata({
+        // Return waiting_human response (with proper graphReviewTrace structure)
+        return {
           status: 'waiting_human' as const,
           run_id: currentRunId,
           paused_at_node: 'human_review',
           reason: humanReviewResult.reason,
-          trace: events,
+          issues: [], // Empty until human decision is processed
+          topicSections: flow2State.topicSections || [],
+          conflicts: execution.conflicts,
+          coverageGaps: execution.coverageGaps,
           checkpoint_metadata: {
             run_id: currentRunId,
             status: 'paused' as const,
@@ -413,10 +416,18 @@ export async function runGraphKycReview(
             approval_email_to: pauseCheckpoint.approval_email_to,
             reminder_due_at: pauseCheckpoint.reminder_due_at,
           } as any,
-          conflicts: execution.conflicts,
-          coverageGaps: execution.coverageGaps,
-          skillInvocations
-        });
+          graphReviewTrace: attachGraphMetadata({
+            events,
+            summary: {
+              path: triage.routePath,
+              riskScore: triage.riskScore,
+              riskBreakdown: triage.riskBreakdown,
+              coverageMissingCount: 0, // Not yet calculated
+              conflictCount: execution.conflicts.length
+            },
+            skillInvocations
+          })
+        };
       }
       
       // Continue: human decision approved/rejected

@@ -29,14 +29,18 @@ describe('Flow2 Reflection API', () => {
     expect(data).toHaveProperty('graphReviewTrace');
     expect(data.graphReviewTrace).toHaveProperty('events');
     
-    // Should have reflect_and_replan event indicating disabled
-    const reflectEvents = data.graphReviewTrace.events.filter((e: any) => e.node === 'reflect_and_replan');
-    expect(reflectEvents.length).toBeGreaterThan(0);
+    // Phase 2 HITL: Execution now pauses at human_review gate
+    // Reflection only happens after human approval
+    expect(data.status).toBe('waiting_human');
+    expect(data.paused_at_node).toBe('human_review');
     
-    // Event should indicate disabled (check decision, reason, or message field)
-    const event = reflectEvents[0];
-    const eventText = (event.decision || event.reason || event.message || '').toLowerCase();
-    expect(eventText).toMatch(/disabled|skipping/);
+    // Should have human_review node in trace (paused)
+    const humanReviewEvents = data.graphReviewTrace.events.filter((e: any) => e.node === 'human_review');
+    expect(humanReviewEvents.length).toBeGreaterThan(0);
+    
+    // Reflection node should NOT be present yet (execution paused)
+    const reflectEvents = data.graphReviewTrace.events.filter((e: any) => e.node === 'reflect_and_replan');
+    expect(reflectEvents.length).toBe(0); // Not executed yet
   });
   
   it('reflection=true shows reflect_and_replan node', async () => {
@@ -52,10 +56,16 @@ describe('Flow2 Reflection API', () => {
     
     expect(response.status).toBe(200);
     const data = await response.json();
+    expect(data).toHaveProperty('graphReviewTrace');
     
-    // Should have reflect_and_replan node in trace
+    // Phase 2 HITL: Execution pauses at human_review, reflection is enabled but not executed yet
+    expect(data.status).toBe('waiting_human');
+    expect(data.paused_at_node).toBe('human_review');
+    
+    // Should NOT have reflect_and_replan node yet (execution paused before reflection)
     const nodeNames = data.graphReviewTrace.events.map((e: any) => e.node);
-    expect(nodeNames).toContain('reflect_and_replan');
+    expect(nodeNames).not.toContain('reflect_and_replan');
+    expect(nodeNames).toContain('human_review'); // Should have human review node
   });
   
   it('REFLECTION_TEST_MODE=rerun produces evidence of rerun in trace', async () => {

@@ -78,7 +78,7 @@ describe('Graph Definition Metadata (Flow2)', () => {
     expect(data.graphReviewTrace.graphDefinition).toBeDefined();
     expect(data.graphReviewTrace.graphDefinition.nodes).toBeDefined();
     expect(Array.isArray(data.graphReviewTrace.graphDefinition.nodes)).toBe(true);
-    expect(data.graphReviewTrace.graphDefinition.nodes.length).toBe(8); // 8 top-level nodes
+    expect(data.graphReviewTrace.graphDefinition.nodes.length).toBe(9); // 9 top-level nodes (added human_review in Phase 2 HITL)
     expect(data.graphReviewTrace.graphDefinition.edges).toBeDefined();
     expect(Array.isArray(data.graphReviewTrace.graphDefinition.edges)).toBe(true);
     expect(data.graphReviewTrace.graphDefinition.edges.length).toBeGreaterThanOrEqual(12); // At least 12 edges
