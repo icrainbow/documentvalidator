@@ -10,6 +10,7 @@ import Flow2DocumentsList from '../components/flow2/Flow2DocumentsList';
 import Flow2RightPanel from '../components/flow2/Flow2RightPanel';
 import Flow2DerivedTopics from '../components/flow2/Flow2DerivedTopics';
 import Flow2TopicMoreInputs from '../components/flow2/Flow2TopicMoreInputs';
+import Flow2ModeSwitchModal from '../components/flow2/Flow2ModeSwitchModal';
 import HumanGatePanel from '../components/flow2/HumanGatePanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -561,6 +562,17 @@ function DocumentPageContent() {
   
   // Phase 1.1: Flow2 input mode state
   const [flow2InputMode, setFlow2InputMode] = useState<Flow2InputMode>('empty');
+  
+  // Phase 1.2: Mode switch modal state
+  const [modeSwitchModal, setModeSwitchModal] = useState<{
+    isOpen: boolean;
+    targetMode: 'demo' | 'upload' | null;
+    onConfirmAction: (() => void) | null;
+  }>({
+    isOpen: false,
+    targetMode: null,
+    onConfirmAction: null
+  });
   const [humanGateData, setHumanGateData] = useState<any | null>(null);
   
   // MILESTONE C: New state for workspace + degraded mode
@@ -4209,6 +4221,25 @@ function DocumentPageContent() {
           topicTitle={moreInputsModal.topic.title}
           existingTopic={moreInputsModal.topic}
           onSubmit={handleMoreInputsSubmit}
+        />
+      )}
+      
+      {/* Flow2: Mode Switch Confirmation Modal (Phase 1.2) */}
+      {isFlow2 && modeSwitchModal.isOpen && modeSwitchModal.targetMode && (
+        <Flow2ModeSwitchModal
+          isOpen={modeSwitchModal.isOpen}
+          currentMode={flow2InputMode}
+          targetMode={modeSwitchModal.targetMode}
+          documentCount={flow2Documents.length}
+          onConfirm={() => {
+            if (modeSwitchModal.onConfirmAction) {
+              modeSwitchModal.onConfirmAction();
+            }
+            setModeSwitchModal({ isOpen: false, targetMode: null, onConfirmAction: null });
+          }}
+          onCancel={() => {
+            setModeSwitchModal({ isOpen: false, targetMode: null, onConfirmAction: null });
+          }}
         />
       )}
     </div>
