@@ -8,6 +8,7 @@ import Flow2UploadPanel from '../components/flow2/Flow2UploadPanel';
 import Flow2PastePanel from '../components/flow2/Flow2PastePanel';
 import Flow2DocumentsList from '../components/flow2/Flow2DocumentsList';
 import Flow2RightPanel from '../components/flow2/Flow2RightPanel';
+import Flow2DerivedTopics from '../components/flow2/Flow2DerivedTopics';
 import HumanGatePanel from '../components/flow2/HumanGatePanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -43,6 +44,7 @@ import {
   loadReviewConfig,
   type ReviewConfig 
 } from '../lib/reviewConfig';
+import { buildDerivedTopicsFallback, type DerivedTopic } from '../lib/flow2/derivedTopicsTypes';
 
 type SectionStatus = 'unreviewed' | 'pass' | 'fail' | 'warning';
 
@@ -532,6 +534,8 @@ function DocumentPageContent() {
   const [graphTopics, setGraphTopics] = useState<any[]>([]);
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [coverageGaps, setCoverageGaps] = useState<any[]>([]);
+  const [derivedTopics, setDerivedTopics] = useState<DerivedTopic[]>([]);
+  const [highlightedTopicKey, setHighlightedTopicKey] = useState<string | null>(null);
   const [humanGateData, setHumanGateData] = useState<any | null>(null);
   
   // MILESTONE C: New state for workspace + degraded mode
@@ -1173,6 +1177,10 @@ function DocumentPageContent() {
     
     // ISOLATED WRITE: Only touches Flow2 state
     setFlow2Documents(scenario.documents);
+    
+    // Build derived topics from loaded documents
+    const topics = buildDerivedTopicsFallback(scenario.documents);
+    setDerivedTopics(topics);
     
     // Clear previous Flow2 results
     setGraphReviewTrace(null);
@@ -2919,6 +2927,14 @@ function DocumentPageContent() {
                       documents={flow2Documents}
                       onRemove={handleFlow2RemoveDocument}
                       onClearAll={handleFlow2ClearWorkspace}
+                    />
+                  )}
+                  
+                  {/* Derived Topics (Phase 3) */}
+                  {derivedTopics.length > 0 && (
+                    <Flow2DerivedTopics
+                      topics={derivedTopics}
+                      highlightedTopicKey={highlightedTopicKey}
                     />
                   )}
                 </div>
