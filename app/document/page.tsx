@@ -45,6 +45,7 @@ import {
   type ReviewConfig 
 } from '../lib/reviewConfig';
 import { buildDerivedTopicsFallback, type DerivedTopic } from '../lib/flow2/derivedTopicsTypes';
+import { mapIssueToTopic } from '../lib/flow2/issueTopicMapping';
 
 type SectionStatus = 'unreviewed' | 'pass' | 'fail' | 'warning';
 
@@ -1568,6 +1569,27 @@ function DocumentPageContent() {
     
     // Clear ALL Flow2-only state (same as clear workspace)
     handleFlow2ClearWorkspace();
+  };
+  
+  /**
+   * Phase 4: Handle issue click (scroll to and highlight topic)
+   */
+  const handleIssueClick = (issue: any) => {
+    if (!isFlow2) return;
+    
+    const topicKey = mapIssueToTopic(issue);
+    setHighlightedTopicKey(topicKey);
+    
+    // Scroll to topic card
+    const element = document.querySelector(`[data-testid="topic-card-${topicKey}"]`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    
+    // Clear highlight after 3 seconds
+    setTimeout(() => {
+      setHighlightedTopicKey(null);
+    }, 3000);
   };
   
   /**
@@ -4042,6 +4064,7 @@ function DocumentPageContent() {
           onClose={() => setShowAgentsDrawer(false)}
           graphReviewTrace={graphReviewTrace}
           skillCatalog={[]}
+          onIssueClick={handleIssueClick}
         />
       ) : (
         <ReviewConfigDrawer

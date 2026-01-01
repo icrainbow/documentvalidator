@@ -12,13 +12,15 @@ interface Flow2ReviewConfigDrawerProps {
   onClose: () => void;
   graphReviewTrace: any | null;
   skillCatalog: any[];
+  onIssueClick?: (issue: any) => void;
 }
 
 export default function Flow2ReviewConfigDrawer({
   isOpen,
   onClose,
   graphReviewTrace,
-  skillCatalog
+  skillCatalog,
+  onIssueClick
 }: Flow2ReviewConfigDrawerProps) {
   const [activeTab, setActiveTab] = useState<'graphTrace' | 'graph' | 'runs' | 'config'>('graphTrace');
   const [isSkillsExpanded, setIsSkillsExpanded] = useState(false);
@@ -29,6 +31,7 @@ export default function Flow2ReviewConfigDrawer({
   const gaps = graphReviewTrace?.gaps || [];
   const conflicts = graphReviewTrace?.conflicts || [];
   const skillInvocations = graphReviewTrace?.skillInvocations || [];
+  const issues = graphReviewTrace?.issues || [];
 
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50" onClick={onClose}>
@@ -106,15 +109,15 @@ export default function Flow2ReviewConfigDrawer({
                 <>
                   <GraphTrace trace={graphReviewTrace} />
                   
-                  {/* Collapsible Outputs (Gaps/EDD) */}
-                  {(gaps.length > 0 || conflicts.length > 0) && (
+                  {/* Collapsible Outputs (Gaps/EDD + Issues) */}
+                  {(gaps.length > 0 || conflicts.length > 0 || issues.length > 0) && (
                     <div className="border-2 border-blue-200 rounded-lg overflow-hidden">
                       <button
                         onClick={() => setIsOutputsExpanded(!isOutputsExpanded)}
                         className="w-full px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors flex items-center justify-between"
                       >
                         <span className="font-semibold text-blue-900 text-sm">
-                          🧾 Outputs (Gaps & Conflicts)
+                          🧾 Outputs (Issues & EDD)
                         </span>
                         <span className="text-blue-700 font-bold">
                           {isOutputsExpanded ? '▲' : '▼'}
@@ -122,6 +125,35 @@ export default function Flow2ReviewConfigDrawer({
                       </button>
                       {isOutputsExpanded && (
                         <div className="p-4 bg-white space-y-4">
+                          {issues.length > 0 && (
+                            <div>
+                              <h4 className="font-semibold text-sm text-slate-700 mb-2">Issues ({issues.length})</h4>
+                              <div className="space-y-2">
+                                {issues.map((issue: any, idx: number) => (
+                                  <div
+                                    key={idx}
+                                    data-testid={`issue-row-${idx}`}
+                                    onClick={() => onIssueClick?.(issue)}
+                                    className="border border-slate-200 rounded p-3 hover:bg-slate-50 cursor-pointer transition-colors"
+                                  >
+                                    <div className="flex items-start gap-2">
+                                      <span className={`text-sm font-bold ${
+                                        issue.severity === 'fail' || issue.severity === 'critical' ? 'text-red-600' : 'text-yellow-600'
+                                      }`}>
+                                        {issue.severity === 'fail' || issue.severity === 'critical' ? '✗' : '⚠'}
+                                      </span>
+                                      <div className="flex-1">
+                                        <div className="text-sm font-semibold text-slate-800">{issue.title || issue.description}</div>
+                                        {issue.details && (
+                                          <div className="text-xs text-slate-600 mt-1">{issue.details}</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           {gaps.length > 0 && (
                             <div>
                               <h4 className="font-semibold text-sm text-slate-700 mb-2">Coverage Gaps ({gaps.length})</h4>
