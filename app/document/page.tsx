@@ -48,6 +48,21 @@ import {
 import { buildDerivedTopicsFallback, type DerivedTopic, type TopicKey } from '../lib/flow2/derivedTopicsTypes';
 import { mapIssueToTopic } from '../lib/flow2/issueTopicMapping';
 
+// Flow2: Input mode type (Phase 1.1)
+type Flow2InputMode = 'empty' | 'demo' | 'upload';
+
+// Flow2: Helper to get mode display label (Phase 1.1)
+function getInputModeLabel(mode: Flow2InputMode): string {
+  switch (mode) {
+    case 'demo':
+      return 'Demo Mode';
+    case 'upload':
+      return 'Upload Mode';
+    case 'empty':
+      return '';
+  }
+}
+
 type SectionStatus = 'unreviewed' | 'pass' | 'fail' | 'warning';
 
 interface LogEntry {
@@ -543,6 +558,9 @@ function DocumentPageContent() {
     topicKey: null,
     topic: null
   });
+  
+  // Phase 1.1: Flow2 input mode state
+  const [flow2InputMode, setFlow2InputMode] = useState<Flow2InputMode>('empty');
   const [humanGateData, setHumanGateData] = useState<any | null>(null);
   
   // MILESTONE C: New state for workspace + degraded mode
