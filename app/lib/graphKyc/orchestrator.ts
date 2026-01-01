@@ -18,6 +18,11 @@ import type { SkillInvocation } from '../skills/types';
 import { flow2GraphV1 } from '../graphs/flow2GraphV1';
 import { flow2GraphV1_0_1 } from '../graphs/flow2GraphV1_0_1';
 import { computeGraphDiff } from '../graphs/graphUtils';
+// Phase 2 HITL: Import checkpoint infrastructure
+import { saveCheckpoint, loadCheckpoint } from '../flow2/checkpointStore';
+import { executeHumanReviewNode } from './nodes/humanReviewNode';
+import type { Flow2Checkpoint } from '../flow2/checkpointTypes';
+import { randomUUID } from 'crypto';
 
 /**
  * Phase 3: Attach graph metadata to response
@@ -60,25 +65,74 @@ function attachGraphMetadata(baseTrace: any): any {
 /**
  * Run LangGraph KYC review
  * 
+ * Phase 2 HITL: Support pause/resume with checkpoints
+ * 
+ * Modes:
+ * - 'run': Start fresh execution (generates new run_id)
+ * - 'resume': Continue from checkpoint (requires checkpoint_run_id)
+ * 
  * Flow:
- * 1. Check if resuming (humanDecision + resumeToken present)
- * 2. If resuming: fetch stored state, continue execution
- * 3. If first run: assemble topics → triage → check human gate
- * 4. If gate required: save state and return gate prompt
- * 5. Execute parallel checks → PHASE 1: reflection node → return issues + trace
+ * 1. If mode='resume': load checkpoint, inject human decision, resume from paused node
+ * 2. If mode='run': assemble topics → triage → parallel checks → human review (may pause)
+ * 3. If human_review pauses: save checkpoint, return {status: 'waiting_human'}
+ * 4. Continue: reflection → finalize → return issues + trace
  */
 export async function runGraphKycReview(
   state: GraphState,
   runId?: string,
   resumeToken?: string,
-  features?: { reflection?: boolean; negotiation?: boolean; memory?: boolean; remote_skills?: boolean }
+  features?: { reflection?: boolean; negotiation?: boolean; memory?: boolean; remote_skills?: boolean },
+  mode?: 'run' | 'resume',
+  checkpoint_run_id?: string
 ): Promise<GraphReviewResponse> {
   const events: GraphTraceEvent[] = [];
   const skillInvocations: SkillInvocation[] = []; // Phase A: Initialize skill invocations array
   const startTime = Date.now();
   
+  // Phase 2 HITL: Determine execution mode
+  const executionMode = mode || 'run';
+  let currentRunId = runId || randomUUID();
+  let checkpoint: Flow2Checkpoint | null = null;
+  let resumedFromCheckpoint = false;
+  
+  // Phase 2 HITL: Resume from checkpoint if mode === 'resume'
+  if (executionMode === 'resume' && checkpoint_run_id) {
+    console.log(`[Flow2/HITL] RESUME mode: loading checkpoint ${checkpoint_run_id}`);
+    
+    checkpoint = await loadCheckpoint(checkpoint_run_id);
+    if (!checkpoint) {
+      throw new Error(`Checkpoint not found: ${checkpoint_run_id}`);
+    }
+    
+    if (checkpoint.status !== 'paused') {
+      throw new Error(`Cannot resume checkpoint with status: ${checkpoint.status}`);
+    }
+    
+    // Restore state from checkpoint
+    currentRunId = checkpoint.run_id;
+    resumedFromCheckpoint = true;
+    
+    // Inject human decision into state
+    if (state.humanDecision) {
+      console.log(`[Flow2/HITL] Injecting human decision from checkpoint API`);
+      (checkpoint.graph_state as any).checkpoint_human_decision = state.humanDecision;
+    }
+    
+    // Add resume event to trace
+    events.push({
+      node: 'execution_resumed',
+      status: 'executed',
+      reason: `Resumed from checkpoint at ${checkpoint.paused_at_node_id}`,
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      durationMs: 0
+    });
+  }
+  
   // Phase 0: Initialize Flow2 state with feature flags
-  const flow2State = createDefaultFlow2State(state.documents);
+  const flow2State = resumedFromCheckpoint && checkpoint 
+    ? (checkpoint.graph_state as any as Flow2State)
+    : createDefaultFlow2State(state.documents);
   flow2State.features.reflection = features?.reflection || false;
   flow2State.features.negotiation = features?.negotiation || false;
   flow2State.features.memory = features?.memory || false;
@@ -127,7 +181,7 @@ export async function runGraphKycReview(
         node: 'human_gate',
         status: 'executed',
         decision: `User selected: ${state.humanDecision.decision}`,
-        reason: `Decision by: ${state.humanDecision.signer || 'Unknown'}`,
+        reason: `Decision by human reviewer`,
         startedAt: new Date().toISOString(),
         endedAt: new Date().toISOString(),
         durationMs: 0
@@ -226,6 +280,111 @@ export async function runGraphKycReview(
     const execution = await executeParallelChecks(topicSections, triage.routePath);
     
     events.push(...execution.events);
+    
+    // Phase 2 HITL: Human Review Node (after parallel checks, before reflection)
+    // Skip if resuming from checkpoint (already completed this node)
+    if (!resumedFromCheckpoint || (checkpoint && checkpoint.paused_at_node_id === 'human_review')) {
+      console.log('[Flow2/HITL] Executing human_review node');
+      
+      const humanReviewResult = executeHumanReviewNode({
+        state: { ...state, ...flow2State } as any as GraphState
+      });
+      
+      if (humanReviewResult.pauseExecution) {
+        // PAUSE: Save checkpoint and return waiting_human status
+        console.log(`[Flow2/HITL] PAUSE at human_review: ${humanReviewResult.reason}`);
+        
+        // Create checkpoint
+        const pauseCheckpoint: Flow2Checkpoint = {
+          run_id: currentRunId,
+          graph_id: flow2GraphV1.graphId,
+          flow: 'flow2',
+          current_node_id: 'parallel_checks', // Last completed
+          paused_at_node_id: 'human_review',
+          graph_state: {
+            ...state,
+            ...flow2State,
+            conflicts: execution.conflicts,
+            coverageGaps: execution.coverageGaps,
+            topicSections
+          } as any as GraphState,
+          documents: state.documents.map((d, idx) => ({
+            doc_id: `doc-${idx}`,
+            filename: d.name,
+            text: d.content,
+            doc_type_hint: 'kyc_form' as any
+          })),
+          created_at: new Date().toISOString(),
+          paused_at: new Date().toISOString(),
+          status: 'paused'
+        };
+        
+        await saveCheckpoint(pauseCheckpoint);
+        
+        // Add pause event to trace
+        events.push({
+          node: 'human_review',
+          status: 'waiting',
+          reason: humanReviewResult.reason,
+          startedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString(),
+          durationMs: 0
+        });
+        
+        // Return waiting_human response
+        return attachGraphMetadata({
+          status: 'waiting_human' as const,
+          run_id: currentRunId,
+          paused_at_node: 'human_review',
+          reason: humanReviewResult.reason,
+          trace: events,
+          checkpoint_metadata: {
+            run_id: currentRunId,
+            status: 'paused' as const,
+            paused_at_node_id: 'human_review',
+            paused_reason: humanReviewResult.reason,
+            document_count: state.documents.length,
+            created_at: pauseCheckpoint.created_at,
+            paused_at: pauseCheckpoint.paused_at
+          },
+          conflicts: execution.conflicts,
+          coverageGaps: execution.coverageGaps,
+          skillInvocations
+        });
+      }
+      
+      // Continue: human decision approved/rejected
+      console.log(`[Flow2/HITL] human_review node: ${state.humanDecision?.decision}`);
+      
+      // Add completion event
+      events.push({
+        node: 'human_review',
+        status: 'executed',
+        decision: (state as any).checkpoint_human_decision?.decision,
+        reason: (state as any).checkpoint_human_decision?.comment || 'Human decision received',
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        durationMs: 0
+      });
+      
+      // Check if rejected
+      if (humanReviewResult.state.execution_terminated) {
+        console.log('[Flow2/HITL] Execution terminated by human rejection');
+        
+        const issues = convertToIssues(execution, topicSections);
+        
+        return attachGraphMetadata({
+          status: 'terminated' as const,
+          run_id: currentRunId,
+          reason: 'Rejected by human reviewer',
+          issues,
+          trace: events,
+          conflicts: execution.conflicts,
+          coverageGaps: execution.coverageGaps,
+          skillInvocations
+        });
+      }
+    }
     
     // Phase 1: Reflect and replan node (inserted after parallel checks)
     flow2State.topicSections = topicSections;

@@ -8,6 +8,21 @@
 // Phase 3: Import graph definition types
 import type { GraphDefinition, GraphDiff } from '../graphs/types';
 
+// Phase 2 HITL: Node execution result types
+export interface NodePauseResult {
+  pauseExecution: true;
+  reason: string;
+  paused_at_node: string;
+  partial_state?: Partial<GraphState>;
+}
+
+export interface NodeContinueResult {
+  pauseExecution: false;
+  state: GraphState;
+}
+
+export type NodeExecutionResult = NodePauseResult | NodeContinueResult;
+
 // Topic-based document structure (not section-based like Flow1)
 export type TopicId = 
   | 'client_identity'
@@ -83,6 +98,14 @@ export interface GraphState {
     prompt: string;
     options: string[];
   };
+  
+  // Phase 2 HITL: Human decision results
+  human_approved?: boolean;
+  human_rejected?: boolean;
+  human_decision_ts?: string;
+  human_decision_comment?: string;
+  human_rejection_reason?: string;
+  execution_terminated?: boolean;
   
   // Trace
   trace?: GraphTraceEvent[];

@@ -56,6 +56,18 @@ export const flow2GraphV1: GraphDefinition = {
       }
     },
     {
+      id: 'human_review',
+      type: 'gate',
+      label: 'Human Review Gate',
+      description: 'Pauses execution for human approval/rejection (Phase 2 HITL)',
+      binding: {
+        functionRef: 'executeHumanReviewNode'
+      },
+      config: {
+        pause_if_no_decision: true
+      }
+    },
+    {
       id: 'reflect_and_replan',
       type: 'system',
       label: 'Reflection Node',
@@ -128,24 +140,34 @@ export const flow2GraphV1: GraphDefinition = {
     {
       id: 'edge_3',
       fromNodeId: 'parallel_checks',
+      toNodeId: 'human_review',
+      condition: {
+        type: 'always',
+        description: 'Always proceed to human review gate after parallel checks'
+      },
+      label: 'to human review'
+    },
+    {
+      id: 'edge_3a',
+      fromNodeId: 'human_review',
       toNodeId: 'reflect_and_replan',
       condition: {
         type: 'state_check',
-        expression: 'features.reflection === true',
-        description: 'Proceed to reflection if enabled'
+        expression: 'features.reflection === true && !state.execution_terminated',
+        description: 'Proceed to reflection if approved and enabled'
       },
-      label: 'if reflection enabled'
+      label: 'if approved + reflection enabled'
     },
     {
-      id: 'edge_4',
-      fromNodeId: 'parallel_checks',
+      id: 'edge_3b',
+      fromNodeId: 'human_review',
       toNodeId: 'finalize',
       condition: {
         type: 'state_check',
-        expression: 'features.reflection === false',
-        description: 'Skip to finalize if reflection disabled'
+        expression: 'features.reflection === false && !state.execution_terminated',
+        description: 'Skip to finalize if approved but reflection disabled'
       },
-      label: 'if reflection disabled'
+      label: 'if approved + no reflection'
     },
     {
       id: 'edge_5',
