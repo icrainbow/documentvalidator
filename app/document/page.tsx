@@ -1641,31 +1641,64 @@ function DocumentPageContent() {
       })
     );
     
-    // Call fusion API
-    const response = await fetch('/api/flow2/topics/fuse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'incremental',
-        topic_key: topicKey,
-        existing_topic: topic,
-        new_docs: newDocs
-      })
-    });
+    // Phase 6: Support full rebuild if user uploaded more than 1 file
+    const mode = files.length > 1 ? 'full_rebuild' : 'incremental';
     
-    if (!response.ok) {
-      throw new Error('Failed to fuse topics');
+    if (mode === 'full_rebuild') {
+      // Full rebuild: pass all existing documents
+      const response = await fetch('/api/flow2/topics/fuse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'full_rebuild',
+          topic_key: topicKey,
+          new_docs: newDocs,
+          existing_docs: flow2Documents.map(d => ({
+            filename: d.filename,
+            text: d.text,
+            doc_type_hint: d.doc_type_hint
+          }))
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to rebuild topics');
+      }
+      
+      const result = await response.json();
+      if (!result.ok || !result.derived_topics) {
+        throw new Error('Invalid full rebuild response');
+      }
+      
+      // Replace all derived topics
+      setDerivedTopics(result.derived_topics);
+    } else {
+      // Incremental: update single topic
+      const response = await fetch('/api/flow2/topics/fuse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'incremental',
+          topic_key: topicKey,
+          existing_topic: topic,
+          new_docs: newDocs
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fuse topics');
+      }
+      
+      const result = await response.json();
+      if (!result.ok || !result.topic) {
+        throw new Error('Invalid fusion response');
+      }
+      
+      // Update single topic
+      setDerivedTopics(prev => 
+        prev.map(t => t.topic_key === topicKey ? result.topic : t)
+      );
     }
-    
-    const result = await response.json();
-    if (!result.ok || !result.topic) {
-      throw new Error('Invalid fusion response');
-    }
-    
-    // Update derived topics
-    setDerivedTopics(prev => 
-      prev.map(t => t.topic_key === topicKey ? result.topic : t)
-    );
   };
 
   // OLD: const canSubmit = sections.every(s => s.status === 'pass');
