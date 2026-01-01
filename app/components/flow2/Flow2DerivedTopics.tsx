@@ -7,9 +7,10 @@ import type { DerivedTopic } from '../../lib/flow2/derivedTopicsTypes';
 interface Flow2DerivedTopicsProps {
   topics: DerivedTopic[];
   highlightedTopicKey?: string | null;
+  onMoreInputsClick?: (topicKey: string) => void;
 }
 
-export default function Flow2DerivedTopics({ topics, highlightedTopicKey }: Flow2DerivedTopicsProps) {
+export default function Flow2DerivedTopics({ topics, highlightedTopicKey, onMoreInputsClick }: Flow2DerivedTopicsProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
   if (topics.length === 0) {
@@ -43,6 +44,7 @@ export default function Flow2DerivedTopics({ topics, highlightedTopicKey }: Flow
               key={topic.topic_key}
               topic={topic}
               isHighlighted={highlightedTopicKey === topic.topic_key}
+              onMoreInputsClick={onMoreInputsClick}
             />
           ))}
         </div>

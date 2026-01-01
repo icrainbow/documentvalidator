@@ -9,6 +9,7 @@ import Flow2PastePanel from '../components/flow2/Flow2PastePanel';
 import Flow2DocumentsList from '../components/flow2/Flow2DocumentsList';
 import Flow2RightPanel from '../components/flow2/Flow2RightPanel';
 import Flow2DerivedTopics from '../components/flow2/Flow2DerivedTopics';
+import Flow2TopicMoreInputs from '../components/flow2/Flow2TopicMoreInputs';
 import HumanGatePanel from '../components/flow2/HumanGatePanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -44,7 +45,7 @@ import {
   loadReviewConfig,
   type ReviewConfig 
 } from '../lib/reviewConfig';
-import { buildDerivedTopicsFallback, type DerivedTopic } from '../lib/flow2/derivedTopicsTypes';
+import { buildDerivedTopicsFallback, type DerivedTopic, type TopicKey } from '../lib/flow2/derivedTopicsTypes';
 import { mapIssueToTopic } from '../lib/flow2/issueTopicMapping';
 
 type SectionStatus = 'unreviewed' | 'pass' | 'fail' | 'warning';
@@ -537,6 +538,11 @@ function DocumentPageContent() {
   const [coverageGaps, setCoverageGaps] = useState<any[]>([]);
   const [derivedTopics, setDerivedTopics] = useState<DerivedTopic[]>([]);
   const [highlightedTopicKey, setHighlightedTopicKey] = useState<string | null>(null);
+  const [moreInputsModal, setMoreInputsModal] = useState<{ isOpen: boolean; topicKey: TopicKey | null; topic: DerivedTopic | null }>({
+    isOpen: false,
+    topicKey: null,
+    topic: null
+  });
   const [humanGateData, setHumanGateData] = useState<any | null>(null);
   
   // MILESTONE C: New state for workspace + degraded mode
@@ -1600,6 +1606,66 @@ function DocumentPageContent() {
     setIsDegraded(false);
     setDegradedReason('');
     handleGraphKycReview();
+  };
+  
+  /**
+   * Phase 5: Handle More Inputs click
+   */
+  const handleMoreInputsClick = (topicKey: string) => {
+    const topic = derivedTopics.find(t => t.topic_key === topicKey);
+    if (!topic) return;
+    
+    setMoreInputsModal({
+      isOpen: true,
+      topicKey: topicKey as TopicKey,
+      topic
+    });
+  };
+  
+  /**
+   * Phase 5: Submit More Inputs
+   */
+  const handleMoreInputsSubmit = async (topicKey: TopicKey, files: File[]) => {
+    const topic = derivedTopics.find(t => t.topic_key === topicKey);
+    if (!topic) throw new Error('Topic not found');
+    
+    // Read files
+    const newDocs = await Promise.all(
+      files.map(async (file) => {
+        const text = await file.text();
+        return {
+          filename: file.name,
+          text,
+          doc_type_hint: 'user_upload'
+        };
+      })
+    );
+    
+    // Call fusion API
+    const response = await fetch('/api/flow2/topics/fuse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'incremental',
+        topic_key: topicKey,
+        existing_topic: topic,
+        new_docs: newDocs
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fuse topics');
+    }
+    
+    const result = await response.json();
+    if (!result.ok || !result.topic) {
+      throw new Error('Invalid fusion response');
+    }
+    
+    // Update derived topics
+    setDerivedTopics(prev => 
+      prev.map(t => t.topic_key === topicKey ? result.topic : t)
+    );
   };
 
   // OLD: const canSubmit = sections.every(s => s.status === 'pass');
@@ -2957,6 +3023,7 @@ function DocumentPageContent() {
                     <Flow2DerivedTopics
                       topics={derivedTopics}
                       highlightedTopicKey={highlightedTopicKey}
+                      onMoreInputsClick={handleMoreInputsClick}
                     />
                   )}
                 </div>
@@ -4079,6 +4146,18 @@ function DocumentPageContent() {
           graphReviewTrace={graphReviewTrace}
           conflicts={conflicts.length > 0 ? conflicts : null}
           coverageGaps={coverageGaps.length > 0 ? coverageGaps : null}
+        />
+      )}
+      
+      {/* Flow2: More Inputs Modal (Phase 5) */}
+      {isFlow2 && moreInputsModal.isOpen && moreInputsModal.topic && (
+        <Flow2TopicMoreInputs
+          isOpen={moreInputsModal.isOpen}
+          onClose={() => setMoreInputsModal({ isOpen: false, topicKey: null, topic: null })}
+          topicKey={moreInputsModal.topicKey!}
+          topicTitle={moreInputsModal.topic.title}
+          existingTopic={moreInputsModal.topic}
+          onSubmit={handleMoreInputsSubmit}
         />
       )}
     </div>

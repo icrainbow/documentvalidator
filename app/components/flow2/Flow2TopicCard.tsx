@@ -6,9 +6,10 @@ import type { DerivedTopic } from '../../lib/flow2/derivedTopicsTypes';
 interface Flow2TopicCardProps {
   topic: DerivedTopic;
   isHighlighted?: boolean;
+  onMoreInputsClick?: (topicKey: string) => void;
 }
 
-export default function Flow2TopicCard({ topic, isHighlighted }: Flow2TopicCardProps) {
+export default function Flow2TopicCard({ topic, isHighlighted, onMoreInputsClick }: Flow2TopicCardProps) {
   const [isSnippetsExpanded, setIsSnippetsExpanded] = useState(false);
 
   return (
@@ -83,6 +84,7 @@ export default function Flow2TopicCard({ topic, isHighlighted }: Flow2TopicCardP
       <div className="px-4 py-2 bg-slate-50 border-t border-slate-200">
         <button
           data-testid={`topic-more-inputs-${topic.topic_key}`}
+          onClick={() => onMoreInputsClick?.(topic.topic_key)}
           className="w-full px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded transition-colors"
         >
           + More Inputs
