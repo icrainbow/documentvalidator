@@ -93,6 +93,45 @@ We provide a complete demo runbook with talk tracks, checklists, and troubleshoo
 
 ## Application Flows
 
+### Flow1: Section-Based Batch Review
+
+Flow1 provides intelligent scope planning for document reviews with sections. It adapts review depth based on what changed (section-only, cross-section, or full-document review).
+
+**UI:** Section cards on left panel, Review Type radio buttons, Submit Document workflow.
+
+**URL:** [http://localhost:3000/document?flow=1](http://localhost:3000/document?flow=1)
+
+### Flow2: Graph KYC Review (LangGraph-Inspired)
+
+**Updated Jan 2025:** Flow2 now has a dedicated minimal, graph-first UX.
+
+**Key Differences from Flow1:**
+- ✅ **No hard-coded sections** displayed (documents are agent-analyzed, not user-sectioned)
+- ✅ **Clean right panel** with Run Graph KYC Review + Agents buttons only
+- ✅ **No Review Type radio** (Flow2 uses fixed graph-based routing)
+- ✅ **No Submit Document button** (Flow2 outputs trace + issues for further processing)
+- ✅ **No magnifier empty state** (status is always visible)
+
+**Flow1 remains unchanged** - All section-based review features work exactly as before.
+
+**URL:** [http://localhost:3000/document?flow=2&scenario=crosscheck](http://localhost:3000/document?flow=2&scenario=crosscheck)
+
+**Quick Demo (Flow2):**
+1. Open Flow2 URL above
+2. Click **"Load Sample KYC Pack"** (loads 3 demo documents)
+3. Click **"🕸️ Run Graph KYC Review"** (executes agentic graph)
+4. Click **"🤖 Agents"** button → Navigate to **"🕸️ Graph Trace"** tab
+5. Observe execution: `Topic Assembler` → `Risk Triage` → Parallel checks (`gap_collector`, `conflict_sweep`, `policy_flags_check`) → `reflect_and_replan` (adaptive routing decision) → `finalize` or `rerun` / `human_gate`
+
+**Graph Trace shows:**
+- Risk score + selected path (fast / crosscheck / escalate)
+- Reflection decision (skip / rerun / escalate) with confidence score
+- All node executions with timing and data
+
+See [docs/demo/DEMO_RUNBOOK.md](docs/demo/DEMO_RUNBOOK.md) for detailed demo script.
+
+---
+
 ## Troubleshooting
 
 ### "Cannot find module './XXX.js'" Error

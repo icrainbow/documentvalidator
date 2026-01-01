@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ReviewConfigDrawer from '../components/ReviewConfigDrawer';
+import Flow2ReviewConfigDrawer from '../components/flow2/Flow2ReviewConfigDrawer';
 import Flow2UploadPanel from '../components/flow2/Flow2UploadPanel';
 import Flow2PastePanel from '../components/flow2/Flow2PastePanel';
 import Flow2DocumentsList from '../components/flow2/Flow2DocumentsList';
@@ -3018,31 +3019,6 @@ function DocumentPageContent() {
                 </div>
               )}
               
-              {/* Flow2: Loaded Documents Display (ISOLATED - only visible when flow2Documents exist) */}
-              {isFlow2 && flow2Documents.length > 0 && (
-                <div className="mb-6 bg-white border-2 border-purple-300 rounded-lg p-5">
-                  <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
-                    <span className="text-lg">📄</span>
-                    Loaded Documents ({flow2Documents.length})
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {flow2Documents.map((doc, idx) => (
-                      <div key={idx} className="bg-slate-50 border border-slate-300 rounded-lg p-3">
-                        <div className="font-semibold text-sm text-slate-800 mb-1">
-                          {doc.filename}
-                        </div>
-                        <div className="text-xs text-slate-600">
-                          {doc.doc_type_hint} • {doc.text.length} chars
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 p-2 bg-green-50 border border-green-300 rounded text-xs text-green-800">
-                    ✓ Ready for review. Click "🕸️ Run Graph KYC Review" on the right to execute.
-                  </div>
-                </div>
-              )}
-              
               {/* Flow1 ONLY: Render document sections */}
               {!isFlow2 && (
                 sections.map((section, index) => (
@@ -4044,19 +4020,28 @@ function DocumentPageContent() {
 
       {/* Agent Dashboard Modal */}
       {/* Review Configuration & Agents Drawer (Governed Selection) */}
-      <ReviewConfigDrawer
-        open={showAgentsDrawer}
-        onOpenChange={setShowAgentsDrawer}
-        participants={agentParticipants}
-        reviewConfig={reviewConfig}
-        onConfigChange={setReviewConfig}
-        onRunReview={isFlow2 ? handleGraphKycReview : handleFullComplianceReview}
-        batchReviewTrace={batchReviewTrace}
-        currentSections={sections}
-        graphReviewTrace={graphReviewTrace}
-        conflicts={conflicts.length > 0 ? conflicts : null}
-        coverageGaps={coverageGaps.length > 0 ? coverageGaps : null}
-      />
+      {isFlow2 ? (
+        <Flow2ReviewConfigDrawer
+          isOpen={showAgentsDrawer}
+          onClose={() => setShowAgentsDrawer(false)}
+          graphReviewTrace={graphReviewTrace}
+          skillCatalog={[]}
+        />
+      ) : (
+        <ReviewConfigDrawer
+          open={showAgentsDrawer}
+          onOpenChange={setShowAgentsDrawer}
+          participants={agentParticipants}
+          reviewConfig={reviewConfig}
+          onConfigChange={setReviewConfig}
+          onRunReview={handleFullComplianceReview}
+          batchReviewTrace={batchReviewTrace}
+          currentSections={sections}
+          graphReviewTrace={graphReviewTrace}
+          conflicts={conflicts.length > 0 ? conflicts : null}
+          coverageGaps={coverageGaps.length > 0 ? coverageGaps : null}
+        />
+      )}
     </div>
   );
 }

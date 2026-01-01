@@ -34,7 +34,7 @@ const Flow2DocumentsList: React.FC<Flow2DocumentsListProps> = ({
 
   return (
     <>
-      <div className="bg-slate-50 border-2 border-slate-300 rounded-lg p-4">
+      <div className="bg-slate-50 border-2 border-slate-300 rounded-lg p-4" data-testid="flow2-documents-list">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-md font-bold text-slate-800 flex items-center gap-2">
             📚 Loaded Documents ({documents.length})
