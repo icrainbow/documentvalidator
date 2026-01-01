@@ -294,7 +294,13 @@ export async function runGraphKycReview(
         // PAUSE: Save checkpoint and return waiting_human status
         console.log(`[Flow2/HITL] PAUSE at human_review: ${humanReviewResult.reason}`);
         
-        // Create checkpoint
+        // Phase 4: Generate approval token FIRST
+        const { randomBytes } = await import('crypto');
+        const approval_token = randomBytes(16).toString('hex'); // 32 chars
+        const approval_email_to = process.env.FLOW2_APPROVER_EMAIL || 'admin@example.com';
+        const base_url = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        
+        // Create checkpoint with token (BEFORE email send)
         const pauseCheckpoint: Flow2Checkpoint = {
           run_id: currentRunId,
           graph_id: flow2GraphV1.graphId,
@@ -316,10 +322,65 @@ export async function runGraphKycReview(
           })),
           created_at: new Date().toISOString(),
           paused_at: new Date().toISOString(),
-          status: 'paused'
+          status: 'paused',
+          
+          // Phase 4: Approval metadata (set before email)
+          approval_token,
+          approval_email_to,
+          approval_email_sent: false, // Will be set true after successful send
+          reminder_email_sent: false,
         };
         
+        // Save checkpoint FIRST (critical for web approval links to work)
         await saveCheckpoint(pauseCheckpoint);
+        console.log(`[Flow2/HITL] Checkpoint saved: ${currentRunId}`);
+        
+        // Phase 4: Send approval email (with attachment)
+        let emailSent = false;
+        let messageId: string | undefined;
+        let emailSubject: string | undefined;
+        
+        try {
+          const { sendApprovalEmail } = await import('../email/smtpAdapter');
+          
+          const emailResult = await sendApprovalEmail({
+            run_id: currentRunId,
+            approval_token,
+            recipient: approval_email_to,
+            checkpoint: pauseCheckpoint,
+            base_url,
+          });
+          
+          emailSent = true;
+          messageId = emailResult.messageId;
+          emailSubject = `[Flow2 Approval] Review Required - Run ${currentRunId.slice(0, 8)}`;
+          
+          console.log(`[Flow2/HITL] Approval email sent to ${approval_email_to} (${messageId})`);
+        } catch (error: any) {
+          console.error('[Flow2/HITL] Failed to send approval email:', error.message);
+          // Non-critical: user can still approve via web UI or manual trigger
+          // Continue execution to return waiting_human status
+        }
+        
+        // Phase 4: Update checkpoint with email metadata (if sent successfully)
+        if (emailSent) {
+          const now = new Date().toISOString();
+          const reminderDueAt = new Date(Date.now() + 180000).toISOString(); // +3 minutes
+          
+          pauseCheckpoint.approval_email_sent = true;
+          pauseCheckpoint.approval_sent_at = now;
+          pauseCheckpoint.approval_message_id = messageId;
+          pauseCheckpoint.approval_email_subject = emailSubject;
+          pauseCheckpoint.reminder_due_at = reminderDueAt;
+          
+          try {
+            await saveCheckpoint(pauseCheckpoint); // Overwrite with email metadata
+            console.log(`[Flow2/HITL] Checkpoint updated with email metadata`);
+          } catch (error: any) {
+            console.error('[Flow2/HITL] Failed to update checkpoint with email metadata:', error);
+            // Non-critical: checkpoint exists with token, email was sent
+          }
+        }
         
         // Add pause event to trace
         events.push({
@@ -345,8 +406,13 @@ export async function runGraphKycReview(
             paused_reason: humanReviewResult.reason,
             document_count: state.documents.length,
             created_at: pauseCheckpoint.created_at,
-            paused_at: pauseCheckpoint.paused_at
-          },
+            paused_at: pauseCheckpoint.paused_at,
+            // Phase 4: Include email metadata in response
+            approval_email_sent: pauseCheckpoint.approval_email_sent,
+            approval_sent_at: pauseCheckpoint.approval_sent_at,
+            approval_email_to: pauseCheckpoint.approval_email_to,
+            reminder_due_at: pauseCheckpoint.reminder_due_at,
+          } as any,
           conflicts: execution.conflicts,
           coverageGaps: execution.coverageGaps,
           skillInvocations
