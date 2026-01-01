@@ -343,19 +343,41 @@ async function handleLangGraphKyc(
   console.log('[Flow2/API] Handling LangGraph KYC request');
   
   try {
-    // Validate
-    if (!body.documents || body.documents.length === 0) {
+    // Phase 3 HITL: Handle checkpoint resume mode
+    const executionMode = body.execution_mode || 'run';
+    
+    if (executionMode === 'resume') {
+      // Validate resume requirements
+      if (!body.checkpoint_run_id) {
+        return NextResponse.json(
+          { error: 'checkpoint_run_id is required for resume mode' },
+          { status: 400 }
+        );
+      }
+      
+      if (!body.checkpoint_human_decision) {
+        return NextResponse.json(
+          { error: 'checkpoint_human_decision is required for resume mode' },
+          { status: 400 }
+        );
+      }
+      
+      console.log(`[Flow2/API] RESUME mode: checkpoint_run_id=${body.checkpoint_run_id}`);
+    }
+    
+    // Validate documents for run mode
+    if (executionMode === 'run' && (!body.documents || body.documents.length === 0)) {
       return NextResponse.json(
-        { error: 'documents array is required for langgraph_kyc mode' },
+        { error: 'documents array is required for run mode' },
         { status: 400 }
       );
     }
     
     // Build graph state
     const graphState: GraphState = {
-      documents: body.documents,
+      documents: body.documents || [],
       dirtyTopics: body.dirtyTopics as any,
-      humanDecision: body.humanDecision
+      humanDecision: body.humanDecision || body.checkpoint_human_decision as any
     };
     
     // Phase 0 + 1: Parse features (default OFF)
@@ -367,12 +389,14 @@ async function handleLangGraphKyc(
     
     console.log('[Flow2/API] Features:', features);
     
-    // Execute graph (pass runId, resumeToken, and features)
+    // Execute graph with checkpoint support
     const result = await runGraphKycReview(
       graphState,
       body.runId,
       body.resumeToken,
-      features
+      features,
+      executionMode,
+      body.checkpoint_run_id
     );
     
     return NextResponse.json(result, { status: 200 });
@@ -661,18 +685,27 @@ export async function GET() {
 
 /**
  * Flow2: LangGraph KYC Request
+ * Phase 3 HITL: Extended with checkpoint resume support
  */
 interface LangGraphKycRequest {
   mode: 'langgraph_kyc';
   documents: { name: string; content: string }[];
   dirtyTopics?: string[];
   humanDecision?: any;
-  runId?: string; // For resume
-  resumeToken?: string; // For resume
+  runId?: string; // For legacy resume (old human gate)
+  resumeToken?: string; // For legacy resume (old human gate)
   features?: { // Phase 0: Feature flags (default OFF)
     reflection?: boolean;
     negotiation?: boolean;
     memory?: boolean;
+  };
+  // Phase 3 HITL: New checkpoint-based resume
+  execution_mode?: 'run' | 'resume';
+  checkpoint_run_id?: string; // Required if execution_mode === 'resume'
+  checkpoint_human_decision?: {
+    node_id: string;
+    decision: 'approve' | 'reject';
+    comment?: string;
   };
 }
 
