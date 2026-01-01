@@ -17,7 +17,7 @@ describe('Flow2 Reflection API', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'langgraph_kyc',
-        documents: [{ name: 'test.txt', content: 'Test KYC document content' }],
+        documents: [{ name: 'test.txt', content: 'Test KYC document content with sufficient length for validation requirements' }],
         features: { reflection: false }
       })
     });
@@ -49,7 +49,7 @@ describe('Flow2 Reflection API', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'langgraph_kyc',
-        documents: [{ name: 'test.txt', content: 'Test KYC document' }],
+        documents: [{ name: 'test.txt', content: 'Test KYC document with sufficient content length for API validation' }],
         features: { reflection: true }
       })
     });
@@ -79,7 +79,7 @@ describe('Flow2 Reflection API', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'langgraph_kyc',
-        documents: [{ name: 'test.txt', content: 'Test KYC document' }],
+        documents: [{ name: 'test.txt', content: 'Test KYC document with sufficient content length for API validation' }],
         features: { reflection: true }
       })
     });

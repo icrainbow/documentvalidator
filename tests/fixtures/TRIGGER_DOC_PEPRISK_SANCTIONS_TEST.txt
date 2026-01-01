@@ -1,0 +1,80 @@
+CLIENT KYC DECLARATION FORM - HIGH RISK ASSESSMENT
+
+Full Name: Dmitri Volkov
+Date of Birth: 1968-11-15
+Nationality: Russian Federation / Cyprus (Dual)
+Current Residence: London, United Kingdom
+
+═══════════════════════════════════════════════════════
+POLITICALLY EXPOSED PERSON (PEP) STATUS - MANDATORY DISCLOSURE
+═══════════════════════════════════════════════════════
+
+The client confirms CURRENT and FORMER affiliations with government entities:
+- Russian Ministry of Energy (2008-2015): Senior Policy Advisor
+- Gazprom International Advisory Board (2012-2018): Non-executive Director
+- Sanctioned Entity Relationship: Former business partner of individuals on OFAC sanctions list
+
+This constitutes HIGH-RISK Politically Exposed Person (PEP) status under FATF guidelines.
+Enhanced due diligence and HUMAN REVIEW are MANDATORY per AML regulations.
+
+═══════════════════════════════════════════════════════
+SANCTIONS SCREENING - ADVERSE FINDINGS
+═══════════════════════════════════════════════════════
+
+CRITICAL ALERT: Sanctions exposure detected across multiple jurisdictions:
+
+1. OFAC Watchlist: Client's previous business entities flagged for connections to sanctioned individuals
+2. EU Sanctions Database: Real estate holdings in Crimea region (annexed territory)
+3. UK HM Treasury: Advisory flagged for trade activities with entities subject to financial restrictions
+
+AUTOMATED SCREENING STATUS: FAILED - Requires manual review by compliance officer
+
+═══════════════════════════════════════════════════════
+SOURCE OF WEALTH & FUNDS - OPAQUE STRUCTURES
+═══════════════════════════════════════════════════════
+
+Declared sources include:
+- State contracts during government service (2008-2015): $4.2M declared
+- Real estate investments in HIGH-RISK JURISDICTIONS: Cyprus, British Virgin Islands, Panama
+- Shell company dividends: 8 entities with undisclosed beneficial ownership
+- Consultancy fees from entities refusing to disclose ultimate clients
+
+BENEFICIAL OWNERSHIP: Client refuses to provide UBO documentation for 5 offshore holding companies.
+
+═══════════════════════════════════════════════════════
+ADVERSE MEDIA & REPUTATIONAL RISK
+═══════════════════════════════════════════════════════
+
+Negative news articles identified:
+- 2017: Investigation by UK Financial Times regarding opaque ownership structures
+- 2019: Mentioned in EU Parliament report on sanction circumvention schemes
+- 2021: Named in ICIJ Pandora Papers leak (offshore wealth holdings)
+
+═══════════════════════════════════════════════════════
+RISK ASSESSMENT & MANDATORY ACTIONS
+═══════════════════════════════════════════════════════
+
+OVERALL RISK RATING: CRITICAL / UNACCEPTABLE
+
+This case presents EXTREME AML/KYC risk due to:
+✗ PEP status with sanctioned entity connections
+✗ Direct sanctions exposure (OFAC, EU, UK)
+✗ Opaque beneficial ownership structures (shell companies, offshore jurisdictions)
+✗ Adverse media coverage and regulatory investigations
+✗ Refusal to provide required UBO documentation
+✗ High-risk jurisdiction exposure (Cyprus, BVI, Panama, Crimea)
+
+MANDATORY ACTIONS:
+⚠ Enhanced due diligence REQUIRED
+⚠ HUMAN REVIEW by senior compliance officer MANDATORY
+⚠ Legal counsel consultation REQUIRED before account opening
+⚠ Regulatory reporting obligations under suspicious activity rules
+⚠ Senior management approval REQUIRED (C-suite level)
+
+═══════════════════════════════════════════════════════
+
+Document prepared by: Automated KYC Screening System
+Screening Date: 2024-12-15
+Document ID: KYC-PEP-SANCTIONS-2024-001
+Review Status: PENDING HUMAN APPROVAL - DO NOT PROCEED WITHOUT CLEARANCE
+

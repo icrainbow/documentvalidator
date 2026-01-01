@@ -23,6 +23,8 @@ import { saveCheckpoint, loadCheckpoint } from '../flow2/checkpointStore';
 import { executeHumanReviewNode } from './nodes/humanReviewNode';
 import type { Flow2Checkpoint } from '../flow2/checkpointTypes';
 import { randomUUID } from 'crypto';
+// Phase 7-9: Import risk assessment module
+import { assessKYCRisks, type RiskSignal } from './riskAssessment';
 
 /**
  * Phase 3: Attach graph metadata to response
@@ -281,13 +283,73 @@ export async function runGraphKycReview(
     
     events.push(...execution.events);
     
+    // Step 3.5: Assess KYC Risks (LLM-first + fallback guardrail)
+    console.log('[Flow2] Step 3.5: Assessing KYC risks (LLM-first + fallback)');
+    const riskAssessmentStart = Date.now();
+    
+    const riskAssessment = await assessKYCRisks(
+      state.documents,
+      topicSections,
+      { 
+        enableFallback: process.env.FLOW2_DEMO_GUARDRAIL === '1' || 
+                       process.env.NODE_ENV === 'development' || 
+                       process.env.NODE_ENV === 'test'
+      }
+    );
+    
+    console.log(`[Flow2/Risk] Assessment complete: ${riskAssessment.signals.length} signal(s), ` +
+                `requires_human_review=${riskAssessment.requires_human_review}, ` +
+                `source=${riskAssessment.source}`);
+    
+    // Add risk assessment trace event
+    events.push({
+      node: 'risk_assessment',
+      status: 'executed',
+      decision: `Found ${riskAssessment.signals.length} risk signal(s) via ${riskAssessment.source}`,
+      reason: riskAssessment.execution_path,
+      startedAt: new Date(riskAssessmentStart).toISOString(),
+      endedAt: new Date().toISOString(),
+      durationMs: Date.now() - riskAssessmentStart,
+      outputsSummary: `${riskAssessment.signals.length} signals, human_review=${riskAssessment.requires_human_review}`
+    });
+    
+    // Convert risk signals to issues (BEFORE humanReviewNode sees them)
+    const riskIssues = riskAssessment.signals.map((signal, idx) => ({
+      id: `kyc-risk-${idx}`,
+      sectionId: 'topic-risk_profile',
+      category: signal.category,
+      severity: signal.severity === 'HIGH' ? 'FAIL' : 'WARNING',
+      title: signal.title,
+      message: signal.description,
+      evidence: signal.evidence.join('\n\n'),
+      agent: { 
+        id: 'risk_assessor', 
+        name: 'KYC Risk Analyzer',
+        source: signal.source 
+      }
+    }));
+    
+    console.log(`[Flow2/Risk] Generated ${riskIssues.length} issue(s) from risk signals`);
+    
+    // Inject into state for humanReviewNode gating
+    flow2State.requires_human_review = riskAssessment.requires_human_review;
+    flow2State.kyc_risk_signals = riskAssessment.signals as any;
+    
     // Phase 2 HITL: Human Review Node (after parallel checks, before reflection)
     // Skip if resuming from checkpoint (already completed this node)
     if (!resumedFromCheckpoint || (checkpoint && checkpoint.paused_at_node_id === 'human_review')) {
       console.log('[Flow2/HITL] Executing human_review node');
       
+      // Prepare state with risk issues for gating logic
+      const stateForHumanReview = {
+        ...state,
+        ...flow2State,
+        issues: riskIssues, // Include risk issues for gating
+        requires_human_review: riskAssessment.requires_human_review
+      } as any as GraphState;
+      
       const humanReviewResult = executeHumanReviewNode({
-        state: { ...state, ...flow2State } as any as GraphState
+        state: stateForHumanReview
       });
       
       if (humanReviewResult.pauseExecution) {
@@ -393,12 +455,15 @@ export async function runGraphKycReview(
         });
         
         // Return waiting_human response (with proper graphReviewTrace structure)
+        // Phase 7-9: Include risk issues in response
+        const allIssuesForPause = convertToIssues(execution, topicSections, riskIssues);
+        
         return {
           status: 'waiting_human' as const,
           run_id: currentRunId,
           paused_at_node: 'human_review',
           reason: humanReviewResult.reason,
-          issues: [], // Empty until human decision is processed
+          issues: allIssuesForPause, // Phase 7-9: Include all issues (risk + gaps + conflicts + flags)
           topicSections: flow2State.topicSections || [],
           conflicts: execution.conflicts,
           coverageGaps: execution.coverageGaps,
@@ -448,7 +513,7 @@ export async function runGraphKycReview(
       if (humanReviewResult.state.execution_terminated) {
         console.log('[Flow2/HITL] Execution terminated by human rejection');
         
-        const issues = convertToIssues(execution, topicSections);
+        const issues = convertToIssues(execution, topicSections, riskIssues);
         
         return attachGraphMetadata({
           status: 'terminated' as const,
@@ -604,7 +669,7 @@ export async function runGraphKycReview(
     
     const issues = (routingDecision === 'rerun_checks' && reflectedState.issues) ?
       reflectedState.issues : // Already generated during rerun
-      convertToIssues(execution, topicSections); // Generate from first execution
+      convertToIssues(execution, topicSections, riskIssues); // Generate from first execution
     
     events.push({
       node: 'finalize',
@@ -725,8 +790,14 @@ function routeAfterReflection(
 /**
  * Convert execution results to issues format (Flow1 compatible)
  */
-function convertToIssues(execution: any, topicSections: any[]): any[] {
+function convertToIssues(execution: any, topicSections: any[], riskIssues?: any[]): any[] {
   const issues: any[] = [];
+  
+  // NEW Phase 7-9: KYC risk issues (from risk assessment node) - HIGHEST PRIORITY
+  if (riskIssues && riskIssues.length > 0) {
+    issues.push(...riskIssues);
+    console.log(`[Flow2/Issues] Added ${riskIssues.length} KYC risk issue(s)`);
+  }
   
   // Coverage gaps → FAIL issues
   execution.coverageGaps.forEach((gap: any) => {

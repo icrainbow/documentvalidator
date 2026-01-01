@@ -366,11 +366,65 @@ async function handleLangGraphKyc(
     }
     
     // Validate documents for run mode
-    if (executionMode === 'run' && (!body.documents || body.documents.length === 0)) {
-      return NextResponse.json(
-        { error: 'documents array is required for run mode' },
-        { status: 400 }
-      );
+    if (executionMode === 'run') {
+      if (!body.documents || body.documents.length === 0) {
+        return NextResponse.json(
+          { 
+            error: 'documents array is required for run mode',
+            error_code: 'MISSING_DOCUMENTS'
+          },
+          { status: 400 }
+        );
+      }
+      
+      // CRITICAL: Validate document content (堵死空跑路径)
+      for (let i = 0; i < body.documents.length; i++) {
+        const doc = body.documents[i];
+        
+        if (!doc.name || typeof doc.name !== 'string') {
+          return NextResponse.json(
+            {
+              error: `Document at index ${i} is missing 'name' field`,
+              error_code: 'INVALID_DOCUMENT_NAME'
+            },
+            { status: 400 }
+          );
+        }
+        
+        if (typeof doc.content !== 'string') {
+          return NextResponse.json(
+            {
+              error: `Document "${doc.name}" is missing 'content' field or content is not a string`,
+              error_code: 'MISSING_DOCUMENT_CONTENT'
+            },
+            { status: 400 }
+          );
+        }
+        
+        const trimmedContent = doc.content.trim();
+        if (trimmedContent.length < 20) {
+          return NextResponse.json(
+            {
+              error: `Document "${doc.name}" has empty or insufficient content (length: ${trimmedContent.length}, minimum: 20 characters)`,
+              error_code: 'EMPTY_DOCUMENT_CONTENT',
+              document_name: doc.name,
+              content_length: trimmedContent.length
+            },
+            { status: 400 }
+          );
+        }
+      }
+      
+      // DEBUG logging (controlled by env)
+      if (process.env.FLOW2_DEBUG === '1') {
+        console.log(`[Flow2/DEBUG] Documents received: ${body.documents.length}`);
+        body.documents.forEach((doc, idx) => {
+          console.log(`[Flow2/DEBUG] Doc[${idx}] name: "${doc.name}"`);
+          console.log(`[Flow2/DEBUG] Doc[${idx}] content length: ${doc.content.length}`);
+          console.log(`[Flow2/DEBUG] Doc[${idx}] content preview (first 120 chars):`, 
+            doc.content.substring(0, 120).replace(/\n/g, '\\n'));
+        });
+      }
     }
     
     // Build graph state

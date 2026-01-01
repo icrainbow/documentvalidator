@@ -107,6 +107,12 @@ export interface GraphState {
   human_rejection_reason?: string;
   execution_terminated?: boolean;
   
+  // Phase 7-9: KYC Risk Assessment
+  requires_human_review?: boolean;
+  kyc_risk_signals?: any[]; // RiskSignal[] from riskAssessment.ts
+  human_review_skipped?: boolean;
+  human_review_skip_reason?: string;
+  
   // Trace
   trace?: GraphTraceEvent[];
 }

@@ -67,6 +67,10 @@ export interface Flow2State {
   triageReasons?: string[];
   routePath?: string;
   
+  // Phase 7-9: KYC Risk Assessment
+  requires_human_review?: boolean;
+  kyc_risk_signals?: any[]; // RiskSignal[]
+  
   // Feature flags + sub-states (Phase 0)
   features: FeatureFlags;
   reflection: ReflectionState;

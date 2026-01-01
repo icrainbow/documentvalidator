@@ -1,0 +1,122 @@
+CLIENT DUE DILIGENCE QUESTIONNAIRE - CORPORATE STRUCTURE ANALYSIS
+
+Company Name: Meridian Capital Holdings Ltd
+Jurisdiction: British Virgin Islands (BVI)
+Registration Date: 2019-03-22
+Business Purpose: Investment Holding Company
+
+═══════════════════════════════════════════════════════
+ULTIMATE BENEFICIAL OWNERSHIP (UBO) - CRITICAL GAPS
+═══════════════════════════════════════════════════════
+
+ALERT: Beneficial ownership information is INCOMPLETE and UNVERIFIABLE
+
+Structure Overview:
+- Meridian Capital Holdings Ltd (BVI) ← Client's primary entity
+  ↓ Owned by: Cayman Islands Trust ("Meridian Family Trust")
+    ↓ Trustees: Professional trustee service (refusing disclosure)
+      ↓ Settlor: UNKNOWN - "To be determined upon request"
+        ↓ Beneficiaries: 5 unnamed individuals (identities withheld)
+
+UBO Documentation Status:
+✗ Beneficial owner identities: REFUSED / NOT PROVIDED
+✗ Trust deed: REDACTED version only (beneficiaries removed)
+✗ Settlor information: UNKNOWN
+✗ Source of trust assets: UNDISCLOSED
+✗ Control persons: Professional nominees only (no natural persons identified)
+
+REGULATORY CONCERN: Unable to identify natural persons with >25% ownership or control.
+This violates 4th AML Directive requirements for UBO transparency.
+
+═══════════════════════════════════════════════════════
+OFFSHORE STRUCTURE - HIGH-RISK JURISDICTIONS
+═══════════════════════════════════════════════════════
+
+Corporate Structure Red Flags:
+- BVI incorporation (known for opacity and minimal disclosure requirements)
+- Cayman Islands trust layer (zero corporate tax, no public registry)
+- Cyprus holding company as intermediate layer (identified in financial leaks)
+- Panama shell company as payment processor (no substance, mail forwarding only)
+- Layered ownership across 4 offshore jurisdictions with NO operating business
+
+No physical presence identified in ANY jurisdiction.
+No employees, no offices, no operational activities beyond fund transfers.
+
+═══════════════════════════════════════════════════════
+FINANCIAL FLOWS - STRUCTURING & LAYERING CONCERNS
+═══════════════════════════════════════════════════════
+
+Transaction Pattern Analysis (Last 24 months):
+
+Funds IN:
+- Wire transfers from 12 different jurisdictions (Turkey, UAE, Russia, China, Switzerland)
+- Payments labeled as "consulting fees" with NO contracts provided
+- Invoice descriptions: vague ("professional services", "business advisory")
+- Total inflows: $18.7M USD
+
+Funds OUT:
+- Distributions to 8 unknown beneficial owner accounts
+- Real estate purchases in London, Monaco, Dubai (shell company buyers)
+- Layering through multiple intermediary accounts before final destination
+- No clear business purpose or legitimate commercial rationale
+
+AML CONCERN: Pattern consistent with LAYERING and STRUCTURING to obscure source/destination.
+
+═══════════════════════════════════════════════════════
+SOURCE OF WEALTH - UNVERIFIABLE CLAIMS
+═══════════════════════════════════════════════════════
+
+Client's Declared Source of Wealth:
+"International business consulting and advisory services"
+
+Documentation Provided:
+✗ NO employment contracts
+✗ NO client agreements or service contracts
+✗ NO tax returns from ANY jurisdiction
+✗ NO invoices or billing records
+✗ NO professional credentials or certifications
+
+Verification Attempts:
+- Corporate registry searches: Entities show ZERO employees
+- Tax authority inquiries: No tax filings in claimed countries of operation
+- Professional body checks: No registration with consulting associations
+- Bank references: Declined to provide
+
+CONCLUSION: Source of wealth is UNVERIFIABLE and potentially fabricated.
+
+═══════════════════════════════════════════════════════
+RISK ASSESSMENT - ULTIMATE BENEFICIAL OWNERSHIP
+═══════════════════════════════════════════════════════
+
+OVERALL RISK RATING: CRITICAL / UNACCEPTABLE
+
+UBO-Related Risk Factors:
+✗ Beneficial ownership UNKNOWN and actively concealed
+✗ Multi-layered offshore structure across 4+ jurisdictions (BVI, Cayman, Cyprus, Panama)
+✗ No natural persons identified with >25% control (regulatory violation)
+✗ Professional nominees and trustees refusing cooperation
+✗ Funds layering through shell companies with NO business substance
+✗ Source of wealth UNVERIFIABLE despite significant asset values ($18.7M+)
+✗ Transaction patterns consistent with money laundering typologies
+
+REGULATORY VIOLATIONS:
+- 4th EU AML Directive: UBO identification failure
+- FATF Recommendation 24: Beneficial ownership transparency
+- UK Money Laundering Regulations 2017: Enhanced due diligence requirements
+
+MANDATORY ACTIONS:
+⚠ SUSPEND all account opening activities
+⚠ HUMAN REVIEW by senior AML/KYC officer MANDATORY
+⚠ Legal counsel and compliance committee review REQUIRED
+⚠ Consider Suspicious Activity Report (SAR) filing
+⚠ Enhanced due diligence CANNOT be completed without UBO disclosure
+⚠ TERMINATE client relationship if UBO information not provided within 30 days
+
+═══════════════════════════════════════════════════════
+
+Document prepared by: Corporate KYC Unit
+Assessment Date: 2024-11-28
+Document ID: KYC-UBO-OFFSHORE-2024-002
+Review Status: ESCALATED - AWAITING HUMAN APPROVAL
+Compliance Officer: [Pending Assignment]
+

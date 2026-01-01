@@ -176,7 +176,7 @@ describe('API Contract: /api/orchestrate', () => {
         body: JSON.stringify({
           mode: 'langgraph_kyc',
           documents: [
-            { name: 'test.txt', content: 'Test KYC document' }
+            { name: 'test.txt', content: 'Test KYC document with sufficient content length for validation requirements' }
           ],
           features: { reflection: false }
         }),

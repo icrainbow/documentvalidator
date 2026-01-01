@@ -130,7 +130,7 @@ describe('Remote Skills Transport', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'langgraph_kyc',
-        documents: [{ name: 'doc1', content: 'Test content.' }],
+        documents: [{ name: 'doc1', content: 'Test content with sufficient length for validation requirements' }],
         features: { remote_skills: true } // User requests remote
       })
     });

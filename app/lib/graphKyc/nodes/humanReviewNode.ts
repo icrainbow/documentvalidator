@@ -16,12 +16,41 @@ export interface HumanReviewNodeInput {
  * Human Review Node
  * 
  * Behavior:
- * - If no human_decision in state → PAUSE
+ * - NEW Phase 7-9: Check if human review is REQUIRED (gating logic)
+ * - If not required → SKIP node (continue execution)
+ * - If required and no decision → PAUSE
  * - If decision === 'approve' → continue with approval flag
  * - If decision === 'reject' → continue with rejection flag
  */
 export function executeHumanReviewNode(input: HumanReviewNodeInput): NodeExecutionResult {
   const { state } = input;
+  
+  // NEW Phase 7-9: Gate logic - determine if human review is REQUIRED
+  const shouldPause = 
+    state.requires_human_review === true ||
+    (state.issues || []).some((i: any) => 
+      (i.category === 'kyc_risk' || i.category === 'pep' || i.category === 'sanctions') && 
+      i.severity === 'FAIL'
+    ) ||
+    (state.riskScore || 0) > 80 ||
+    state.routePath === 'human_gate';
+  
+  if (!shouldPause) {
+    // SKIP node: no human review needed
+    console.log('[Flow2/HITL] Human review NOT required - skipping node');
+    console.log('[Flow2/HITL] Gating check: requires_human_review=false, no HIGH kyc_risk issues, riskScore<=80');
+    
+    return {
+      pauseExecution: false,
+      state: {
+        ...state,
+        human_review_skipped: true,
+        human_review_skip_reason: 'No high-risk KYC issues detected'
+      } as GraphState
+    };
+  }
+  
+  console.log('[Flow2/HITL] Human review IS required - checking for decision');
   
   // Check if human decision is present (using checkpoint format)
   const humanDecision = (state as any).checkpoint_human_decision as CheckpointHumanDecision | undefined;

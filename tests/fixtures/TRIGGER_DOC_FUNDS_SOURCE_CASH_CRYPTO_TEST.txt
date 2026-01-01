@@ -1,0 +1,145 @@
+ENHANCED DUE DILIGENCE - SOURCE OF FUNDS INVESTIGATION
+
+Client Name: Viktor Chen
+Account Type: Private Banking / High Net Worth
+Requested Services: Multi-currency accounts, cryptocurrency custody, offshore transfers
+
+═══════════════════════════════════════════════════════
+SOURCE OF FUNDS - CASH-INTENSIVE BUSINESS
+═══════════════════════════════════════════════════════
+
+ALERT: Declared source of funds raises CRITICAL money laundering concerns
+
+Client's Business Declaration:
+- Primary Business: Cash-intensive retail operations (convenience stores, money exchange)
+- Geographic Scope: 47 locations across Southeast Asia
+- Annual Revenue (Declared): $23M USD (85% cash transactions)
+- Secondary Income: Cryptocurrency trading and "digital asset consulting"
+
+Cash Handling Red Flags:
+✗ LARGE CASH deposits averaging $180K weekly across multiple bank accounts
+✗ Cash business model in jurisdictions with weak AML controls (Cambodia, Myanmar, Laos)
+✗ No adequate explanation for cash-to-crypto conversion patterns
+✗ Deposits often just below reporting thresholds ($9,800 - $9,950 USD)
+✗ Structuring behavior: Multiple same-day deposits across different branches
+
+═══════════════════════════════════════════════════════
+CRYPTOCURRENCY & MIXING SERVICES - HIGH RISK
+═══════════════════════════════════════════════════════
+
+CRITICAL ALERT: Blockchain analysis reveals use of PROHIBITED services
+
+Cryptocurrency Transaction Analysis:
+- Wallet addresses linked to client: 14 identified across Bitcoin, Ethereum, Monero
+- Total crypto holdings (estimated): $8.4M USD equivalent
+- Mixing services detected: TornadoCash (Ethereum mixer - sanctioned by OFAC)
+- Tumbler usage: ChipMixer (Bitcoin tumbler - shut down by law enforcement 2023)
+- DEX (Decentralized Exchange) activity: $2.1M traded on non-KYC platforms
+
+Blockchain Forensics Findings:
+✗ 67% of incoming crypto funds passed through MIXING SERVICES before client wallets
+✗ Privacy coins (Monero): $1.2M in transactions (untraceable by design)
+✗ Peer-to-peer exchanges with NO KYC: Frequent use of LocalBitcoins, Bisq
+✗ Wallet clustering suggests deliberate obfuscation of transaction trails
+✗ Some incoming funds traced to darknet marketplace wallets (archived data)
+
+SANCTIONS CONCERN: TornadoCash sanctioned by US Treasury (August 2022).
+Any interaction with sanctioned entity requires SAR filing and transaction blocking.
+
+═══════════════════════════════════════════════════════
+TAX EVASION & UNREPORTED INCOME INDICATORS
+═══════════════════════════════════════════════════════
+
+Income Reporting Discrepancies:
+
+Declared Income (Tax Returns):
+- Cambodia: $420K USD (2023 tax year)
+- Singapore: $180K USD (2023 tax year)
+- Total declared: $600K USD
+
+Observed Financial Activity (Bank + Crypto):
+- Cash deposits: $9.4M USD (annual)
+- Cryptocurrency transactions: $8.7M USD (annual)
+- Real estate purchases: $3.2M USD (2023 alone)
+- Luxury goods: $890K USD (watches, vehicles, jewelry)
+- Total observed: $22.2M USD
+
+DISCREPANCY: Observed wealth 37x higher than declared income
+
+Tax Evasion Red Flags:
+✗ Massive income discrepancy (37:1 ratio)
+✗ Assets held through nominee names and shell companies (5 identified)
+✗ Cryptocurrency used to bypass tax reporting requirements
+✗ No tax returns filed in primary business operation countries (Cambodia, Myanmar)
+✗ Residency claims do NOT match actual location (perpetual traveler pattern)
+✗ Use of offshore accounts to receive undeclared income
+
+═══════════════════════════════════════════════════════
+ADVERSE MEDIA & REGULATORY INVESTIGATIONS
+═══════════════════════════════════════════════════════
+
+Open Investigations:
+- Singapore IRAS (tax authority): Inquiry into undeclared crypto gains (2024-ongoing)
+- Cambodia Anti-Money Laundering Unit: Investigation into cash-intensive business (status unknown)
+- Interpol Red Notice: NONE (verified clean)
+- US FinCEN: NO current investigations (verified)
+
+Adverse Media Mentions:
+- 2022: Named in leaked documents "Crypto Tax Haven Schemes" (investigative journalism)
+- 2023: Business partner convicted of VAT fraud in Thailand (client not charged)
+- 2024: Convenience store chain raided by local authorities (cash handling violations)
+
+═══════════════════════════════════════════════════════
+AML TYPOLOGY ASSESSMENT - RISK INDICATORS
+═══════════════════════════════════════════════════════
+
+Money Laundering Typology Matches:
+
+✓ Trade-Based Money Laundering: Cash business as placement mechanism
+✓ Cryptocurrency Laundering: Mixing services + tumblers + privacy coins
+✓ Structuring / Smurfing: Multiple deposits below reporting thresholds
+✓ Tax Evasion: Income concealment + offshore structures + unreported crypto gains
+✓ Layering: Complex transaction chains through crypto mixers and DEX platforms
+
+Client Profile Matches 8 out of 10 FATF Red Flag Indicators for High-Risk Customers
+
+═══════════════════════════════════════════════════════
+RISK ASSESSMENT - SOURCE OF FUNDS CONCLUSION
+═══════════════════════════════════════════════════════
+
+OVERALL RISK RATING: CRITICAL / UNACCEPTABLE FOR ONBOARDING
+
+Source of Funds Risk Summary:
+✗ Cash-intensive business in weak AML jurisdictions (placement layer)
+✗ LARGE CASH deposits with structuring patterns (regulatory violation)
+✗ Cryptocurrency mixer and tumbler usage (OFAC sanctioned services)
+✗ Privacy coin transactions (Monero - untraceable)
+✗ Tax evasion indicators (37x income/wealth discrepancy)
+✗ No adequate explanation for wealth accumulation
+✗ Sanctions exposure (TornadoCash interaction)
+✗ Open tax investigation by Singapore IRAS
+
+LEGAL & REGULATORY CONCERNS:
+- OFAC Sanctions: Interaction with TornadoCash requires blocking and reporting
+- AML Violations: Structuring behavior is criminal offense in most jurisdictions
+- Tax Fraud: Income concealment triggers reporting obligations
+- Proceeds of Crime: Cannot rule out illicit source of funds
+
+MANDATORY ACTIONS:
+⚠ DO NOT OPEN ACCOUNT - Risk profile UNACCEPTABLE
+⚠ HUMAN REVIEW by Head of Compliance MANDATORY before any reconsideration
+⚠ File Suspicious Activity Report (SAR) with FinCEN and local FIU
+⚠ Block any pending transactions involving sanctioned entities (TornadoCash)
+⚠ Notify legal counsel of potential reputational and regulatory risk
+⚠ Enhanced due diligence CANNOT mitigate critical risk factors
+⚠ Consider referral to law enforcement if additional criminal indicators emerge
+
+═══════════════════════════════════════════════════════
+
+Document prepared by: Financial Crimes Investigation Unit
+Investigation Date: 2024-12-08
+Document ID: KYC-FUNDS-SOURCE-CRYPTO-2024-003
+Review Status: REJECTED PENDING SENIOR REVIEW
+Investigating Officer: Sarah Mitchell, CAMS, CFE
+Approval Required: Chief Compliance Officer + Legal Counsel
+
