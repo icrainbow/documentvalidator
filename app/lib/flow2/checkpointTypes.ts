@@ -21,6 +21,25 @@ export interface Flow2Checkpoint {
   paused_at: string; // ISO timestamp
   resumed_at?: string; // ISO timestamp (optional)
   status: CheckpointStatus;
+  
+  // ========== HITL Email Approval Fields (Phase 1) ==========
+  approval_token?: string; // 32-char hex token for approval links
+  approval_email_to?: string; // Approver email address
+  approval_email_sent?: boolean; // Whether initial email was sent
+  approval_sent_at?: string; // ISO timestamp of initial email send
+  approval_message_id?: string; // SMTP Message-ID for threading
+  approval_email_subject?: string; // Email subject (for debugging)
+  
+  // Reminder tracking (3-minute, exactly once)
+  reminder_email_sent?: boolean; // Whether reminder was sent
+  reminder_sent_at?: string; // ISO timestamp of reminder send
+  reminder_due_at?: string; // ISO timestamp = approval_sent_at + 180s
+  
+  // Human decision tracking
+  decision?: 'approve' | 'reject'; // Human decision
+  decision_comment?: string; // Rejection reason or approval note
+  decided_at?: string; // ISO timestamp of decision
+  decided_by?: string; // Email or identifier of decision maker
 }
 
 export interface CheckpointMetadata {

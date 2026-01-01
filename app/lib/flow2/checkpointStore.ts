@@ -9,6 +9,64 @@ import path from 'path';
 import type { Flow2Checkpoint, CheckpointMetadata } from './checkpointTypes';
 
 const CHECKPOINT_DIR = path.join(process.cwd(), '.local', 'flow2-checkpoints');
+const TOKEN_INDEX_PATH = path.join(CHECKPOINT_DIR, '_token_index.json');
+
+// ========== Token Index Management (Phase 1.5) ==========
+
+interface TokenIndex {
+  [token: string]: string; // token -> run_id mapping
+}
+
+/**
+ * Load token index from file
+ */
+async function loadTokenIndex(): Promise<TokenIndex> {
+  try {
+    const content = await fs.readFile(TOKEN_INDEX_PATH, 'utf-8');
+    return JSON.parse(content) as TokenIndex;
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      return {}; // Index doesn't exist yet
+    }
+    console.error('[CheckpointStore] Failed to load token index:', error);
+    return {};
+  }
+}
+
+/**
+ * Save token index to file (atomic write)
+ */
+async function saveTokenIndex(index: TokenIndex): Promise<void> {
+  await ensureCheckpointDir();
+  const tempPath = `${TOKEN_INDEX_PATH}.tmp`;
+  await fs.writeFile(tempPath, JSON.stringify(index, null, 2), 'utf-8');
+  await fs.rename(tempPath, TOKEN_INDEX_PATH);
+}
+
+/**
+ * Get run_id by approval token
+ */
+export async function getRunIdByToken(token: string): Promise<string | null> {
+  if (!token || typeof token !== 'string' || token.length !== 32) {
+    return null;
+  }
+  
+  const index = await loadTokenIndex();
+  return index[token] || null;
+}
+
+/**
+ * Load checkpoint by approval token (convenience helper)
+ */
+export async function loadCheckpointByToken(token: string): Promise<Flow2Checkpoint | null> {
+  const run_id = await getRunIdByToken(token);
+  if (!run_id) {
+    return null;
+  }
+  
+  return await loadCheckpoint(run_id);
+}
+
 
 /**
  * Ensure checkpoint directory exists
@@ -47,6 +105,18 @@ export async function saveCheckpoint(checkpoint: Flow2Checkpoint): Promise<void>
   // Atomic write: write to temp file, then rename
   await fs.writeFile(tempPath, JSON.stringify(checkpoint, null, 2), 'utf-8');
   await fs.rename(tempPath, filePath);
+  
+  // Phase 1.5: Update token index if approval_token exists
+  if (checkpoint.approval_token) {
+    try {
+      const index = await loadTokenIndex();
+      index[checkpoint.approval_token] = checkpoint.run_id;
+      await saveTokenIndex(index);
+    } catch (error) {
+      console.error('[CheckpointStore] Failed to update token index:', error);
+      // Non-critical: checkpoint is saved, index update failed
+    }
+  }
 }
 
 /**
