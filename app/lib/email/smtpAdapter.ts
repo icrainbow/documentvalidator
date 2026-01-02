@@ -172,13 +172,17 @@ export async function sendApprovalEmail(params: {
 </body>
 </html>`,
       // ATTACHMENTS: Only user-uploaded documents (NO HTML packet)
-      attachments: params.checkpoint.documents.map((doc, idx) => ({
-        filename: doc.filename || `document-${idx + 1}.txt`,
-        content: doc.text,
-        contentType: 'text/plain; charset=utf-8',
-      })),
+      attachments: params.checkpoint.documents.map((doc, idx) => {
+        console.log(`[SMTP] Attachment ${idx + 1}: filename="${doc.filename}", text_length=${doc.text?.length || 0}`);
+        return {
+          filename: doc.filename || `document-${idx + 1}.txt`,
+          content: Buffer.from(doc.text, 'utf-8'),
+          contentType: 'text/plain; charset=utf-8',
+        };
+      }),
     };
     
+    console.log(`[SMTP] Sending approval email with ${params.checkpoint.documents.length} attachment(s) to ${params.recipient}`);
     const result = await transporter.sendMail(mailOptions);
     
     console.log(`[SMTP] Approval email sent: ${result.messageId}`);
