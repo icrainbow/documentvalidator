@@ -49,6 +49,7 @@ export interface PostRejectAnalysisData {
 
 interface PostRejectAnalysisPanelProps {
   data: PostRejectAnalysisData;
+  onAnimationComplete?: (isComplete: boolean) => void; // NEW: Callback when animation finishes
 }
 
 type Phase = 'idle' | 'tasks' | 'skills' | 'findings' | 'evidence' | 'done';
@@ -59,7 +60,7 @@ interface SkillState {
   progress: number; // 0-100
 }
 
-export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPanelProps) {
+export default function PostRejectAnalysisPanel({ data, onAnimationComplete }: PostRejectAnalysisPanelProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [skillStates, setSkillStates] = useState<Map<number, SkillState>>(new Map());
   const [allowReplay, setAllowReplay] = useState(false);
@@ -159,9 +160,14 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
       setPhase('done');
       setAllowReplay(true);
       cleanup(); // Clear intervals
+      // NEW: Notify parent that animation is complete
+      if (onAnimationComplete) {
+        onAnimationComplete(true);
+        console.log('[PostRejectAnalysis] Animation complete, notifying parent');
+      }
     }, 3601);
     timersRef.current.push(doneTimer);
-  }, [data.skills, cleanup]);
+  }, [data.skills, cleanup, onAnimationComplete]);
   
   // Skip to final state
   const handleSkip = useCallback(() => {
@@ -176,14 +182,25 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
     
     setPhase('done');
     setAllowReplay(true);
-  }, [data.skills, cleanup]);
+    
+    // NEW: Notify parent immediately when skipped
+    if (onAnimationComplete) {
+      onAnimationComplete(true);
+      console.log('[PostRejectAnalysis] Animation skipped, notifying parent');
+    }
+  }, [data.skills, cleanup, onAnimationComplete]);
   
   // Replay animation
   const handleReplay = useCallback(() => {
     hasStartedRef.current = false;
     setPhase('idle');
+    // NEW: Reset completion state when replaying
+    if (onAnimationComplete) {
+      onAnimationComplete(false);
+      console.log('[PostRejectAnalysis] Animation replaying, notifying parent (not complete)');
+    }
     scheduleAnimation();
-  }, [scheduleAnimation]);
+  }, [scheduleAnimation, onAnimationComplete]);
   
   // Auto-start on mount or runId change
   useEffect(() => {

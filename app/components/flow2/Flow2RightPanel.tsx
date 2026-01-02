@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useCallback } from 'react';
 import Flow2InfoPanel from './Flow2InfoPanel';
 import Flow2ReviewStatus from './Flow2ReviewStatus';
 import Flow2MonitorPanel, { type FlowStatus, type CheckpointMetadata, type RiskData } from './Flow2MonitorPanel';
@@ -56,6 +57,15 @@ export default function Flow2RightPanel({
   const hasDocuments = flow2Documents.length > 0;
   const canRunReview = hasDocuments && !isOrchestrating && !case3Active;
   
+  // NEW: Track if Phase 8 animation is complete (controls Evidence Dashboard visibility)
+  const [isPhase8AnimationComplete, setIsPhase8AnimationComplete] = useState(false);
+  
+  // NEW: Callback when Phase 8 animation completes or restarts
+  const handlePhase8AnimationComplete = useCallback((isComplete: boolean) => {
+    console.log(`[Flow2RightPanel] Phase 8 animation complete status: ${isComplete}`);
+    setIsPhase8AnimationComplete(isComplete);
+  }, []);
+  
   // Demo EDD fields
   const isDemoEdd = flowMonitorMetadata?.demo_mode === 'edd_injection';
   const demoEvidence = (flowMonitorMetadata as any)?.demo_evidence;
@@ -80,7 +90,10 @@ export default function Flow2RightPanel({
         
         {/* PHASE 8: Post-Reject Analysis (tasks, skills, findings) */}
         {postRejectAnalysisData && postRejectAnalysisData.triggered && (
-          <PostRejectAnalysisPanel data={postRejectAnalysisData} />
+          <PostRejectAnalysisPanel 
+            data={postRejectAnalysisData}
+            onAnimationComplete={handlePhase8AnimationComplete}
+          />
         )}
         
         {/* Status Display */}
@@ -184,7 +197,8 @@ export default function Flow2RightPanel({
         */}
 
         {/* Evidence Dashboard (Phase 8 or demo fallback) */}
-        {(postRejectAnalysisData?.triggered || isDemoEdd) && phase8Evidence && (
+        {/* NEW LOGIC: Only show Evidence AFTER Phase 8 animation completes (or if demo EDD without animation) */}
+        {((postRejectAnalysisData?.triggered && isPhase8AnimationComplete) || (isDemoEdd && !postRejectAnalysisData?.triggered)) && phase8Evidence && (
           <div className="mb-6" id="flow2-evidence">
             <Flow2EvidenceDashboard
               visible={true}
