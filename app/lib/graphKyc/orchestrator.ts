@@ -359,8 +359,8 @@ export async function runGraphKycReview(
         // Phase 4: Generate approval token FIRST
         const { randomBytes } = await import('crypto');
         const approval_token = randomBytes(16).toString('hex'); // 32 chars
-        const approval_email_to = process.env.FLOW2_APPROVER_EMAIL || 'admin@example.com';
-        const base_url = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        const approval_email_to = process.env.FLOW2_APPROVAL_EMAIL_TO || process.env.FLOW2_APPROVER_EMAIL || 'admin@example.com';
+        const base_url = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
         
         // Create checkpoint with token (BEFORE email send)
         const pauseCheckpoint: Flow2Checkpoint = {
