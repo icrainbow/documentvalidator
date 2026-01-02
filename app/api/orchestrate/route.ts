@@ -392,13 +392,13 @@ async function handleLangGraphKyc(
         }
         
         if (typeof doc.content !== 'string') {
-          return NextResponse.json(
+      return NextResponse.json(
             {
               error: `Document "${doc.name}" is missing 'content' field or content is not a string`,
               error_code: 'MISSING_DOCUMENT_CONTENT'
             },
-            { status: 400 }
-          );
+        { status: 400 }
+      );
         }
         
         const trimmedContent = doc.content.trim();

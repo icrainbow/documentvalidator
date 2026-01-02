@@ -603,11 +603,11 @@ export async function runGraphKycReview(
       // MILESTONE C: Enforce max 1 gate
       console.log('[Flow2] Human gate required (Milestone C: max 1 gate)');
       
-      // Generate runId if not provided
-      const currentRunId = runId || `kyc_run_${Date.now()}`;
+      // Generate runId if not provided (use proper UUID format)
+      const legacyRunId = runId || randomUUID();
       
       // Save state for resume
-      graphResumeStore.save(currentRunId, {
+      graphResumeStore.save(legacyRunId, {
         topicSections,
         triageResult: {
           routePath: triage.routePath,
@@ -618,11 +618,11 @@ export async function runGraphKycReview(
         previousEvents: events
       });
       
-      console.log('[Flow2] Saved state for runId:', currentRunId);
+      console.log('[Flow2] Saved state for runId:', legacyRunId);
       
       // Create resume token (JSON string, NOT base64)
       const resumeTokenStr = JSON.stringify({
-        runId: currentRunId,
+        runId: legacyRunId,
         gateId: 'human_gate',
         createdAt: Date.now()
       });
