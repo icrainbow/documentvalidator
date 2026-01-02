@@ -12,7 +12,8 @@ import Flow2DerivedTopics from '../components/flow2/Flow2DerivedTopics';
 import Flow2TopicMoreInputs from '../components/flow2/Flow2TopicMoreInputs';
 import Flow2ModeSwitchModal from '../components/flow2/Flow2ModeSwitchModal';
 import Flow2KeyTopicsPanel from '../components/flow2/Flow2KeyTopicsPanel';
-import type { FlowStatus, CheckpointMetadata } from '../components/flow2/Flow2MonitorPanel';
+import Flow2RiskDetailsPanel, { type RiskLevel } from '../components/flow2/Flow2RiskDetailsPanel';
+import type { FlowStatus, CheckpointMetadata, RiskData } from '../components/flow2/Flow2MonitorPanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { computeParticipants } from '../lib/computeParticipants';
@@ -211,6 +212,23 @@ const FAKE_SECTIONS = [
 
 // Force dynamic rendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
+
+// Helper: Compute overall risk level from issues and gaps
+function computeRiskLevel(issues: any[], gaps: any[]): RiskLevel {
+  const hasHighRisk = issues.some((i: any) => 
+    (i.severity === 'high' || i.severity === 'critical') && i.category === 'kyc_risk'
+  );
+  const hasMediumRisk = issues.some((i: any) => 
+    i.severity === 'medium' && i.category === 'kyc_risk'
+  );
+  const hasMissingTopics = gaps.some((g: any) => g.status === 'missing');
+  const hasPartialTopics = gaps.some((g: any) => g.status === 'partial');
+  
+  if (hasHighRisk) return 'high';
+  if (hasMediumRisk || hasMissingTopics) return 'medium';
+  if (hasPartialTopics) return 'medium';
+  return 'low';
+}
 
 // Internal component that uses useSearchParams
 function DocumentPageContent() {
@@ -563,6 +581,7 @@ function DocumentPageContent() {
   const [flow2ActiveScenario, setFlow2ActiveScenario] = useState<string>('');
   const [graphReviewTrace, setGraphReviewTrace] = useState<any | null>(null);
   const [graphTopics, setGraphTopics] = useState<any[]>([]);
+  const [extractedTopics, setExtractedTopics] = useState<any[]>([]); // NEW: For UI display (document summaries)
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [coverageGaps, setCoverageGaps] = useState<any[]>([]);
   const [derivedTopics, setDerivedTopics] = useState<DerivedTopic[]>([]);
@@ -1677,6 +1696,7 @@ function DocumentPageContent() {
         setCurrentIssues(data.issues || []);
         setGraphReviewTrace(data.graphReviewTrace || null);
         setGraphTopics(data.topicSections || []);
+        setExtractedTopics(data.extracted_topics || []); // NEW: UI-friendly topic summaries
         setConflicts(data.conflicts || []);
         setCoverageGaps(data.coverageGaps || []);
         
@@ -1705,6 +1725,7 @@ function DocumentPageContent() {
         });
         setGraphReviewTrace(data.graphReviewTrace || null);
         setGraphTopics(data.topicSections || []);
+        setExtractedTopics(data.extracted_topics || []); // NEW: UI-friendly topic summaries
         
         setMessages(prev => [...prev, {
           role: 'agent',
@@ -1729,6 +1750,7 @@ function DocumentPageContent() {
       
       // Update Flow2-specific state (ISOLATED WRITES)
       setGraphTopics(data.topicSections || []);
+      setExtractedTopics(data.extracted_topics || []); // NEW: UI-friendly topic summaries
       setConflicts(data.conflicts || []);
       setCoverageGaps(data.coverageGaps || []);
       
@@ -1848,6 +1870,7 @@ function DocumentPageContent() {
       // Update Flow2 state (ISOLATED)
       setGraphReviewTrace(data.graphReviewTrace || null);
       setGraphTopics(data.topicSections || []);
+      setExtractedTopics(data.extracted_topics || []); // NEW: UI-friendly topic summaries
       setConflicts(data.conflicts || []);
       setCoverageGaps(data.coverageGaps || []);
       setCurrentIssues(data.issues || []);
@@ -3670,9 +3693,19 @@ function DocumentPageContent() {
               {isFlow2 && (
                 <Flow2KeyTopicsPanel
                   documents={flow2Documents}
-                  reviewIssues={currentIssues}
-                  postRejectData={postRejectAnalysisData}
-                  checkpointMetadata={flowMonitorMetadata}
+                  extractedTopics={extractedTopics}
+                />
+              )}
+              
+              {/* Flow2: Risk Details Panel */}
+              {isFlow2 && orchestrationResult && (
+                <Flow2RiskDetailsPanel
+                  riskLevel={computeRiskLevel(currentIssues, coverageGaps)}
+                  riskSignals={currentIssues.filter((i: any) => i.category === 'kyc_risk')}
+                  coverageGaps={coverageGaps}
+                  conflicts={conflicts}
+                  riskScore={graphReviewTrace?.summary?.riskScore}
+                  visible={true}
                 />
               )}
               
@@ -3835,6 +3868,12 @@ function DocumentPageContent() {
                   onFlowStatusChange={setFlowMonitorStatus}
                   postRejectAnalysisData={postRejectAnalysisData}
                   case3Active={case3Active}
+                  riskData={{
+                    riskLevel: computeRiskLevel(currentIssues, coverageGaps),
+                    hasHighRisk: currentIssues.some((i: any) => (i.severity === 'high' || i.severity === 'critical') && i.category === 'kyc_risk'),
+                    warningsCount: currentIssues.filter((i: any) => i.severity === 'medium').length,
+                    riskSignals: currentIssues.filter((i: any) => i.category === 'kyc_risk')
+                  }}
                 />
               ) : (
                 // FLOW1: Original right panel with all features

@@ -6,7 +6,7 @@
  */
 
 import type { GraphState, GraphReviewResponse, GraphTraceEvent, TopicSection } from './types';
-import { assembleTopics } from './topicAssembler';
+import { assembleTopics, convertToExtractedTopics } from './topicAssembler';
 import { triageRisk } from './riskTriage';
 import { executeParallelChecks } from './executor';
 import { graphResumeStore } from './resumeStore';
@@ -216,6 +216,7 @@ export async function runGraphKycReview(
       return {
         issues,
         topicSections: storedState.topicSections,
+        extracted_topics: convertToExtractedTopics(storedState.topicSections), // UI-friendly summaries
         conflicts: execution.conflicts,
         coverageGaps: execution.coverageGaps,
         graphReviewTrace: attachGraphMetadata({
@@ -642,6 +643,7 @@ export async function runGraphKycReview(
       return {
         issues: [],
         topicSections,
+        extracted_topics: convertToExtractedTopics(topicSections), // UI-friendly summaries
         conflicts: [], // Empty until human decision
         coverageGaps: [], // Empty until human decision
         graphReviewTrace: attachGraphMetadata({
@@ -686,6 +688,7 @@ export async function runGraphKycReview(
     return {
       issues,
       topicSections,
+      extracted_topics: convertToExtractedTopics(topicSections), // UI-friendly summaries
       conflicts: finalExecution.conflicts, // Use final (possibly rerun) conflicts
       coverageGaps: finalExecution.coverageGaps, // Use final (possibly rerun) gaps
       graphReviewTrace: attachGraphMetadata({

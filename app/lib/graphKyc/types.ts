@@ -47,6 +47,14 @@ export interface TopicSection {
   coverage: 'complete' | 'partial' | 'missing';
 }
 
+// Extracted Topic for UI display (document content summary, NOT risk findings)
+export interface ExtractedTopic {
+  title: string;
+  summary: string;
+  evidence: string[];
+  coverage: 'complete' | 'partial' | 'missing';
+}
+
 export interface Coverage {
   topicId: TopicId;
   status: 'complete' | 'partial' | 'missing';
@@ -139,6 +147,7 @@ export interface HumanDecision {
 export interface GraphReviewResponse {
   issues: any[];
   topicSections?: TopicSection[];
+  extracted_topics?: ExtractedTopic[]; // NEW: For UI display (document summaries, NOT risk)
   conflicts?: Conflict[]; // NEW: Explicit top-level field
   coverageGaps?: Coverage[]; // NEW: Explicit top-level field
   graphReviewTrace: {

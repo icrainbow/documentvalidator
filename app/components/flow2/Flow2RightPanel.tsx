@@ -2,7 +2,7 @@
 
 import Flow2InfoPanel from './Flow2InfoPanel';
 import Flow2ReviewStatus from './Flow2ReviewStatus';
-import Flow2MonitorPanel, { type FlowStatus, type CheckpointMetadata } from './Flow2MonitorPanel';
+import Flow2MonitorPanel, { type FlowStatus, type CheckpointMetadata, type RiskData } from './Flow2MonitorPanel';
 // import Flow2LogicGraphPreview from './Flow2LogicGraphPreview'; // Hidden: info duplicates Flow Monitor
 import Flow2EvidenceDashboard from './Flow2EvidenceDashboard';
 import PostRejectAnalysisPanel, { type PostRejectAnalysisData } from './PostRejectAnalysisPanel';
@@ -26,6 +26,8 @@ interface Flow2RightPanelProps {
   postRejectAnalysisData?: PostRejectAnalysisData | null;
   // Case 3 props
   case3Active?: boolean;
+  // Risk data for stage coloring
+  riskData?: RiskData;
 }
 
 export default function Flow2RightPanel({
@@ -44,6 +46,7 @@ export default function Flow2RightPanel({
   onFlowStatusChange,
   postRejectAnalysisData,
   case3Active = false,
+  riskData,
 }: Flow2RightPanelProps) {
   
   const hasDocuments = flow2Documents.length > 0;
@@ -68,6 +71,7 @@ export default function Flow2RightPanel({
           initialStatus={flowMonitorStatus}
           checkpointMetadata={flowMonitorMetadata}
           onStatusChange={onFlowStatusChange}
+          riskData={riskData}
         />
         
         {/* PHASE 8: Post-Reject Analysis (tasks, skills, findings) */}

@@ -5,7 +5,7 @@
  * No LLM calls in MVP (can add later for quality).
  */
 
-import type { TopicSection, TopicId, EvidenceRef } from './types';
+import type { TopicSection, TopicId, EvidenceRef, ExtractedTopic } from './types';
 
 const TOPIC_KEYWORDS: Record<TopicId, string[]> = {
   client_identity: ['name', 'identity', 'passport', 'id number', 'date of birth', 'nationality'],
@@ -16,6 +16,17 @@ const TOPIC_KEYWORDS: Record<TopicId, string[]> = {
   sanctions_pep: ['sanctions', 'pep', 'politically exposed', 'watchlist', 'screening'],
   transaction_patterns: ['transaction', 'volume', 'frequency', 'pattern', 'activity'],
   other: []
+};
+
+const TOPIC_TITLES: Record<TopicId, string> = {
+  client_identity: 'Client Identity & Verification',
+  source_of_wealth: 'Source of Wealth & Income',
+  business_relationship: 'Business Relationship Purpose',
+  beneficial_ownership: 'Beneficial Ownership Structure',
+  risk_profile: 'Risk Profile & Appetite',
+  sanctions_pep: 'Sanctions & PEP Screening',
+  transaction_patterns: 'Expected Transaction Patterns',
+  other: 'Other Information'
 };
 
 /**
@@ -120,6 +131,44 @@ export function extractHighRiskKeywords(content: string): string[] {
   
   const contentLower = content.toLowerCase();
   return HIGH_RISK_KEYWORDS.filter(kw => contentLower.includes(kw));
+}
+
+/**
+ * Convert TopicSections to ExtractedTopics for UI display
+ * 
+ * This creates user-friendly topic summaries from document content (NOT risk findings).
+ * Used by Key Topics Extracted panel to show what documents contain.
+ */
+export function convertToExtractedTopics(topicSections: TopicSection[]): ExtractedTopic[] {
+  const extracted: ExtractedTopic[] = [];
+  
+  topicSections.forEach(section => {
+    // Skip empty topics
+    if (section.coverage === 'missing' || !section.content.trim()) {
+      return;
+    }
+    
+    // Generate summary from content (first 200 chars)
+    const summary = section.content
+      .substring(0, 200)
+      .trim()
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      + (section.content.length > 200 ? '...' : '');
+    
+    // Extract evidence references
+    const evidence = section.evidenceRefs
+      .slice(0, 3) // Max 3 refs
+      .map(ref => `${ref.docName} (${ref.pageOrSection || 'N/A'})`);
+    
+    extracted.push({
+      title: TOPIC_TITLES[section.topicId] || section.topicId,
+      summary,
+      evidence,
+      coverage: section.coverage
+    });
+  });
+  
+  return extracted;
 }
 
 

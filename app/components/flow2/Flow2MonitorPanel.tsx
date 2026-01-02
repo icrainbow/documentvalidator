@@ -29,11 +29,20 @@ export interface CheckpointMetadata {
   final_decision?: string;
 }
 
+// NEW: Risk data for stage coloring
+export interface RiskData {
+  riskLevel?: 'low' | 'medium' | 'high' | 'critical';
+  hasHighRisk?: boolean;
+  warningsCount?: number;
+  riskSignals?: any[];
+}
+
 interface Flow2MonitorPanelProps {
   runId: string | null;
   initialStatus?: FlowStatus;
   checkpointMetadata?: CheckpointMetadata | null;
   onStatusChange?: (status: FlowStatus) => void;
+  riskData?: RiskData; // NEW: For stage coloring
 }
 
 // Business stages (NOT node-level)
@@ -83,11 +92,43 @@ export default function Flow2MonitorPanel({
   initialStatus = 'idle',
   checkpointMetadata,
   onStatusChange,
+  riskData,
 }: Flow2MonitorPanelProps) {
   const [status, setStatus] = useState<FlowStatus>(initialStatus);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
   const [reminderDisabled, setReminderDisabled] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // Helper: Get risk-based stage color
+  const getRiskStageColor = (stageId: number): string => {
+    if (stageId !== 2 || !riskData) return ''; // Only apply to Risk Assessment stage (id: 2)
+    
+    const { riskLevel, hasHighRisk, warningsCount = 0, riskSignals = [] } = riskData;
+    
+    // Critical or high risk = RED
+    if (riskLevel === 'critical' || riskLevel === 'high' || hasHighRisk || riskSignals.some((s: any) => s.severity === 'high' || s.severity === 'critical')) {
+      return 'bg-red-500 text-white';
+    }
+    
+    // Medium risk or warnings = YELLOW
+    if (riskLevel === 'medium' || warningsCount > 0 || riskSignals.some((s: any) => s.severity === 'medium')) {
+      return 'bg-yellow-500 text-white';
+    }
+    
+    // Otherwise GREEN (completed stage)
+    return 'bg-green-500 text-white';
+  };
+  
+  // Handler: Scroll to risk details
+  const handleRiskStageClick = () => {
+    const riskElement = document.getElementById('risk-details');
+    if (riskElement) {
+      riskElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }
+  };
 
   // Sync with prop changes
   useEffect(() => {
@@ -267,6 +308,10 @@ export default function Flow2MonitorPanel({
               // Special case: Human Review (stage 4) rejected at stage 1
               const isRejectedAtHumanReview = status === 'rejected' && stage.id === 4 && !checkpointMetadata?.edd_stage;
               
+              // Special case: Risk Assessment stage (stage 2) - use risk-based coloring when completed
+              const isRiskStage = stage.id === 2;
+              const riskStageColor = (isRiskStage && isCompleted) ? getRiskStageColor(stage.id) : '';
+              
               // Special case: EDD Review (stage 5) states
               let eddStepColor = '';
               let eddStepIcon = stage.icon;
@@ -290,19 +335,22 @@ export default function Flow2MonitorPanel({
               return (
                 <div key={stage.id} className="flex items-center flex-1">
                   <div className="flex flex-col items-center">
-                    <div
+                    <button
+                      onClick={isRiskStage && isCompleted ? handleRiskStageClick : undefined}
+                      disabled={!isRiskStage || !isCompleted}
                       className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                        eddStepColor || (isRejectedAtHumanReview
+                        eddStepColor || riskStageColor || (isRejectedAtHumanReview
                           ? 'bg-red-500 text-white'
                           : isCompleted
                           ? 'bg-green-500 text-white'
                           : isCurrent
                           ? 'bg-blue-500 text-white ring-4 ring-blue-200'
                           : 'bg-slate-200 text-slate-500')
-                      }`}
+                      } ${isRiskStage && isCompleted ? 'cursor-pointer hover:ring-4 hover:ring-blue-200' : 'cursor-default'}`}
+                      title={isRiskStage && isCompleted ? 'Click to view risk details' : stage.label}
                     >
                       {eddStepIcon || (isRejectedAtHumanReview ? '✗' : isCompleted ? '✓' : stage.icon)}
-                    </div>
+                    </button>
                     <div
                       className={`mt-1 text-xs font-medium text-center ${
                         isRejectedAtHumanReview ? 'text-red-700' : isCurrent ? 'text-blue-700' : 'text-slate-600'
