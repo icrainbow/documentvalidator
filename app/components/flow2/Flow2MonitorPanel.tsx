@@ -8,6 +8,7 @@ export interface CheckpointMetadata {
   approval_email_to?: string;
   approval_sent_at?: string;
   reminder_sent_at?: string;
+  decision?: 'approve' | 'reject'; // NEW: Stage 1 decision
   decision_comment?: string;
   decided_by?: string;
   decided_at?: string;
@@ -22,7 +23,7 @@ export interface CheckpointMetadata {
     status: string;
     approval_email_to?: string;
     approval_sent_at?: string;
-    decision?: string;
+    decision?: 'approve' | 'reject'; // EDD decision
     decided_at?: string;
     decided_by?: string;
   };
@@ -101,11 +102,17 @@ export default function Flow2MonitorPanel({
   const [reminderDisabled, setReminderDisabled] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
-  // NEW: Detect if workflow is fully completed (EDD approved or Stage 1 approved)
-  const isFullyCompleted = status === 'completed' && (
-    checkpointMetadata?.final_decision === 'approved' ||
-    checkpointMetadata?.final_decision === 'approved_with_edd'
-  );
+  // NEW: Detect if workflow is fully completed
+  // Logic: Check if the LAST approval stage (whichever was executed) is approved
+  const isFullyCompleted = (() => {
+    // If EDD stage exists, it's the last approval stage - check its decision
+    if (checkpointMetadata?.edd_stage) {
+      return checkpointMetadata.edd_stage.decision === 'approve';
+    }
+    // Otherwise, Stage 1 (Human Review) is the last approval stage
+    // Check if status is completed AND Stage 1 was approved (not rejected)
+    return status === 'completed' && checkpointMetadata?.decision === 'approve';
+  })();
   
   // Helper: Get risk-based stage color
   const getRiskStageColor = (stageId: number): string => {
@@ -328,6 +335,10 @@ export default function Flow2MonitorPanel({
               const isRiskStage = stage.id === 2;
               const riskStageColor = (isRiskStage && isCompleted) ? getRiskStageColor(stage.id) : '';
               
+              // Special case: Final Report (stage 6) - show as completed (green) when fully approved
+              const isFinalReport = stage.id === 6;
+              const finalReportCompleted = isFinalReport && isFullyCompleted;
+              
               // Special case: EDD Review (stage 5) states
               let eddStepColor = '';
               let eddStepIcon = stage.icon;
@@ -355,7 +366,10 @@ export default function Flow2MonitorPanel({
                       onClick={isRiskStage && isCompleted ? handleRiskStageClick : undefined}
                       disabled={!isRiskStage || !isCompleted}
                       className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                        eddStepColor || riskStageColor || (isRejectedAtHumanReview
+                        eddStepColor || 
+                        riskStageColor || 
+                        (finalReportCompleted ? 'bg-green-500 text-white' : '') || // Final Report green when fully approved
+                        (isRejectedAtHumanReview
                           ? 'bg-red-500 text-white'
                           : isCompleted
                           ? 'bg-green-500 text-white'
@@ -365,7 +379,7 @@ export default function Flow2MonitorPanel({
                       } ${isRiskStage && isCompleted ? 'cursor-pointer hover:ring-4 hover:ring-blue-200' : 'cursor-default'}`}
                       title={isRiskStage && isCompleted ? 'Click to view risk details' : stage.label}
                     >
-                      {eddStepIcon || (isRejectedAtHumanReview ? '✗' : isCompleted ? '✓' : stage.icon)}
+                      {eddStepIcon || (isRejectedAtHumanReview ? '✗' : (isCompleted || finalReportCompleted) ? '✓' : stage.icon)}
                     </button>
                     <div
                       className={`mt-1 text-xs font-medium text-center ${
