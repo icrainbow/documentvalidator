@@ -101,17 +101,34 @@ Purple gradient panel with 3 sections:
   → Mapped: 3-layer structure (BVI → Cayman → Swiss trust)
 ```
 
-**Section 2: Parallel Skill Invocation**
+**Section 2: Parallel Skill Invocation** ⚡ **WITH LIVE ANIMATION!**
+
+Watch the skills execute in parallel:
+- **t=400ms**: Document Retrieval starts (blue "RUNNING", spinner, progress bar 10%)
+- **t=650ms**: Regulatory Lookup starts (now 2 skills running!)
+- **t=900ms**: Corporate Structure starts (all 3 running simultaneously!)
+- **t=2000ms**: Regulatory Lookup completes (green "DONE", progress 100%)
+- **t=2600ms**: Document Retrieval completes
+- **t=3200ms**: Corporate Structure completes
+
+**Final State:**
 ```
-[DONE] Document Retrieval (1200ms)
+[DONE] Document Retrieval (1200ms) ✓
   Fetched Wealth division Q4 2024 annual report (internal DB)
+  Progress: ████████████████████ 100%
 
-[DONE] Regulatory Lookup (950ms)
+[DONE] Regulatory Lookup (950ms) ✓
   Found policy update: Dec 1 2025 — Offshore holdings require EDD
+  Progress: ████████████████████ 100%
 
-[DONE] Corporate Structure Analyzer (1450ms)
+[DONE] Corporate Structure Analyzer (1450ms) ✓
   Traced beneficial ownership: 3-layer offshore chain identified
+  Progress: ████████████████████ 100%
 ```
+
+**Controls:**
+- **"Skip →"** button in header: Click to jump to final state instantly
+- **"🔄 Replay"** button (after completion): Restart the animation
 
 **Section 3: Highlight Findings**
 ```
@@ -160,9 +177,13 @@ Click **"🤖 Agents"** button to see additional debug info (not part of Phase 8
 ## Expected Output Summary
 
 ✅ **Flow Monitor**: Rejection status + reason + timestamp  
-✅ **Phase 8 Panel**: Tasks (A/B/C) + Skills (3 parallel) + Findings (3 cards)  
+✅ **Phase 8 Panel**: Tasks (A/B/C) + **ANIMATED Skills** (3 parallel with spinners/progress) + Findings (3 cards)  
+✅ **Animation**: Staggered skill starts (400/650/900ms), completions (2000/2600/3200ms), findings reveal (3300ms)  
+✅ **Controls**: Skip button (instant final state) + Replay button (restart animation)  
 ✅ **Logic Graph**: 6 nodes with EDD injected after Human Review  
 ✅ **Evidence Dashboard**: 3 columns (comment | PDF | structure tree)  
+
+**Total animation time:** ~3.6 seconds (or instant with Skip)  
 
 ---
 
