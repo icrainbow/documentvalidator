@@ -11,9 +11,10 @@ import Flow2RightPanel from '../components/flow2/Flow2RightPanel';
 import Flow2DerivedTopics from '../components/flow2/Flow2DerivedTopics';
 import Flow2TopicMoreInputs from '../components/flow2/Flow2TopicMoreInputs';
 import Flow2ModeSwitchModal from '../components/flow2/Flow2ModeSwitchModal';
-import Flow2KeyTopicsPanel from '../components/flow2/Flow2KeyTopicsPanel';
+import TopicSummariesPanel from '../components/shared/TopicSummariesPanel';
 import Flow2RiskDetailsPanel, { type RiskLevel } from '../components/flow2/Flow2RiskDetailsPanel';
-import type { TopicSummary } from '@/app/lib/flow2/kycTopicsSchema';
+import type { GenericTopicSummary } from '@/app/lib/topicSummaries/types';
+import { KYC_FLOW2_CONFIG, IT_BULLETIN_CONFIG } from '@/app/lib/topicSummaries/configs';
 import { KYC_TOPIC_IDS } from '@/app/lib/flow2/kycTopicsSchema';
 import { mapIssuesToRiskInputs } from '@/app/lib/flow2/issueAdapter';
 import type { FlowStatus, CheckpointMetadata, RiskData } from '../components/flow2/Flow2MonitorPanel';
@@ -592,6 +593,11 @@ function DocumentPageContent() {
   const [flow2TopicSummaries, setFlow2TopicSummaries] = useState<any[]>([]); // TopicSummary[] from API
   const [topicSummariesRunId, setTopicSummariesRunId] = useState<string | null>(null);
   const [isLoadingTopicSummaries, setIsLoadingTopicSummaries] = useState(false);
+  
+  // ✅ IT Bulletin Topics Summary state (generic engine, IT config)
+  const [itBulletinTopicSummaries, setItBulletinTopicSummaries] = useState<any[]>([]);
+  const [itTopicSummariesRunId, setItTopicSummariesRunId] = useState<string | null>(null);
+  const [isLoadingItTopicSummaries, setIsLoadingItTopicSummaries] = useState(false);
   const [derivedTopics, setDerivedTopics] = useState<DerivedTopic[]>([]);
   const [highlightedTopicKey, setHighlightedTopicKey] = useState<string | null>(null);
   const [moreInputsModal, setMoreInputsModal] = useState<{ isOpen: boolean; topicKey: TopicKey | null; topic: DerivedTopic | null }>({
@@ -1705,7 +1711,16 @@ function DocumentPageContent() {
         
         // ✅ STEP 4: Call topic summaries endpoint (waiting_human path)
         const runIdForTopics = data.run_id || `run-${Date.now()}`;
-        callTopicSummariesEndpoint(runIdForTopics, flow2Documents, data.issues || []);
+        callGenericTopicSummariesEndpoint(
+          '/api/flow2/topic-summaries',
+          runIdForTopics,
+          flow2Documents,
+          KYC_FLOW2_CONFIG.topic_ids,
+          data.issues || [],
+          setFlow2TopicSummaries,
+          setIsLoadingTopicSummaries,
+          setTopicSummariesRunId
+        );
         
         setGraphReviewTrace(data.graphReviewTrace || null);
         setGraphTopics(data.topicSections || []);
@@ -1760,7 +1775,16 @@ function DocumentPageContent() {
       
       // ✅ STEP 4: Call topic summaries endpoint (Flow2 only, non-blocking)
       const runIdForTopics = data.run_id || data.graphReviewTrace?.summary?.runId || `run-${Date.now()}`;
-      callTopicSummariesEndpoint(runIdForTopics, flow2Documents, data.issues || []);
+      callGenericTopicSummariesEndpoint(
+        '/api/flow2/topic-summaries',
+        runIdForTopics,
+        flow2Documents,
+        KYC_FLOW2_CONFIG.topic_ids,
+        data.issues || [],
+        setFlow2TopicSummaries,
+        setIsLoadingTopicSummaries,
+        setTopicSummariesRunId
+      );
       
       // Update graph trace
       setGraphReviewTrace(data.graphReviewTrace || null);
@@ -1843,58 +1867,64 @@ function DocumentPageContent() {
   };
 
   /**
-   * ✅ STEP 4: Call Topic Summaries Endpoint (Flow2 only)
+   * ✅ Generic Topic Summaries Endpoint Call (KYC or IT)
    * 
-   * Calls /api/flow2/topic-summaries with multi-document aggregation.
-   * Always returns 8 canonical topic summaries with risk linking.
+   * Config-driven: can call any topic summaries endpoint.
    * Non-blocking: failure doesn't break main review flow.
    */
-  const callTopicSummariesEndpoint = async (
+  const callGenericTopicSummariesEndpoint = async (
+    endpoint: string,  // "/api/flow2/topic-summaries" or "/api/it-bulletin/topic-summaries"
     runId: string,
     documents: Flow2Document[],
-    risks: any[] // currentIssues for risk linking
+    topicIds: readonly string[],
+    risks: any[] | undefined,
+    setSummaries: (data: GenericTopicSummary[]) => void,
+    setLoading: (loading: boolean) => void,
+    setRunId: (id: string) => void
   ) => {
-    setIsLoadingTopicSummaries(true);
+    setLoading(true);
     
     try {
-      console.log(`[TopicSummaries] Calling endpoint: run_id=${runId}, docs=${documents.length}, risks=${risks.length}`);
+      console.log(`[TopicSummaries/${endpoint}] Calling: run_id=${runId}, docs=${documents.length}, risks=${risks?.length || 0}`);
       
-      // Map currentIssues to RiskInput format (PATCH 4: repo-accurate)
-      const riskInputs = mapIssuesToRiskInputs(risks);
+      const requestBody: any = {
+        run_id: runId,
+        documents: documents.map(d => ({
+          doc_id: d.doc_id,
+          filename: d.filename,
+          text: d.text,
+        })),
+        topics: [...topicIds],
+      };
       
-      const response = await fetch('/api/flow2/topic-summaries', {
+      // Add risks only if provided (KYC uses this, IT doesn't)
+      if (risks && risks.length > 0) {
+        const riskInputs = mapIssuesToRiskInputs(risks);
+        requestBody.risks = riskInputs;
+      }
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          run_id: runId,
-          documents: documents.map(d => ({
-            doc_id: d.doc_id,
-            filename: d.filename,
-            text: d.text,
-          })),
-          topics: KYC_TOPIC_IDS, // ✅ PATCH 1: Explicit topics array (always 8)
-          risks: riskInputs, // ✅ PATCH 1: Optional risks for linking
-        }),
+        body: JSON.stringify(requestBody),
       });
       
       const data = await response.json();
       
-      // ✅ PATCH 2: Branch on union response (Success | Error)
-      if (data.ok === true && data.topic_summaries && data.topic_summaries.length === 8) {
-        setFlow2TopicSummaries(data.topic_summaries);
-        setTopicSummariesRunId(runId);
-        console.log('[TopicSummaries] ✓ Loaded 8 summaries with risk linkage');
+      // Branch on union response (Success | Error)
+      if (data.ok === true && data.topic_summaries && data.topic_summaries.length > 0) {
+        setSummaries(data.topic_summaries);
+        setRunId(runId);
+        console.log(`[TopicSummaries/${endpoint}] ✓ Loaded ${data.topic_summaries.length} summaries`);
       } else if (data.ok === false) {
-        console.warn('[TopicSummaries] API returned error:', data.error);
-        // Non-blocking: show console warning only (UI remains usable)
+        console.warn(`[TopicSummaries/${endpoint}] API returned error:`, data.error);
       } else {
-        console.error('[TopicSummaries] Invalid response shape:', data);
+        console.error(`[TopicSummaries/${endpoint}] Invalid response shape:`, data);
       }
     } catch (error: any) {
-      console.error('[TopicSummaries] Request failed:', error.message);
-      // Silent failure - don't block main flow
+      console.error(`[TopicSummaries/${endpoint}] Request failed:`, error.message);
     } finally {
-      setIsLoadingTopicSummaries(false);
+      setLoading(false);
     }
   };
 
@@ -3534,6 +3564,21 @@ function DocumentPageContent() {
   // Case 4 Handlers
   const handleEnterITReview = () => {
     setCase4Active(true);
+    
+    // Trigger IT topic summaries generation
+    if (flow2Documents.length > 0) {
+      const itRunId = `it-review-${Date.now()}`;
+      callGenericTopicSummariesEndpoint(
+        '/api/it-bulletin/topic-summaries',
+        itRunId,
+        flow2Documents,
+        IT_BULLETIN_CONFIG.topic_ids,
+        undefined, // IT doesn't use risk linking
+        setItBulletinTopicSummaries,
+        setIsLoadingItTopicSummaries,
+        setItTopicSummariesRunId
+      );
+    }
   };
 
   const handleExitITReview = () => {
@@ -3749,12 +3794,14 @@ function DocumentPageContent() {
                 </div>
               )}
               
-              {/* Flow2: Topic Summary Panel - Only show for KYC Review, not IT Impact Review */}
-              {isFlow2 && !case4Active && (
-                <Flow2KeyTopicsPanel
+              {/* Flow2: Topic Summary Panel - ALWAYS VISIBLE, switches mode by config */}
+              {isFlow2 && (
+                <TopicSummariesPanel
+                  panelTitle={case4Active ? IT_BULLETIN_CONFIG.panel_title : KYC_FLOW2_CONFIG.panel_title}
+                  panelSubtitle={case4Active ? IT_BULLETIN_CONFIG.panel_subtitle : KYC_FLOW2_CONFIG.panel_subtitle}
+                  topicSummaries={case4Active ? itBulletinTopicSummaries : flow2TopicSummaries}
+                  isLoading={case4Active ? isLoadingItTopicSummaries : isLoadingTopicSummaries}
                   documents={flow2Documents}
-                  topicSummaries={flow2TopicSummaries}
-                  isLoading={isLoadingTopicSummaries}
                 />
               )}
               
