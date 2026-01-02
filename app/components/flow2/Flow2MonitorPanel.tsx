@@ -299,6 +299,55 @@ export default function Flow2MonitorPanel({
           </p>
         </div>
       )}
+      
+      {/* Rejection Details */}
+      {status === 'rejected' && checkpointMetadata?.decision_comment && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">❌</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-900 mb-2">
+                Rejection Reason
+              </p>
+              <p className="text-sm text-red-800 leading-relaxed whitespace-pre-wrap bg-white border border-red-200 rounded p-3">
+                {checkpointMetadata.decision_comment}
+              </p>
+              {checkpointMetadata.decided_by && (
+                <p className="text-xs text-red-600 mt-2">
+                  <strong>Rejected by:</strong> {checkpointMetadata.decided_by}
+                </p>
+              )}
+              {checkpointMetadata.decided_at && (
+                <p className="text-xs text-red-600 mt-1">
+                  <strong>Date:</strong> {formatTimeAgo(checkpointMetadata.decided_at)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Approval Details */}
+      {status === 'completed' && checkpointMetadata?.decided_by && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">✅</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-green-900 mb-1">
+                Workflow Approved
+              </p>
+              <p className="text-xs text-green-700 mb-1">
+                <strong>Approved by:</strong> {checkpointMetadata.decided_by}
+              </p>
+              {checkpointMetadata.decided_at && (
+                <p className="text-xs text-green-600">
+                  <strong>Date:</strong> {formatTimeAgo(checkpointMetadata.decided_at)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Resuming Message */}
       {status === 'resuming' && checkpointMetadata?.decided_by && (

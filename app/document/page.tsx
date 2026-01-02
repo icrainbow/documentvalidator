@@ -681,6 +681,87 @@ function DocumentPageContent() {
     }
   }, [isFlow2, searchParams]);
   
+  // Flow2: Load checkpoint state when docKey is present (e.g., after approval/rejection)
+  useEffect(() => {
+    if (!isFlow2 || !docKey) return;
+    
+    // Only load if we don't already have documents (avoid overwriting current work)
+    if (flow2Documents.length > 0) {
+      console.log('[Flow2] Skipping checkpoint load - documents already present');
+      return;
+    }
+    
+    console.log('[Flow2] Loading checkpoint for run_id:', docKey);
+    
+    // Poll for checkpoint status
+    const loadCheckpoint = async () => {
+      try {
+        const response = await fetch(`/api/flow2/approvals/poll?run_id=${docKey}`);
+        if (!response.ok) {
+          console.warn('[Flow2] Failed to load checkpoint:', response.status);
+          return;
+        }
+        
+        const data = await response.json();
+        console.log('[Flow2] Checkpoint data loaded:', data);
+        
+        // Restore documents from checkpoint
+        if (data.checkpoint_metadata?.documents) {
+          const restoredDocs: Flow2Document[] = data.checkpoint_metadata.documents.map((doc: any) => ({
+            id: doc.doc_id || `doc-${Date.now()}`,
+            filename: doc.filename || 'Untitled',
+            text: doc.text || doc.content || '',
+            uploadedAt: new Date()
+          }));
+          
+          setFlow2Documents(restoredDocs);
+          console.log('[Flow2] Restored', restoredDocs.length, 'document(s) from checkpoint');
+        }
+        
+        // Restore flow monitor state
+        if (data.status) {
+          const statusMap: Record<string, FlowStatus> = {
+            'waiting_human': 'waiting_human',
+            'approved': 'completed',
+            'rejected': 'rejected'
+          };
+          setFlowMonitorStatus(statusMap[data.status] || 'idle');
+          setFlowMonitorRunId(docKey);
+          
+          if (data.checkpoint_metadata) {
+            setFlowMonitorMetadata(data.checkpoint_metadata);
+          }
+        }
+        
+        // Restore issues if present
+        if (data.checkpoint_metadata?.graph_state?.issues) {
+          setCurrentIssues(data.checkpoint_metadata.graph_state.issues);
+        }
+        
+        // Restore topics if present
+        if (data.checkpoint_metadata?.graph_state?.topicSections) {
+          setGraphTopics(data.checkpoint_metadata.graph_state.topicSections);
+        }
+        
+        // Add system message
+        const statusLabel = data.status === 'approved' ? 'Approved' : 
+                           data.status === 'rejected' ? 'Rejected' : 
+                           data.status === 'waiting_human' ? 'Awaiting Approval' : 'Unknown';
+        
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          agent: 'System',
+          content: `✓ Workflow restored from checkpoint\n\nRun ID: ${docKey}\nStatus: ${statusLabel}\nDocuments: ${data.checkpoint_metadata?.documents?.length || 0}`
+        }]);
+        
+      } catch (error: any) {
+        console.error('[Flow2] Failed to load checkpoint:', error);
+      }
+    };
+    
+    loadCheckpoint();
+  }, [isFlow2, docKey, flow2Documents.length]);
+  
   // Auto-save session on state changes
   useEffect(() => {
     // Only save if we have a sessionId

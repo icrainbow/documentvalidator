@@ -72,6 +72,9 @@ export async function GET(request: Request) {
         decision_comment: checkpoint.decision_comment,
         decided_by: checkpoint.decided_by,
         decided_at: checkpoint.decided_at,
+        // Include documents and graph_state for restoration
+        documents: checkpoint.documents,
+        graph_state: checkpoint.graph_state,
         // Demo fields (optional)
         ...(((checkpoint as any).demo_mode) && {
           demo_mode: (checkpoint as any).demo_mode,
@@ -175,6 +178,9 @@ export async function GET(request: Request) {
       approval_email_to: checkpoint.approval_email_to,
       approval_sent_at: checkpoint.approval_sent_at,
       reminder_sent_at: checkpoint.reminder_sent_at,
+      // Include documents and graph_state for restoration
+      documents: checkpoint.documents,
+      graph_state: checkpoint.graph_state,
       // Demo fields (optional) - should not be present in waiting_human state
       // but include for consistency if somehow set
       ...(((checkpoint as any).demo_mode) && {
