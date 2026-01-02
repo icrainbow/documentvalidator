@@ -1,93 +1,186 @@
 'use client';
 
 /**
- * Flow2KeyTopicsPanel
+ * Flow2KeyTopicsPanel - "KYC Topics Summary"
  * 
- * Displays key topics extracted from uploaded documents.
- * Shows DOCUMENT CONTENT SUMMARIES only (NOT risk findings).
+ * Displays LLM-generated KYC topic summaries (ALWAYS 8 fixed topics).
+ * Shows DOCUMENT CONTENT SUMMARIES only (NOT risk reasoning).
  * 
- * Data source: extracted_topics from orchestrator (deterministic, stable across runs)
+ * FEATURES:
+ * - Fixed 8-topic template (SSOT from kycTopicsSchema)
+ * - Multi-document aggregated summaries (from LLM API)
+ * - Coverage badges (PRESENT/WEAK/MISSING)
+ * - Evidence snippets with doc attribution
+ * - Risk highlighting (red=HIGH, yellow=MEDIUM) with click-to-scroll
+ * 
+ * DATA SOURCE:
+ * - Flow2: flow2TopicSummaries (from /api/flow2/topic-summaries)
+ * - Flow1: Not applicable (uses different mechanism)
  */
 
 import React, { useState } from 'react';
-
-interface ExtractedTopic {
-  title: string;
-  summary: string;
-  evidence: string[];
-  coverage: 'complete' | 'partial' | 'missing';
-}
+import type { TopicSummary } from '@/app/lib/flow2/kycTopicsSchema';
 
 interface Flow2KeyTopicsPanelProps {
-  extractedTopics?: ExtractedTopic[];
+  topicSummaries?: TopicSummary[];
   documents: any[];
+  isLoading?: boolean;
 }
 
 export default function Flow2KeyTopicsPanel({
-  extractedTopics,
+  topicSummaries,
   documents,
+  isLoading = false,
 }: Flow2KeyTopicsPanelProps) {
   const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // EMPTY STATES
+  // ═══════════════════════════════════════════════════════════════════════
   
   if (documents.length === 0) {
     return (
       <div className="mb-6 bg-slate-50 border-2 border-slate-300 rounded-lg p-5">
         <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
           <span className="text-xl">📊</span>
-          Key Topics Extracted
+          KYC Topics Summary
         </h3>
         <p className="text-sm text-slate-600 italic">
-          Upload documents to see extracted key topics
+          Upload documents to see KYC topic summaries
         </p>
       </div>
     );
   }
   
-  if (!extractedTopics || extractedTopics.length === 0) {
+  if (isLoading) {
     return (
       <div className="mb-6 bg-slate-50 border-2 border-slate-300 rounded-lg p-5">
         <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
           <span className="text-xl">📊</span>
-          Key Topics Extracted
+          KYC Topics Summary
+        </h3>
+        <div className="flex items-center gap-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-600"></div>
+          <p className="text-sm text-slate-600">
+            Generating topic summaries from {documents.length} document(s)...
+          </p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!topicSummaries || topicSummaries.length === 0) {
+    return (
+      <div className="mb-6 bg-slate-50 border-2 border-slate-300 rounded-lg p-5">
+        <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
+          <span className="text-xl">📊</span>
+          KYC Topics Summary
         </h3>
         <p className="text-sm text-slate-600">
-          {documents.length} document(s) loaded. Run review to extract topics.
+          {documents.length} document(s) loaded. Run Graph KYC Review to generate summaries.
         </p>
       </div>
     );
   }
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // HELPER: RISK HIGHLIGHTING LOGIC
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  /**
+   * Determine risk highlight color for topic card
+   * Returns: 'red' | 'yellow' | null
+   */
+  const getRiskHighlight = (linkedRisks?: any[]): 'red' | 'yellow' | null => {
+    if (!linkedRisks || linkedRisks.length === 0) return null;
+    
+    const hasHigh = linkedRisks.some(r => r.severity === 'high');
+    const hasMedium = linkedRisks.some(r => r.severity === 'medium');
+    
+    if (hasHigh) return 'red';
+    if (hasMedium) return 'yellow';
+    return null;
+  };
+  
+  /**
+   * Scroll to Risk Details panel when user clicks "Related Risks"
+   */
+  const handleRiskLinkClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't toggle topic expansion
+    
+    const riskElement = document.getElementById('risk-details');
+    if (riskElement) {
+      const rect = riskElement.getBoundingClientRect();
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const targetY = rect.top + scrollTop - 100;
+      
+      window.scrollTo({
+        top: targetY,
+        behavior: 'smooth',
+      });
+    } else {
+      console.warn('[Flow2KeyTopicsPanel] Risk details element not found (id="risk-details")');
+    }
+  };
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // RENDER: FIXED 8-TOPIC TEMPLATE
+  // ═══════════════════════════════════════════════════════════════════════
   
   return (
     <div className="mb-6 bg-slate-50 border-2 border-slate-300 rounded-lg p-5">
       <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
         <span className="text-xl">📊</span>
-        Key Topics Extracted
+        KYC Topics Summary
       </h3>
       <p className="text-xs text-slate-600 mb-3">
-        Document content summary (what the documents say)
+        LLM-generated summary of customer information across all documents
       </p>
       
       <div className="space-y-2">
-        {extractedTopics.map((topic, idx) => {
-          const isExpanded = expandedTopic === topic.title;
+        {topicSummaries.map((topic) => {
+          const isExpanded = expandedTopic === topic.topic_id;
+          const riskHighlight = getRiskHighlight(topic.linked_risks);
           
-          // Coverage badge color
+          // Coverage badge styling
           const coverageBadge = 
-            topic.coverage === 'complete' ? 'bg-green-100 text-green-700' :
-            topic.coverage === 'partial' ? 'bg-yellow-100 text-yellow-700' :
+            topic.coverage === 'PRESENT' ? 'bg-green-100 text-green-700' :
+            topic.coverage === 'WEAK' ? 'bg-yellow-100 text-yellow-700' :
             'bg-gray-100 text-gray-600';
           
+          // Risk border styling
+          const riskBorderClass =
+            riskHighlight === 'red' ? 'border-red-400 border-l-4' :
+            riskHighlight === 'yellow' ? 'border-yellow-400 border-l-4' :
+            'border-slate-300';
+          
           return (
-            <div key={idx} className="border-2 border-slate-300 rounded-lg overflow-hidden bg-white">
+            <div
+              key={topic.topic_id}
+              className={`border-2 rounded-lg overflow-hidden bg-white ${riskBorderClass}`}
+            >
               <button
-                onClick={() => setExpandedTopic(isExpanded ? null : topic.title)}
+                onClick={() => setExpandedTopic(isExpanded ? null : topic.topic_id)}
                 className="w-full px-3 py-2 flex items-center justify-between hover:bg-slate-50 transition-colors"
               >
                 <div className="flex items-center gap-2 flex-1 text-left">
                   <span className="font-semibold text-sm text-slate-800">{topic.title}</span>
                   <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${coverageBadge}`}>
-                    {topic.coverage.toUpperCase()}
+                    {topic.coverage}
                   </span>
+                  
+                  {/* Risk severity indicator */}
+                  {riskHighlight && (
+                    <span
+                      className={`text-xs px-1.5 py-0.5 rounded font-semibold ${
+                        riskHighlight === 'red'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}
+                    >
+                      {riskHighlight === 'red' ? '⚠️ HIGH' : '⚠️ MEDIUM'}
+                    </span>
+                  )}
                 </div>
                 <span className="text-slate-600 text-sm ml-2">
                   {isExpanded ? '▼' : '▶'}
@@ -96,19 +189,72 @@ export default function Flow2KeyTopicsPanel({
               
               {isExpanded && (
                 <div className="px-3 pb-3 pt-1 bg-slate-50/50 border-t border-slate-200">
+                  {/* Summary bullets */}
                   <div className="mb-2">
                     <p className="text-xs font-semibold text-slate-700 mb-1">Summary:</p>
-                    <p className="text-xs text-slate-700 leading-relaxed">{topic.summary}</p>
+                    <ul className="text-xs text-slate-700 space-y-1 leading-relaxed">
+                      {topic.bullets.map((bullet, idx) => (
+                        <li key={idx} className="flex gap-1.5">
+                          <span className="text-slate-500 mt-0.5">•</span>
+                          <span>{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                   
-                  {topic.evidence.length > 0 && (
+                  {/* Evidence snippets */}
+                  {topic.evidence && topic.evidence.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-slate-200">
-                      <p className="text-xs font-semibold text-slate-700 mb-1">Source documents:</p>
-                      <ul className="text-xs text-slate-600 space-y-0.5">
+                      <p className="text-xs font-semibold text-slate-700 mb-1">Evidence:</p>
+                      <ul className="text-xs text-slate-600 space-y-1">
                         {topic.evidence.map((ev, evIdx) => (
-                          <li key={evIdx}>• {ev}</li>
+                          <li key={evIdx} className="flex gap-1.5">
+                            <span className="text-slate-400 mt-0.5">→</span>
+                            <span>
+                              &quot;{ev.quote}&quot;
+                              {ev.doc_id && (
+                                <span className="text-slate-500 ml-1">({ev.doc_id})</span>
+                              )}
+                            </span>
+                          </li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+                  
+                  {/* Related risks (compact, click-to-scroll) */}
+                  {topic.linked_risks && topic.linked_risks.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-slate-200">
+                      <p className="text-xs font-semibold text-slate-700 mb-1">
+                        Related Risks ({topic.linked_risks.length}):
+                      </p>
+                      <ul className="text-xs space-y-0.5">
+                        {topic.linked_risks.slice(0, 3).map((risk, riskIdx) => (
+                          <li key={riskIdx} className="flex items-center gap-1.5">
+                            <span
+                              className={`inline-block w-2 h-2 rounded-full ${
+                                risk.severity === 'high'
+                                  ? 'bg-red-500'
+                                  : risk.severity === 'medium'
+                                  ? 'bg-yellow-500'
+                                  : 'bg-gray-400'
+                              }`}
+                            />
+                            <span className="text-slate-700">{risk.title}</span>
+                          </li>
+                        ))}
+                        {topic.linked_risks.length > 3 && (
+                          <li className="text-slate-500 italic">
+                            +{topic.linked_risks.length - 3} more
+                          </li>
+                        )}
+                      </ul>
+                      <button
+                        onClick={handleRiskLinkClick}
+                        className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                      >
+                        → View full risk details
+                      </button>
                     </div>
                   )}
                 </div>
@@ -120,7 +266,7 @@ export default function Flow2KeyTopicsPanel({
       
       <div className="mt-3 pt-3 border-t border-slate-300">
         <p className="text-xs text-slate-600 italic">
-          💡 Topics are extracted from document content. For risk assessment details, see Risk Assessment stage.
+          💡 Topics show what the documents say (content summary). For risk reasoning and actions, see Risk Assessment details.
         </p>
       </div>
     </div>

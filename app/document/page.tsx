@@ -13,6 +13,9 @@ import Flow2TopicMoreInputs from '../components/flow2/Flow2TopicMoreInputs';
 import Flow2ModeSwitchModal from '../components/flow2/Flow2ModeSwitchModal';
 import Flow2KeyTopicsPanel from '../components/flow2/Flow2KeyTopicsPanel';
 import Flow2RiskDetailsPanel, { type RiskLevel } from '../components/flow2/Flow2RiskDetailsPanel';
+import type { TopicSummary } from '@/app/lib/flow2/kycTopicsSchema';
+import { KYC_TOPIC_IDS } from '@/app/lib/flow2/kycTopicsSchema';
+import { mapIssuesToRiskInputs } from '@/app/lib/flow2/issueAdapter';
 import type { FlowStatus, CheckpointMetadata, RiskData } from '../components/flow2/Flow2MonitorPanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -581,9 +584,14 @@ function DocumentPageContent() {
   const [flow2ActiveScenario, setFlow2ActiveScenario] = useState<string>('');
   const [graphReviewTrace, setGraphReviewTrace] = useState<any | null>(null);
   const [graphTopics, setGraphTopics] = useState<any[]>([]);
-  const [extractedTopics, setExtractedTopics] = useState<any[]>([]); // NEW: For UI display (document summaries)
+  const [extractedTopics, setExtractedTopics] = useState<any[]>([]); // DEPRECATED in Flow2: Use flow2TopicSummaries
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [coverageGaps, setCoverageGaps] = useState<any[]>([]);
+  
+  // ✅ STEP 4: Flow2-only KYC Topics Summary state (LLM-generated, SSOT)
+  const [flow2TopicSummaries, setFlow2TopicSummaries] = useState<any[]>([]); // TopicSummary[] from API
+  const [topicSummariesRunId, setTopicSummariesRunId] = useState<string | null>(null);
+  const [isLoadingTopicSummaries, setIsLoadingTopicSummaries] = useState(false);
   const [derivedTopics, setDerivedTopics] = useState<DerivedTopic[]>([]);
   const [highlightedTopicKey, setHighlightedTopicKey] = useState<string | null>(null);
   const [moreInputsModal, setMoreInputsModal] = useState<{ isOpen: boolean; topicKey: TopicKey | null; topic: DerivedTopic | null }>({
@@ -1694,9 +1702,14 @@ function DocumentPageContent() {
         
         // Update UI state to show issues/trace (but NOT approval controls)
         setCurrentIssues(data.issues || []);
+        
+        // ✅ STEP 4: Call topic summaries endpoint (waiting_human path)
+        const runIdForTopics = data.run_id || `run-${Date.now()}`;
+        callTopicSummariesEndpoint(runIdForTopics, flow2Documents, data.issues || []);
+        
         setGraphReviewTrace(data.graphReviewTrace || null);
         setGraphTopics(data.topicSections || []);
-        setExtractedTopics(data.extracted_topics || []); // NEW: UI-friendly topic summaries
+        // setExtractedTopics(data.extracted_topics || []); // ✅ DISABLED: Use flow2TopicSummaries in Flow2
         setConflicts(data.conflicts || []);
         setCoverageGaps(data.coverageGaps || []);
         
@@ -1725,7 +1738,7 @@ function DocumentPageContent() {
         });
         setGraphReviewTrace(data.graphReviewTrace || null);
         setGraphTopics(data.topicSections || []);
-        setExtractedTopics(data.extracted_topics || []); // NEW: UI-friendly topic summaries
+        // setExtractedTopics(data.extracted_topics || []); // ✅ DISABLED: Use flow2TopicSummaries in Flow2
         
         setMessages(prev => [...prev, {
           role: 'agent',
@@ -1745,12 +1758,17 @@ function DocumentPageContent() {
       // Update issues
       setCurrentIssues(data.issues || []);
       
+      // ✅ STEP 4: Call topic summaries endpoint (Flow2 only, non-blocking)
+      const runIdForTopics = data.run_id || data.graphReviewTrace?.summary?.runId || `run-${Date.now()}`;
+      callTopicSummariesEndpoint(runIdForTopics, flow2Documents, data.issues || []);
+      
       // Update graph trace
       setGraphReviewTrace(data.graphReviewTrace || null);
       
       // Update Flow2-specific state (ISOLATED WRITES)
+      // ⚠️ DISABLE extractedTopics in Flow2 path (use flow2TopicSummaries instead)
       setGraphTopics(data.topicSections || []);
-      setExtractedTopics(data.extracted_topics || []); // NEW: UI-friendly topic summaries
+      // setExtractedTopics(data.extracted_topics || []); // ✅ DISABLED: Use flow2TopicSummaries in Flow2
       setConflicts(data.conflicts || []);
       setCoverageGaps(data.coverageGaps || []);
       
@@ -1825,6 +1843,62 @@ function DocumentPageContent() {
   };
 
   /**
+   * ✅ STEP 4: Call Topic Summaries Endpoint (Flow2 only)
+   * 
+   * Calls /api/flow2/topic-summaries with multi-document aggregation.
+   * Always returns 8 canonical topic summaries with risk linking.
+   * Non-blocking: failure doesn't break main review flow.
+   */
+  const callTopicSummariesEndpoint = async (
+    runId: string,
+    documents: Flow2Document[],
+    risks: any[] // currentIssues for risk linking
+  ) => {
+    setIsLoadingTopicSummaries(true);
+    
+    try {
+      console.log(`[TopicSummaries] Calling endpoint: run_id=${runId}, docs=${documents.length}, risks=${risks.length}`);
+      
+      // Map currentIssues to RiskInput format (PATCH 4: repo-accurate)
+      const riskInputs = mapIssuesToRiskInputs(risks);
+      
+      const response = await fetch('/api/flow2/topic-summaries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          run_id: runId,
+          documents: documents.map(d => ({
+            doc_id: d.doc_id,
+            filename: d.filename,
+            text: d.text,
+          })),
+          topics: KYC_TOPIC_IDS, // ✅ PATCH 1: Explicit topics array (always 8)
+          risks: riskInputs, // ✅ PATCH 1: Optional risks for linking
+        }),
+      });
+      
+      const data = await response.json();
+      
+      // ✅ PATCH 2: Branch on union response (Success | Error)
+      if (data.ok === true && data.topic_summaries && data.topic_summaries.length === 8) {
+        setFlow2TopicSummaries(data.topic_summaries);
+        setTopicSummariesRunId(runId);
+        console.log('[TopicSummaries] ✓ Loaded 8 summaries with risk linkage');
+      } else if (data.ok === false) {
+        console.warn('[TopicSummaries] API returned error:', data.error);
+        // Non-blocking: show console warning only (UI remains usable)
+      } else {
+        console.error('[TopicSummaries] Invalid response shape:', data);
+      }
+    } catch (error: any) {
+      console.error('[TopicSummaries] Request failed:', error.message);
+      // Silent failure - don't block main flow
+    } finally {
+      setIsLoadingTopicSummaries(false);
+    }
+  };
+
+  /**
    * MILESTONE C: Handle human gate decision submission
    */
   const handleHumanGateSubmit = async (selectedOption: string, signer: string) => {
@@ -1870,7 +1944,7 @@ function DocumentPageContent() {
       // Update Flow2 state (ISOLATED)
       setGraphReviewTrace(data.graphReviewTrace || null);
       setGraphTopics(data.topicSections || []);
-      setExtractedTopics(data.extracted_topics || []); // NEW: UI-friendly topic summaries
+      // setExtractedTopics(data.extracted_topics || []); // ✅ DISABLED: Use flow2TopicSummaries in Flow2
       setConflicts(data.conflicts || []);
       setCoverageGaps(data.coverageGaps || []);
       setCurrentIssues(data.issues || []);
@@ -3693,7 +3767,8 @@ function DocumentPageContent() {
               {isFlow2 && (
                 <Flow2KeyTopicsPanel
                   documents={flow2Documents}
-                  extractedTopics={extractedTopics}
+                  topicSummaries={flow2TopicSummaries}
+                  isLoading={isLoadingTopicSummaries}
                 />
               )}
               
