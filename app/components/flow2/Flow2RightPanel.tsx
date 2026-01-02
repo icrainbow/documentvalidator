@@ -133,13 +133,19 @@ export default function Flow2RightPanel({
               {onEnterITReview && (
                 <button
                   onClick={onEnterITReview}
-                  disabled={case3Active}
+                  disabled={!hasDocuments || case3Active}
                   className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
-                    case3Active
+                    !hasDocuments || case3Active
                       ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                       : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
                   }`}
-                  title={case3Active ? 'Review blocked - resolve guardrail alert first' : ''}
+                  title={
+                    !hasDocuments 
+                      ? 'Load documents first' 
+                      : case3Active 
+                      ? 'Review blocked - resolve guardrail alert first'
+                      : ''
+                  }
                 >
                   🔧 Run IT Impact Review
                 </button>
