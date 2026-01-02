@@ -1400,7 +1400,41 @@ function DocumentPageContent() {
       const data = await response.json();
       console.log('[Flow2] Graph KYC review response:', data);
       
-      // MILESTONE C: Check if human gate required
+      // Phase 7-9: Check for HITL pause (new checkpoint-based HITL)
+      if (data.status === 'waiting_human') {
+        console.log('[Flow2/HITL] Workflow paused - awaiting human approval');
+        
+        // Update UI state to show HITL panel
+        setCurrentIssues(data.issues || []);
+        setGraphReviewTrace(data.graphReviewTrace || null);
+        setGraphTopics(data.topicSections || []);
+        setConflicts(data.conflicts || []);
+        setCoverageGaps(data.coverageGaps || []);
+        
+        // Set HITL state (new format)
+        setHumanGateState({
+          gateId: 'hitl_checkpoint',
+          prompt: `Human review required: ${(data.issues || []).filter((i: any) => i.category === 'kyc_risk' && i.severity === 'FAIL').length} high-risk KYC issue(s) detected`,
+          options: ['approve', 'reject'],
+          context: JSON.stringify({
+            run_id: data.run_id,
+            paused_at_node: data.paused_at_node,
+            checkpoint_metadata: data.checkpoint_metadata
+          }),
+          resumeToken: data.run_id || '' // Use run_id as resume token
+        });
+        
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          agent: 'KYC Risk Analyzer',
+          content: `⏸️ **Workflow Paused for Human Review**\n\n${(data.issues || []).filter((i: any) => i.category === 'kyc_risk').length} KYC risk issue(s) detected.\n\nPlease review the issues and approve or reject to continue.`
+        }]);
+        
+        setIsOrchestrating(false);
+        return;
+      }
+      
+      // MILESTONE C: Check if human gate required (legacy format)
       if (data.humanGate && data.humanGate.required) {
         // ISOLATED WRITE: Only Flow2 state
         setHumanGateState({
