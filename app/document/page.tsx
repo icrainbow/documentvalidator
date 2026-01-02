@@ -49,6 +49,9 @@ import {
 } from '../lib/reviewConfig';
 import { buildDerivedTopicsFallback, type DerivedTopic, type TopicKey } from '../lib/flow2/derivedTopicsTypes';
 import { mapIssueToTopic } from '../lib/flow2/issueTopicMapping';
+import Case2ProcessBanner, { type Case2State } from '../components/case2/Case2ProcessBanner';
+import { CASE2_DEMO_DATA, type Case2DemoData } from '../lib/case2/demoCase2Data';
+import { detectCase2Trigger } from '../lib/case2/case2Trigger';
 
 // Flow2: Input mode type (Phase 1.1)
 type Flow2InputMode = 'empty' | 'demo' | 'upload';
@@ -591,6 +594,13 @@ function DocumentPageContent() {
   
   // Phase 8: Auto-scroll guard
   const didScrollToPhase8Ref = useRef<string | null>(null);
+  
+  // Case 2: CS Integration Exception state
+  const [case2State, setCase2State] = useState<Case2State>('idle');
+  const [case2Data, setCase2Data] = useState<Case2DemoData | null>(null);
+  const [case2UploadedFiles, setCase2UploadedFiles] = useState<File[]>([]);
+  const [case2Id, setCase2Id] = useState<string | null>(null);
+  const [case2Query, setCase2Query] = useState<string>(''); // Store original query
   
   // Workspace limits
   const MAX_FLOW2_DOCUMENTS = 10;
@@ -2957,6 +2967,47 @@ function DocumentPageContent() {
         return;
       }
 
+      // CASE 2: Check for CS Integration Exception trigger (Flow2 only)
+      if (isFlow2 && detectCase2Trigger(inputValue)) {
+        // If Case 2 is already active, inform user and return
+        if (case2State !== 'idle') {
+          setMessages([...messages, userMessage]);
+          const alreadyActiveMessage: Message = {
+            role: 'agent',
+            agent: 'Case 2 Agent',
+            content: '⚠️ A Case 2 review is already in progress. Please complete or close the current review before starting a new one.'
+          };
+          setMessages(prev => [...prev, alreadyActiveMessage]);
+          setInputValue('');
+          setHasNewChatMessage(true);
+          return;
+        }
+        
+        // Trigger Case 2 flow
+        setMessages([...messages, userMessage]);
+        setInputValue('');
+        
+        // Store original query and initialize Case 2 state
+        setCase2Query(inputValue);
+        setCase2State('triggered');
+        setCase2Data(CASE2_DEMO_DATA);
+        setCase2Id(`case2_${Date.now()}`);
+        
+        // Add agent acknowledgment message
+        const ackMessage: Message = {
+          role: 'agent',
+          agent: 'Case 2 Agent',
+          content: '🔍 Analyzing CS integration exception scenario... Retrieving relevant policies and guidelines.'
+        };
+        setMessages(prev => [...prev, ackMessage]);
+        setHasNewChatMessage(true);
+        
+        // Transition to tracing state after brief delay
+        setTimeout(() => setCase2State('tracing'), 100);
+        
+        return;
+      }
+
       // Check if user is requesting AI optimization for a specific section
       const mentionedSection = detectSectionForModify(lowerInput);
       
@@ -3131,6 +3182,71 @@ function DocumentPageContent() {
     }
   };
 
+  // Case 2 Handlers
+  const handleCase2Accept = () => {
+    setCase2State('accepted');
+    const msg: Message = {
+      role: 'agent',
+      agent: 'Case 2 Agent',
+      content: '✓ Process accepted. Please upload the 3 required documents to proceed with the exception approval flow.'
+    };
+    setMessages(prev => [...prev, msg]);
+    setHasNewChatMessage(true);
+  };
+
+  const handleCase2FileUpload = (files: File[]) => {
+    setCase2UploadedFiles(files);
+    
+    // Check if all 3 required documents are covered
+    if (files.length >= 3 && case2Data) {
+      const mapFileToDocType = (filename: string): string | null => {
+        const lower = filename.toLowerCase();
+        if (lower.includes('legacy') || lower.includes('profile') || lower.includes('cs'))
+          return case2Data.required_documents[0].name;
+        if (lower.includes('waiver') || lower.includes('strategic'))
+          return case2Data.required_documents[1].name;
+        if (lower.includes('escalation') || lower.includes('committee') || lower.includes('memo'))
+          return case2Data.required_documents[2].name;
+        return null;
+      };
+      
+      const coveredDocs = new Set<string>();
+      files.forEach(file => {
+        const docType = mapFileToDocType(file.name);
+        if (docType) coveredDocs.add(docType);
+      });
+      
+      const allDocsUploaded = case2Data.required_documents.every(doc => coveredDocs.has(doc.name));
+      
+      if (allDocsUploaded) {
+        setCase2State('files_ready');
+        const msg: Message = {
+          role: 'agent',
+          agent: 'Case 2 Agent',
+          content: '✓ All required documents uploaded. You may now start the approval flow.'
+        };
+        setMessages(prev => [...prev, msg]);
+        setHasNewChatMessage(true);
+      }
+    }
+  };
+
+  const handleCase2Start = async () => {
+    if (case2State !== 'files_ready' || !case2Id) return;
+    
+    // Optional: Call backend API (currently not implemented)
+    // For demo, we'll just update state and show success message
+    
+    setCase2State('started');
+    const msg: Message = {
+      role: 'agent',
+      agent: 'Case 2 Agent',
+      content: `✓ Exception approval flow initiated. Case ID: ${case2Id}. The Joint Steering Committee will be notified for review. All stakeholders will receive automated notifications.`
+    };
+    setMessages(prev => [...prev, msg]);
+    setHasNewChatMessage(true);
+  };
+
   const getSectionColor = (status: SectionStatus) => {
     switch (status) {
       case 'pass':
@@ -3266,6 +3382,19 @@ function DocumentPageContent() {
                     />
                   )}
                 </div>
+              )}
+              
+              {/* Case 2 Demo Flow Banner */}
+              {isFlow2 && case2State !== 'idle' && case2Data && (
+                <Case2ProcessBanner
+                  state={case2State}
+                  data={case2Data}
+                  uploadedFiles={case2UploadedFiles}
+                  onAccept={handleCase2Accept}
+                  onFileUpload={handleCase2FileUpload}
+                  onStart={handleCase2Start}
+                  onTraceComplete={() => setCase2State('synthesized')}
+                />
               )}
               
               {/* REMOVED: Flow2 Human Gate Panel - approval is done via email only, not on Document page */}
