@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { applyFlow2DemoNodeStatusPolicy, isFlow2DemoMode } from '@/app/lib/flow2/demoNodeStatusPolicy';
 
 export type FlowStatus = 'idle' | 'running' | 'waiting_human' | 'resuming' | 'completed' | 'rejected' | 'error';
 
@@ -110,6 +111,9 @@ export default function Flow2MonitorPanel({
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
   const [reminderDisabled, setReminderDisabled] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // DEMO-ONLY: Detect if we should apply historical node status policy
+  const shouldApplyDemoPolicy = checkpointMetadata ? isFlow2DemoMode(checkpointMetadata) : false;
   
   // NEW: Detect if workflow is fully completed
   // UNIVERSAL RULE: If current stage reached the LAST stage (Final Report), it's fully completed
@@ -330,6 +334,23 @@ export default function Flow2MonitorPanel({
               const isRiskStage = stage.id === 2;
               const riskStageColor = (isRiskStage && isCompleted) ? getRiskStageColor(stage.id) : '';
               
+              // DEMO-ONLY: Apply historical status policy for Human Review stage
+              const isHumanStage = stage.id === 4;
+              let humanStageColor = '';
+              let humanStageIcon = stage.icon;
+              if (isHumanStage && shouldApplyDemoPolicy && isCompleted) {
+                // Check if human ever rejected (which triggers EDD)
+                const hadHumanRejection = !!(
+                  checkpointMetadata?.decision === 'reject' ||
+                  checkpointMetadata?.edd_stage // EDD only happens after rejection
+                );
+                if (hadHumanRejection) {
+                  humanStageColor = 'bg-red-500 text-white'; // RED for historical rejection
+                  humanStageIcon = '✗';
+                  console.log('[Flow2Monitor DEMO] Human stage: detected rejection → RED');
+                }
+              }
+              
               // Special case: Final Report (stage 6) - show as completed (green) when fully approved
               const isFinalReport = stage.id === 6;
               const finalReportCompleted = isFinalReport && isFullyCompleted;
@@ -362,6 +383,7 @@ export default function Flow2MonitorPanel({
                       disabled={!isRiskStage || !isCompleted}
                       className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                         eddStepColor || 
+                        humanStageColor ||  // DEMO: Human rejection color (priority after EDD)
                         riskStageColor || 
                         (finalReportCompleted ? 'bg-green-500 text-white' : '') || // Final Report green when fully approved
                         (isRejectedAtHumanReview
@@ -374,7 +396,7 @@ export default function Flow2MonitorPanel({
                       } ${isRiskStage && isCompleted ? 'cursor-pointer hover:ring-4 hover:ring-blue-200' : 'cursor-default'}`}
                       title={isRiskStage && isCompleted ? 'Click to view risk details' : stage.label}
                     >
-                      {eddStepIcon || (isRejectedAtHumanReview ? '✗' : (isCompleted || finalReportCompleted) ? '✓' : stage.icon)}
+                      {eddStepIcon || humanStageIcon || (isRejectedAtHumanReview ? '✗' : (isCompleted || finalReportCompleted) ? '✓' : stage.icon)}
                     </button>
                     <div
                       className={`mt-1 text-xs font-medium text-center ${
