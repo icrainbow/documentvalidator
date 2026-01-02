@@ -74,13 +74,13 @@ export function isAmbiguousReject(comment: string | undefined): boolean {
   // Group 1: Identity mismatch
   const group1 = [
     ['identity'],
-    ['doesn t match', 'not match', 'mismatch', 'do not match']
+    ['doesn\'t match', 'doesnt match', 'not match', 'mismatch', 'do not match', 'does not match']
   ];
   
   // Group 2: Wealth annual report + last year/2024
   const group2 = [
     ['wealth'],
-    ['annual report', 'year end report', 'year-end report', 'yearly report'],
+    ['annual report', 'year end report', 'yearly report'],
     ['last year', '2024', 'previous year']
   ];
   

@@ -42,7 +42,7 @@ export default function RejectActionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
-          decision: 'reject',
+          action: 'reject',
           reason: reason.trim(),
           signer: 'Email Approval',
         }),
