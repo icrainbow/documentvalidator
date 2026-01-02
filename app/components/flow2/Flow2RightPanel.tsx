@@ -17,6 +17,9 @@ interface Flow2RightPanelProps {
   onRetry: () => void;
   onOpenAgents: () => void;
   agentParticipants: any[];
+  // IT Impact Review props
+  onEnterITReview?: () => void;
+  case4Active?: boolean;
   // Flow Monitor props
   flowMonitorRunId?: string | null;
   flowMonitorStatus?: FlowStatus;
@@ -40,6 +43,7 @@ export default function Flow2RightPanel({
   onRetry,
   onOpenAgents,
   agentParticipants,
+  onEnterITReview,
   flowMonitorRunId,
   flowMonitorStatus = 'idle',
   flowMonitorMetadata,
@@ -124,6 +128,22 @@ export default function Flow2RightPanel({
                 {case3Active && '🚫 '}
                 {isOrchestrating ? '🔄 Running Review...' : '🕸️ Run Graph KYC Review'}
               </button>
+              
+              {/* IT Impact Review Button */}
+              {onEnterITReview && (
+                <button
+                  onClick={onEnterITReview}
+                  disabled={case3Active}
+                  className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
+                    case3Active
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
+                  }`}
+                  title={case3Active ? 'Review blocked - resolve guardrail alert first' : ''}
+                >
+                  🔧 Run IT Impact Review
+                </button>
+              )}
               
               {/* Case 3: Guardrail helper text */}
               {case3Active && (

@@ -3923,6 +3923,7 @@ function DocumentPageContent() {
                   onRetry={handleFlow2Retry}
                   onOpenAgents={() => setShowAgentsDrawer(true)}
                   agentParticipants={agentParticipants}
+                  onEnterITReview={handleEnterITReview}
                   flowMonitorRunId={flowMonitorRunId}
                   flowMonitorStatus={flowMonitorStatus}
                   flowMonitorMetadata={flowMonitorMetadata}
@@ -4048,21 +4049,6 @@ function DocumentPageContent() {
                       >
                         {isOrchestrating ? '🔄 Running Review...' : isFlow2 ? '🕸️ Run Graph KYC Review' : '🔍 Run Full Review'}
                       </button>
-                      
-                      {/* Flow2: IT Impact Review button */}
-                      {isFlow2 && (
-                        <button
-                          onClick={handleEnterITReview}
-                          disabled={case4Active}
-                          className={`w-full px-5 py-3 rounded-lg font-bold text-sm transition-all shadow-md ${
-                            case4Active
-                              ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                              : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
-                          }`}
-                        >
-                          🔧 Run IT Impact Review
-                        </button>
-                      )}
                       
                       {documentStatus.status === 'REQUIRES_SIGN_OFF' && !signOff && (
                         <button
