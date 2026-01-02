@@ -75,6 +75,8 @@ export async function GET(request: Request) {
         // Include documents and graph_state for restoration
         documents: checkpoint.documents,
         graph_state: checkpoint.graph_state,
+        // CRITICAL: Include topic_summaries for UI restoration after redirect
+        topic_summaries: checkpoint.topic_summaries,
         // NEW: Include EDD stage and final decision
         edd_stage: checkpoint.edd_stage,
         final_decision: checkpoint.final_decision,
@@ -184,6 +186,8 @@ export async function GET(request: Request) {
       // Include documents and graph_state for restoration
       documents: checkpoint.documents,
       graph_state: checkpoint.graph_state,
+      // CRITICAL: Include topic_summaries for UI restoration after redirect
+      topic_summaries: checkpoint.topic_summaries,
       // Demo fields (optional) - should not be present in waiting_human state
       // but include for consistency if somehow set
       ...(((checkpoint as any).demo_mode) && {
