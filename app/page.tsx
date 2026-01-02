@@ -83,9 +83,9 @@ export default function HomePage() {
 
         {/* Flow Selection Section */}
         <div className="mb-12">
-          <h2 className="text-2xl font-bold text-white mb-4 text-center">Choose Review Flow</h2>
+          <h2 className="text-2xl font-bold text-white mb-4 text-center">Choose a review process based on case complexity and uncertainty</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            {/* Flow 1: Agentic Batch Review */}
+            {/* Flow 1: Deterministic Review Process */}
             <div className="bg-white rounded-xl shadow-xl border-2 border-slate-200 overflow-hidden hover:border-blue-400 transition-all">
               <div className="p-8">
                 <div className="flex items-center gap-3 mb-4">
@@ -94,9 +94,9 @@ export default function HomePage() {
                   </div>
                   <h2 className="text-2xl font-bold text-slate-800">Flow 1</h2>
                 </div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-2">Agentic Batch Review</h3>
+                <h3 className="text-lg font-semibold text-slate-700 mb-2">Deterministic Review Process</h3>
                 <p className="text-slate-600 mb-6 leading-relaxed">
-                  Intelligent section-based review with adaptive scope planning. Edit sections, track changes, and get AI-driven compliance feedback with explainable decision traces.
+                  Predictable, scope-bound review for standard cases. Same inputs produce same outcomes for auditability and cost efficiency.
                 </p>
                 <button
                   onClick={handleStartNewReview}
@@ -112,7 +112,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Flow 2: KYC Graph Review (LangGraph) */}
+            {/* Flow 2: Agentic Review Process */}
             <div className="bg-white rounded-xl shadow-xl border-2 border-slate-200 overflow-hidden hover:border-purple-400 transition-all">
               <div className="p-8">
                 <div className="flex items-center gap-3 mb-4">
@@ -121,9 +121,9 @@ export default function HomePage() {
                   </div>
                   <h2 className="text-2xl font-bold text-slate-800">Flow 2</h2>
                 </div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-2">KYC Graph Review</h3>
+                <h3 className="text-lg font-semibold text-slate-700 mb-2">Agentic Review Process</h3>
                 <p className="text-slate-600 mb-6 leading-relaxed">
-                  Advanced LangGraph-powered KYC review with parallel risk checks, conflict detection, and human-in-the-loop gates for high-risk scenarios.
+                  Dynamic review for complex exceptions. Adapts scope and execution path based on signals, with human control at key decision points.
                 </p>
                 <button
                   onClick={() => router.push('/document?flow=2&scenario=kyc')}
