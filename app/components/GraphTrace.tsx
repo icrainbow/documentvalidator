@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { applyFlow2DemoNodeStatusPolicy, isFlow2DemoMode, type UiNodeStatus } from '@/app/lib/flow2/demoNodeStatusPolicy';
 
 interface GraphTraceProps {
   trace: {
@@ -33,6 +34,11 @@ interface GraphTraceProps {
     };
     degraded?: boolean;
   };
+  // NEW: Demo-only props for node status policy
+  checkpointMetadata?: any;
+  graphState?: any;
+  issues?: any[];
+  isFlow2Demo?: boolean; // Explicit flag
 }
 
 const STATUS_STYLES = {
@@ -49,8 +55,11 @@ const STATUS_ICONS = {
   failed: '✗'
 };
 
-export default function GraphTrace({ trace }: GraphTraceProps) {
+export default function GraphTrace({ trace, checkpointMetadata, graphState, issues, isFlow2Demo }: GraphTraceProps) {
   const { events, summary, degraded } = trace;
+  
+  // DEMO-ONLY: Detect if we should apply historical node status policy
+  const shouldApplyDemoPolicy = isFlow2Demo ?? (checkpointMetadata ? isFlow2DemoMode(checkpointMetadata) : false);
   
   // Calculate total duration
   const totalDuration = events
@@ -203,56 +212,71 @@ export default function GraphTrace({ trace }: GraphTraceProps) {
         </h3>
         
         <div className="space-y-3">
-          {events.map((event, idx) => (
-            <div
-              key={idx}
-              id={`trace-event-${idx}`}
-              className={`border-2 rounded-lg p-3 ${STATUS_STYLES[event.status]}`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">{STATUS_ICONS[event.status]}</span>
-                  <span className="font-bold text-sm uppercase tracking-wide">
-                    {event.node.replace(/_/g, ' ')}
-                  </span>
+          {events.map((event, idx) => {
+            // DEMO-ONLY: Apply historical node status policy
+            let displayStatus = event.status;
+            if (shouldApplyDemoPolicy) {
+              displayStatus = applyFlow2DemoNodeStatusPolicy({
+                nodeId: `node-${idx}`,
+                nodeName: event.node,
+                baseStatus: event.status,
+                checkpointMetadata,
+                graphState,
+                issues,
+              });
+            }
+            
+            return (
+              <div
+                key={idx}
+                id={`trace-event-${idx}`}
+                className={`border-2 rounded-lg p-3 ${STATUS_STYLES[displayStatus]}`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{STATUS_ICONS[displayStatus]}</span>
+                    <span className="font-bold text-sm uppercase tracking-wide">
+                      {event.node.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 text-xs">
+                    {event.durationMs !== undefined && (
+                      <span className="font-mono bg-white/50 px-2 py-1 rounded">
+                        {event.durationMs}ms
+                      </span>
+                    )}
+                    <span className={`px-2 py-1 rounded font-semibold uppercase ${
+                      displayStatus === 'executed' ? 'bg-green-200' :
+                      displayStatus === 'skipped' ? 'bg-gray-200' :
+                      displayStatus === 'waiting' ? 'bg-yellow-200' :
+                      'bg-red-200'
+                    }`}>
+                      {displayStatus}
+                    </span>
+                  </div>
                 </div>
                 
-                <div className="flex items-center gap-3 text-xs">
-                  {event.durationMs !== undefined && (
-                    <span className="font-mono bg-white/50 px-2 py-1 rounded">
-                      {event.durationMs}ms
-                    </span>
-                  )}
-                  <span className={`px-2 py-1 rounded font-semibold uppercase ${
-                    event.status === 'executed' ? 'bg-green-200' :
-                    event.status === 'skipped' ? 'bg-gray-200' :
-                    event.status === 'waiting' ? 'bg-yellow-200' :
-                    'bg-red-200'
-                  }`}>
-                    {event.status}
-                  </span>
-                </div>
+                {event.decision && (
+                  <div className="text-sm mb-1">
+                    <span className="font-semibold">Decision:</span> {event.decision}
+                  </div>
+                )}
+                
+                {event.reason && (
+                  <div className="text-sm mb-1">
+                    <span className="font-semibold">Reason:</span> {event.reason}
+                  </div>
+                )}
+                
+                {event.outputsSummary && (
+                  <div className="text-sm text-slate-700 mt-2 bg-white/30 rounded p-2">
+                    <span className="font-semibold">Output:</span> {event.outputsSummary}
+                  </div>
+                )}
               </div>
-              
-              {event.decision && (
-                <div className="text-sm mb-1">
-                  <span className="font-semibold">Decision:</span> {event.decision}
-                </div>
-              )}
-              
-              {event.reason && (
-                <div className="text-sm mb-1">
-                  <span className="font-semibold">Reason:</span> {event.reason}
-                </div>
-              )}
-              
-              {event.outputsSummary && (
-                <div className="text-sm text-slate-700 mt-2 bg-white/30 rounded p-2">
-                  <span className="font-semibold">Output:</span> {event.outputsSummary}
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
       

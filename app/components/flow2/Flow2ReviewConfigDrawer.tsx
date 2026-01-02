@@ -25,6 +25,9 @@ interface Flow2ReviewConfigDrawerProps {
   onIssueClick?: (issue: any) => void;
   demoTrace?: DemoTraceEvent[] | null;
   demoRunId?: string | null;
+  // NEW: Demo-only props for node status policy
+  checkpointMetadata?: any;
+  isFlow2Demo?: boolean;
 }
 
 export default function Flow2ReviewConfigDrawer({
@@ -34,7 +37,9 @@ export default function Flow2ReviewConfigDrawer({
   skillCatalog,
   onIssueClick,
   demoTrace,
-  demoRunId
+  demoRunId,
+  checkpointMetadata,
+  isFlow2Demo
 }: Flow2ReviewConfigDrawerProps) {
   const [activeTab, setActiveTab] = useState<'graphTrace' | 'graph' | 'runs' | 'config'>('graphTrace');
   const [isSkillsExpanded, setIsSkillsExpanded] = useState(false);
@@ -129,7 +134,13 @@ export default function Flow2ReviewConfigDrawer({
               
               {graphReviewTrace ? (
                 <>
-                  <GraphTrace trace={graphReviewTrace} />
+                  <GraphTrace 
+                    trace={graphReviewTrace}
+                    checkpointMetadata={checkpointMetadata}
+                    graphState={checkpointMetadata?.graph_state}
+                    issues={issues}
+                    isFlow2Demo={isFlow2Demo}
+                  />
                   
                   {/* Collapsible Outputs (Gaps/EDD + Issues) */}
                   {(gaps.length > 0 || conflicts.length > 0 || issues.length > 0) && (

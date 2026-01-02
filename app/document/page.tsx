@@ -5266,6 +5266,8 @@ function DocumentPageContent() {
           onIssueClick={handleIssueClick}
           demoTrace={(flowMonitorMetadata as any)?.demo_trace || null}
           demoRunId={flowMonitorRunId}
+          checkpointMetadata={flowMonitorMetadata}
+          isFlow2Demo={isFlow2 && !!(flowMonitorMetadata?.demo_mode || flowMonitorMetadata?.edd_stage)}
         />
       ) : (
         <ReviewConfigDrawer
