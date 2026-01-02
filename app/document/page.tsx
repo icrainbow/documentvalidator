@@ -3074,124 +3074,65 @@ function DocumentPageContent() {
     }
   };
 
-  const handleSendMessage = async () => {
-    if (inputValue.trim()) {
-      const userMessage: Message = {
-        role: 'user',
-        content: inputValue
-      };
+  /**
+   * FLOW-SPECIFIC CHAT ROUTING
+   * Flow1 and Flow2 have completely separate chat logic
+   */
+  
+  /**
+   * Handle Flow1 chat commands (original behavior)
+   * Commands: "global evaluate", "fix [section]", "modify [section]", AI optimization
+   */
+  const handleFlow1ChatSubmit = async (userInput: string, userMessage: Message) => {
+    const lowerInput = userInput.toLowerCase();
 
-      const lowerInput = inputValue.toLowerCase();
-      let agentMessage: Message;
+    // Phase 2-B: Check for re-review command FIRST
+    const reReviewSectionId = parseReReviewCommand(lowerInput);
+    if (reReviewSectionId !== null) {
+      setMessages([...messages, userMessage]);
+      setInputValue('');
+      handleReReviewSection(reReviewSectionId);
+      setHasNewChatMessage(true);
+      return;
+    }
 
-      // Phase 2-B: Check for re-review command FIRST
-      const reReviewSectionId = parseReReviewCommand(lowerInput);
-      if (reReviewSectionId !== null) {
-        setMessages([...messages, userMessage]);
-        setInputValue('');
-        handleReReviewSection(reReviewSectionId);
-        setHasNewChatMessage(true);
-        return;
-      }
-
-      // CASE 2: Check for CS Integration Exception trigger (Flow2 only)
-      if (isFlow2 && detectCase2Trigger(inputValue)) {
-        // If Case 2 is already active, inform user and return
-        if (case2State !== 'idle') {
-          setMessages([...messages, userMessage]);
-          const alreadyActiveMessage: Message = {
-            role: 'agent',
-            agent: 'Case 2 Agent',
-            content: '⚠️ A Case 2 review is already in progress. Please complete or close the current review before starting a new one.'
-          };
-          setMessages(prev => [...prev, alreadyActiveMessage]);
-          setInputValue('');
-          setHasNewChatMessage(true);
-          return;
-        }
-        
-        // Trigger Case 2 flow
-        setMessages([...messages, userMessage]);
-        setInputValue('');
-        
-        // Store original query and initialize Case 2 state
-        setCase2Query(inputValue);
-        setCase2State('triggered');
-        setCase2Data(CASE2_DEMO_DATA);
-        setCase2Id(`case2_${Date.now()}`);
-        
-        // Add agent acknowledgment message
-        const ackMessage: Message = {
-          role: 'agent',
-          agent: 'Case 2 Agent',
-          content: '🔍 Analyzing CS integration exception scenario... Retrieving relevant policies and guidelines.'
-        };
-        setMessages(prev => [...prev, ackMessage]);
-        setHasNewChatMessage(true);
-        
-        // Transition to tracing state after brief delay
-        setTimeout(() => setCase2State('tracing'), 100);
-        
-        return;
-      }
-
-      // Check if user is requesting AI optimization for a specific section
-      const mentionedSection = detectSectionForModify(lowerInput);
+    // Check if user is requesting AI optimization for a specific section
+    const mentionedSection = detectSectionForModify(lowerInput);
+    
+    if (mentionedSection && !lowerInput.includes('global evaluate') && !lowerInput.startsWith('fix ')) {
+      // User mentioned a section - use real LLM to optimize
+      setMessages([...messages, userMessage]);
       
-      if (mentionedSection && !lowerInput.includes('global evaluate') && !lowerInput.startsWith('fix ')) {
-        // User mentioned a section - use real LLM to optimize
-        setMessages([...messages, userMessage]);
+      const processingMessage: Message = {
+        role: 'agent',
+        agent: 'Optimize Agent',
+        content: `Processing your request for Section ${getSectionPosition(mentionedSection)}... AI is analyzing and optimizing the content.`
+      };
+      setMessages(prev => [...prev, processingMessage]);
+
+      try {
+        const revisedContent = await callLLMForOptimization(mentionedSection, userInput);
         
-        const processingMessage: Message = {
-          role: 'agent',
-          agent: 'Optimize Agent',
-          content: `Processing your request for Section ${getSectionPosition(mentionedSection)}... AI is analyzing and optimizing the content.`
-        };
-        setMessages(prev => [...prev, processingMessage]);
+        if (revisedContent) {
+          // COMPLIANCE CHECK: Validate AI-generated content for ANY section
+          if (revisedContent.toLowerCase().includes('tobacco')) {
+            // Compliance Agent blocks AI-generated content with forbidden terms
+            const complianceWarning: Message = {
+              role: 'agent',
+              agent: 'Compliance Agent',
+              content: `⚠️ COMPLIANCE VIOLATION: The AI-generated content for Section ${getSectionPosition(mentionedSection)} contains "tobacco" which violates our company\'s KYC compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED and content has NOT been updated. Please modify your request to exclude prohibited terms.`
+            };
+            setMessages(prev => [...prev, complianceWarning]);
 
-        try {
-          const revisedContent = await callLLMForOptimization(mentionedSection, inputValue);
-          
-          if (revisedContent) {
-            // COMPLIANCE CHECK: Validate AI-generated content for ANY section
-            if (revisedContent.toLowerCase().includes('tobacco')) {
-              // Compliance Agent blocks AI-generated content with forbidden terms
-              const complianceWarning: Message = {
-                role: 'agent',
-                agent: 'Compliance Agent',
-                content: `⚠️ COMPLIANCE VIOLATION: The AI-generated content for Section ${getSectionPosition(mentionedSection)} contains "tobacco" which violates our company\'s KYC compliance rules. We cannot include investments related to tobacco in client documents due to regulatory restrictions. The section has been marked as FAILED and content has NOT been updated. Please modify your request to exclude prohibited terms.`
-              };
-              setMessages(prev => [...prev, complianceWarning]);
-
-              // Add to decision log and mark section as FAIL
-              setSections(prevSections => prevSections.map(s => {
-                if (s.id === mentionedSection) {
-                  return {
-                    ...s,
-                    status: 'fail',
-                    log: [...s.log, { 
-                      agent: 'Compliance', 
-                      action: 'BLOCKED: AI-generated content contains prohibited term "tobacco"', 
-                      timestamp: new Date() 
-                    }]
-                  };
-                }
-                return s;
-              }));
-
-              return; // Stop here, don't update content
-            }
-
-            // No compliance issues - proceed with update
+            // Add to decision log and mark section as FAIL
             setSections(prevSections => prevSections.map(s => {
               if (s.id === mentionedSection) {
                 return {
                   ...s,
-                  content: revisedContent,
-                  status: 'pass',
+                  status: 'fail',
                   log: [...s.log, { 
-                    agent: 'Optimize', 
-                    action: 'AI optimized content successfully, status updated to PASS', 
+                    agent: 'Compliance', 
+                    action: 'BLOCKED: AI-generated content contains prohibited term "tobacco"', 
                     timestamp: new Date() 
                   }]
                 };
@@ -3199,113 +3140,233 @@ function DocumentPageContent() {
               return s;
             }));
 
-            const successMessage: Message = {
-              role: 'agent',
-              agent: 'Optimize Agent',
-              content: `✓ Section ${getSectionPosition(mentionedSection)} has been optimized based on your request. The content has been updated and the section status is now PASS.`
-            };
-            setMessages(prev => [...prev, successMessage]);
+            return; // Stop here, don't update content
           }
-        } catch (error) {
-          const errorMessage: Message = {
-            role: 'agent',
-            agent: 'System',
-            content: `⚠️ Failed to optimize content: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or check your API configuration.`
-          };
-          setMessages(prev => [...prev, errorMessage]);
-        }
 
-        setInputValue('');
-        return;
-      }
-
-      // Original logic for other commands
-      if (lowerInput.includes('global evaluate')) {
-        setSections(sections.map(s => {
-          let newStatus: SectionStatus = s.status;
-          let logAction = '';
-          
-          if (s.id === 1) {
-            newStatus = 'pass';
-            logAction = 'PASS: Global evaluation confirmed';
-          } else if (s.id === 2) {
-            newStatus = 'fail';
-            logAction = 'FAIL: Issues detected in global evaluation';
-          } else if (s.id === 3) {
-            newStatus = 'pass';
-            logAction = 'PASS: Global evaluation confirmed';
-          }
-          
-          return {
-            ...s,
-            status: newStatus,
-            log: [...s.log, { agent: 'Evaluate', action: logAction, timestamp: new Date() }]
-          };
-        }));
-
-        agentMessage = {
-          role: 'agent',
-          agent: 'Evaluate Agent',
-          content: 'Global evaluation completed:\n✓ Section 1: PASS\n✗ Section 2: FAIL - Issues detected\n✓ Section 3: PASS'
-        };
-      } else if (lowerInput.includes('fix')) {
-        const sectionId = detectSection(lowerInput);
-        if (sectionId === 2 || sectionId === 3) {
-          const section = sections.find(s => s.id === sectionId);
+          // No compliance issues - proceed with update
           setSections(prevSections => prevSections.map(s => {
-            if (s.id === sectionId) {
+            if (s.id === mentionedSection) {
               return {
                 ...s,
+                content: revisedContent,
                 status: 'pass',
-                log: [...s.log, { agent: 'Optimize', action: 'Fixed via chat command, status updated to PASS', timestamp: new Date() }]
+                log: [...s.log, { 
+                  agent: 'Optimize', 
+                  action: 'AI optimized content successfully, status updated to PASS', 
+                  timestamp: new Date() 
+                }]
               };
             }
             return s;
           }));
 
-          agentMessage = {
+          const successMessage: Message = {
             role: 'agent',
             agent: 'Optimize Agent',
-            content: `Section ${getSectionPosition(sectionId)} "${section?.title}" has been fixed and optimized. Status updated to PASS. ✓`
+            content: `✓ Section ${getSectionPosition(mentionedSection)} has been optimized based on your request. The content has been updated and the section status is now PASS.`
           };
-        } else {
-          agentMessage = {
-            role: 'agent',
-            agent: 'Optimize Agent',
-            content: 'Please specify which section to fix. You can fix Section 2 (Risk Assessment) or Section 3 (Technical Strategy).'
-          };
+          setMessages(prev => [...prev, successMessage]);
         }
-      } else if (lowerInput.includes('modify')) {
-        const sectionId = detectSectionForModify(lowerInput);
-        if (sectionId) {
-          const section = sections.find(s => s.id === sectionId);
-          setEditingSectionId(sectionId);
-          setEditContent(section?.content || '');
+      } catch (error) {
+        const errorMessage: Message = {
+          role: 'agent',
+          agent: 'System',
+          content: `⚠️ Failed to optimize content: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or check your API configuration.`
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
 
-          agentMessage = {
-            role: 'agent',
-            agent: 'Optimize Agent',
-            content: `Section ${sectionId} "${section?.title}" is now in edit mode. Make your changes and click Save.`
-          };
-        } else {
-          agentMessage = {
-            role: 'agent',
-            agent: 'Optimize Agent',
-            content: 'Please specify which section to modify (e.g., "modify section 1", "modify Risk Assessment", or "modify Technical Strategy").'
-          };
+      setInputValue('');
+      return;
+    }
+
+    // Original Flow1 command logic
+    let agentMessage: Message;
+    
+    if (lowerInput.includes('global evaluate')) {
+      setSections(sections.map(s => {
+        let newStatus: SectionStatus = s.status;
+        let logAction = '';
+        
+        if (s.id === 1) {
+          newStatus = 'pass';
+          logAction = 'PASS: Global evaluation confirmed';
+        } else if (s.id === 2) {
+          newStatus = 'fail';
+          logAction = 'FAIL: Issues detected in global evaluation';
+        } else if (s.id === 3) {
+          newStatus = 'pass';
+          logAction = 'PASS: Global evaluation confirmed';
         }
+        
+        return {
+          ...s,
+          status: newStatus,
+          log: [...s.log, { agent: 'Evaluate', action: logAction, timestamp: new Date() }]
+        };
+      }));
+
+      agentMessage = {
+        role: 'agent',
+        agent: 'Evaluate Agent',
+        content: 'Global evaluation completed:\n✓ Section 1: PASS\n✗ Section 2: FAIL - Issues detected\n✓ Section 3: PASS'
+      };
+    } else if (lowerInput.includes('fix')) {
+      const sectionId = detectSection(lowerInput);
+      if (sectionId === 2 || sectionId === 3) {
+        const section = sections.find(s => s.id === sectionId);
+        setSections(prevSections => prevSections.map(s => {
+          if (s.id === sectionId) {
+            return {
+              ...s,
+              status: 'pass',
+              log: [...s.log, { agent: 'Optimize', action: 'Fixed via chat command, status updated to PASS', timestamp: new Date() }]
+            };
+          }
+          return s;
+        }));
+
+        agentMessage = {
+          role: 'agent',
+          agent: 'Optimize Agent',
+          content: `Section ${getSectionPosition(sectionId)} "${section?.title}" has been fixed and optimized. Status updated to PASS. ✓`
+        };
       } else {
         agentMessage = {
           role: 'agent',
-          agent: lowerInput.includes('section') ? 'Optimize Agent' : 'System',
-          content: lowerInput.includes('section')
-            ? `Understood. Processing your request: "${inputValue}"`
-            : 'I\'m here to help. You can type "global evaluate" to evaluate all sections, "fix [section]" to fix a section, or "modify [section]" to edit.'
+          agent: 'Optimize Agent',
+          content: 'Please specify which section to fix. You can fix Section 2 (Risk Assessment) or Section 3 (Technical Strategy).'
         };
       }
+    } else if (lowerInput.includes('modify')) {
+      const sectionId = detectSectionForModify(lowerInput);
+      if (sectionId) {
+        const section = sections.find(s => s.id === sectionId);
+        setEditingSectionId(sectionId);
+        setEditContent(section?.content || '');
 
-      setMessages([...messages, userMessage, agentMessage]);
+        agentMessage = {
+          role: 'agent',
+          agent: 'Optimize Agent',
+          content: `Section ${sectionId} "${section?.title}" is now in edit mode. Make your changes and click Save.`
+        };
+      } else {
+        agentMessage = {
+          role: 'agent',
+          agent: 'Optimize Agent',
+          content: 'Please specify which section to modify (e.g., "modify section 1", "modify Risk Assessment", or "modify Technical Strategy").'
+        };
+      }
+    } else {
+      // Default Flow1 help message
+      agentMessage = {
+        role: 'agent',
+        agent: lowerInput.includes('section') ? 'Optimize Agent' : 'System',
+        content: lowerInput.includes('section')
+          ? `Understood. Processing your request: "${userInput}"`
+          : 'I\'m here to help. You can type "global evaluate" to evaluate all sections, "fix [section]" to fix a section, or "modify [section]" to edit.'
+      };
+    }
+
+    setMessages([...messages, userMessage, agentMessage]);
+    setInputValue('');
+    setHasNewChatMessage(true);
+  };
+
+  /**
+   * Handle Flow2 chat commands (Case 2 trigger, Flow2-specific routing)
+   * Flow2 does NOT support Flow1 commands
+   */
+  const handleFlow2ChatSubmit = async (userInput: string, userMessage: Message) => {
+    const lowerInput = userInput.toLowerCase();
+
+    // CASE 2: Check for CS Integration Exception trigger (Flow2 only)
+    if (detectCase2Trigger(userInput)) {
+      // If Case 2 is already active, inform user and return
+      if (case2State !== 'idle') {
+        setMessages([...messages, userMessage]);
+        const alreadyActiveMessage: Message = {
+          role: 'agent',
+          agent: 'Case 2 Agent',
+          content: '⚠️ A Case 2 review is already in progress. Please complete or close the current review before starting a new one.'
+        };
+        setMessages(prev => [...prev, alreadyActiveMessage]);
+        setInputValue('');
+        setHasNewChatMessage(true);
+        return;
+      }
+      
+      // Trigger Case 2 flow
+      setMessages([...messages, userMessage]);
       setInputValue('');
+      
+      // Store original query and initialize Case 2 state
+      setCase2Query(userInput);
+      setCase2State('triggered');
+      setCase2Data(CASE2_DEMO_DATA);
+      setCase2Id(`case2_${Date.now()}`);
+      
+      // Add agent acknowledgment message
+      const ackMessage: Message = {
+        role: 'agent',
+        agent: 'Case 2 Agent',
+        content: '🔍 Analyzing CS integration exception scenario... Retrieving relevant policies and guidelines.'
+      };
+      setMessages(prev => [...prev, ackMessage]);
+      setHasNewChatMessage(true);
+      
+      // Transition to tracing state after brief delay
+      setTimeout(() => setCase2State('tracing'), 100);
+      
+      return;
+    }
+
+    // Check if user is trying to use Flow1 commands in Flow2
+    const isFlow1Command = lowerInput.includes('global evaluate') || 
+                          lowerInput.startsWith('fix ') ||
+                          lowerInput.startsWith('modify ');
+    
+    if (isFlow1Command) {
+      setMessages([...messages, userMessage]);
+      const flow2HintMessage: Message = {
+        role: 'agent',
+        agent: 'System',
+        content: '⚠️ You are in Flow2 mode. Flow1 commands ("global evaluate", "fix [section]", "modify [section]") are disabled here. Switch to Flow1 to use these commands.'
+      };
+      setMessages(prev => [...prev, flow2HintMessage]);
+      setInputValue('');
+      setHasNewChatMessage(true);
+      return;
+    }
+
+    // Default Flow2 response for unrecognized input
+    setMessages([...messages, userMessage]);
+    const defaultMessage: Message = {
+      role: 'agent',
+      agent: 'System',
+      content: 'Flow2 mode active. You can ask about CS integration, restricted jurisdictions, or high-net-worth client exceptions to trigger Case 2 analysis.'
+    };
+    setMessages(prev => [...prev, defaultMessage]);
+    setInputValue('');
+    setHasNewChatMessage(true);
+  };
+
+  /**
+   * Main chat message handler - routes to flow-specific handler
+   */
+  const handleSendMessage = async () => {
+    if (inputValue.trim()) {
+      const userMessage: Message = {
+        role: 'user',
+        content: inputValue
+      };
+
+      // Route by flow mode
+      if (isFlow2) {
+        await handleFlow2ChatSubmit(inputValue, userMessage);
+      } else {
+        await handleFlow1ChatSubmit(inputValue, userMessage);
+      }
     }
   };
 
