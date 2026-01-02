@@ -18,6 +18,19 @@ export async function POST(request: NextRequest) {
       ? `\n**CRITICAL:** The user is communicating in ${language}. You MUST respond in ${language}. The revised content MUST be entirely in ${language}.`
       : '';
 
+    // Compliance restrictions
+    const complianceRestrictions = `
+
+**COMPLIANCE REQUIREMENTS (MANDATORY):**
+You MUST NOT include or reference any of the following prohibited terms or topics in your response:
+- Tobacco or tobacco-related products
+- Any terms related to smoking, cigarettes, cigars, vaping, or tobacco industry
+- Weapons, firearms, or arms trading
+- Illegal substances or activities
+- Adult entertainment or gambling
+
+If the user's request would require mentioning these topics, politely decline and suggest an alternative approach that complies with regulations.`;
+
     // Call Claude API
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -32,7 +45,7 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'user',
-            content: `You are an AI investment document assistant.${languageInstruction}
+            content: `You are an AI investment document assistant.${languageInstruction}${complianceRestrictions}
 
 Current Section: ${sectionTitle}
 Current Content:
@@ -41,7 +54,9 @@ ${sectionContent}
 User Request:
 ${userPrompt}
 
-Please revise the section content based on the user's request. Return ONLY the revised section content, without any additional explanation or meta-commentary. Keep the tone professional and appropriate for investment documentation.${language !== 'english' ? ` ALL REVISED CONTENT MUST BE IN ${language.toUpperCase()}.` : ''}`
+Please revise the section content based on the user's request. Return ONLY the revised section content, without any additional explanation or meta-commentary. Keep the tone professional and appropriate for investment documentation.${language !== 'english' ? ` ALL REVISED CONTENT MUST BE IN ${language.toUpperCase()}.` : ''}
+
+REMEMBER: Absolutely NO prohibited terms (tobacco, weapons, etc.) in your response.`
           }
         ]
       })

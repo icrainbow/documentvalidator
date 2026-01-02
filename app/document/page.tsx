@@ -523,6 +523,7 @@ function DocumentPageContent() {
   const [hasComplianceIssue, setHasComplianceIssue] = useState(false);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const [chatHeight, setChatHeight] = useState(400); // NEW: Adjustable chat height in pixels
   const [executedActionIds, setExecutedActionIds] = useState<Set<string>>(new Set());
   const [hasNewChatMessage, setHasNewChatMessage] = useState(false);
   
@@ -3237,6 +3238,41 @@ function DocumentPageContent() {
   const handleFlow1ChatSubmit = async (userInput: string, userMessage: Message) => {
     const lowerInput = userInput.toLowerCase();
 
+    // NEW: Check for "delete section N" command
+    const deleteSectionMatch = lowerInput.match(/delete\s+section\s+(\d+)/);
+    if (deleteSectionMatch) {
+      const sectionIdToDelete = parseInt(deleteSectionMatch[1], 10);
+      
+      // Find section by ID (not position)
+      const sectionToDelete = sections.find(s => s.id === sectionIdToDelete);
+      
+      if (!sectionToDelete) {
+        const errorMessage: Message = {
+          role: 'agent',
+          agent: 'System',
+          content: `⚠️ Section ${sectionIdToDelete} not found. Available sections: ${sections.map(s => `Section ${s.id}`).join(', ')}.`
+        };
+        setMessages([...messages, userMessage, errorMessage]);
+        setInputValue('');
+        setHasNewChatMessage(true);
+        return;
+      }
+      
+      // Delete the section
+      setSections(prev => prev.filter(s => s.id !== sectionIdToDelete));
+      
+      const confirmMessage: Message = {
+        role: 'agent',
+        agent: 'System',
+        content: `✓ Section ${sectionIdToDelete} "${sectionToDelete.title}" has been deleted.`
+      };
+      
+      setMessages([...messages, userMessage, confirmMessage]);
+      setInputValue('');
+      setHasNewChatMessage(true);
+      return;
+    }
+
     // NEW: Check for "add section [name]" command
     const addSectionMatch = lowerInput.match(/add\s+section\s+(.+)/);
     if (addSectionMatch) {
@@ -3261,7 +3297,7 @@ function DocumentPageContent() {
       const agentMessage: Message = {
         role: 'agent',
         agent: 'System',
-        content: `✓ New section "${newSectionName}" has been added. You can now edit its content.`
+        content: `✓ New section "${newSectionName}" has been added as Section ${newSectionId}. You can now edit its content.`
       };
       
       setMessages([...messages, userMessage, agentMessage]);
@@ -3273,14 +3309,16 @@ function DocumentPageContent() {
     // NEW: Check for "fix section N" command - auto-optimize with LLM
     const fixSectionMatch = lowerInput.match(/fix\s+section\s+(\d+)/);
     if (fixSectionMatch) {
-      const sectionPosition = parseInt(fixSectionMatch[1], 10);
+      const sectionId = parseInt(fixSectionMatch[1], 10);
       
-      // Validate section position
-      if (sectionPosition < 1 || sectionPosition > sections.length) {
+      // Find section by ID (not position)
+      const targetSection = sections.find(s => s.id === sectionId);
+      
+      if (!targetSection) {
         const errorMessage: Message = {
           role: 'agent',
           agent: 'System',
-          content: `⚠️ Invalid section number. Please specify a section between 1 and ${sections.length}.`
+          content: `⚠️ Section ${sectionId} not found. Available sections: ${sections.map(s => `Section ${s.id}`).join(', ')}.`
         };
         setMessages([...messages, userMessage, errorMessage]);
         setInputValue('');
@@ -3288,14 +3326,12 @@ function DocumentPageContent() {
         return;
       }
       
-      const targetSection = sections[sectionPosition - 1];
-      
       setMessages([...messages, userMessage]);
       
       const processingMessage: Message = {
         role: 'agent',
         agent: 'Optimize Agent',
-        content: `Processing Section ${sectionPosition} "${targetSection.title}"... AI is generating optimized content.`
+        content: `Processing Section ${sectionId} "${targetSection.title}"... AI is generating optimized content.`
       };
       setMessages(prev => [...prev, processingMessage]);
 
@@ -3356,9 +3392,18 @@ function DocumentPageContent() {
           const successMessage: Message = {
             role: 'agent',
             agent: 'Optimize Agent',
-            content: `✓ Section ${sectionPosition} "${targetSection.title}" has been automatically optimized with AI-generated content. Status updated to PASS.`
+            content: `✓ Section ${sectionId} "${targetSection.title}" has been automatically optimized with AI-generated content. Status updated to PASS.`
           };
           setMessages(prev => [...prev, successMessage]);
+          
+          // NEW: Scroll to the updated section
+          setTimeout(() => {
+            const sectionElement = document.getElementById(`sec-${sectionId}`);
+            if (sectionElement) {
+              sectionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              console.log(`[Flow1] Scrolled to section ${sectionId}`);
+            }
+          }, 300);
         } else {
           throw new Error('Failed to generate optimized content');
         }
@@ -3366,7 +3411,7 @@ function DocumentPageContent() {
         const errorMessage: Message = {
           role: 'agent',
           agent: 'System',
-          content: `⚠️ Failed to optimize Section ${sectionPosition}: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or check your API configuration.`
+          content: `⚠️ Failed to optimize Section ${sectionId}: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or check your API configuration.`
         };
         setMessages(prev => [...prev, errorMessage]);
       }
@@ -3506,7 +3551,7 @@ function DocumentPageContent() {
       agentMessage = {
         role: 'agent',
         agent: 'System',
-        content: '[System] Available commands:\n• "global evaluate" - Run full evaluation\n• "add section [name]" - Add a new section\n• "fix section N" - Auto-optimize section N with AI\n• Mention section name to request AI improvements'
+        content: '[System] Available commands:\n• "global evaluate" - Run full evaluation\n• "add section [name]" - Add a new section\n• "delete section N" - Delete section by ID\n• "fix section N" - Auto-optimize section N with AI (scrolls to section)\n• Mention section name to request AI improvements'
       };
     }
 
@@ -4867,13 +4912,48 @@ function DocumentPageContent() {
               )}
             </div>
 
-            {/* Sticky Chat Panel at Bottom */}
+            {/* Sticky Chat Panel at Bottom - Resizable */}
             <div 
-              className={`fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] transition-all duration-200 ${
-                isChatExpanded ? 'h-[40vh] max-h-[400px]' : 'h-[50px]'
-              }`}
+              style={{
+                height: isChatExpanded ? `${chatHeight}px` : '50px',
+                minHeight: '50px',
+                maxHeight: '80vh'
+              }}
+              className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] transition-none"
             >
-              <div className="flex flex-col h-full max-w-7xl mx-auto px-6">
+              {/* Resize Handle (only visible when expanded) */}
+              {isChatExpanded && (
+                <div
+                  className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize bg-slate-300 hover:bg-blue-400 transition-colors flex items-center justify-center group"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const startY = e.clientY;
+                    const startHeight = chatHeight;
+                    
+                    const handleMouseMove = (moveEvent: MouseEvent) => {
+                      const deltaY = startY - moveEvent.clientY;
+                      const newHeight = Math.min(
+                        Math.max(startHeight + deltaY, 200), // Min 200px
+                        window.innerHeight * 0.8 // Max 80vh
+                      );
+                      setChatHeight(newHeight);
+                    };
+                    
+                    const handleMouseUp = () => {
+                      document.removeEventListener('mousemove', handleMouseMove);
+                      document.removeEventListener('mouseup', handleMouseUp);
+                    };
+                    
+                    document.addEventListener('mousemove', handleMouseMove);
+                    document.addEventListener('mouseup', handleMouseUp);
+                  }}
+                  title="Drag to resize chat window"
+                >
+                  <div className="w-12 h-1 bg-slate-400 rounded-full group-hover:bg-blue-500" />
+                </div>
+              )}
+              
+              <div className="flex flex-col h-full max-w-7xl mx-auto px-6 pt-2">
                 {/* Message History (only when expanded) */}
                 {isChatExpanded && (
                   <div className="flex-1 overflow-y-auto bg-slate-50 p-4 -mx-6">
