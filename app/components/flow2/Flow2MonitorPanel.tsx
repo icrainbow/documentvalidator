@@ -43,6 +43,7 @@ interface Flow2MonitorPanelProps {
   checkpointMetadata?: CheckpointMetadata | null;
   onStatusChange?: (status: FlowStatus) => void;
   riskData?: RiskData; // NEW: For stage coloring
+  onStartNewReview?: () => void; // NEW: Callback to reset workspace
 }
 
 // Business stages (NOT node-level)
@@ -93,11 +94,18 @@ export default function Flow2MonitorPanel({
   checkpointMetadata,
   onStatusChange,
   riskData,
+  onStartNewReview,
 }: Flow2MonitorPanelProps) {
   const [status, setStatus] = useState<FlowStatus>(initialStatus);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
   const [reminderDisabled, setReminderDisabled] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // NEW: Detect if workflow is fully completed (EDD approved or Stage 1 approved)
+  const isFullyCompleted = status === 'completed' && (
+    checkpointMetadata?.final_decision === 'approved' ||
+    checkpointMetadata?.final_decision === 'approved_with_edd'
+  );
   
   // Helper: Get risk-based stage color
   const getRiskStageColor = (stageId: number): string => {
@@ -288,10 +296,10 @@ export default function Flow2MonitorPanel({
         )}
         {status === 'completed' && (
           <div className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold flex items-center gap-2">
-            ✅ COMPLETED
+            ✅ {isFullyCompleted ? 'APPROVED & COMPLETED' : 'COMPLETED'}
           </div>
         )}
-        {status === 'rejected' && (
+        {status === 'rejected' && !isFullyCompleted && (
           <div className="px-3 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             ❌ REJECTED
           </div>
@@ -526,6 +534,22 @@ export default function Flow2MonitorPanel({
               )}
             </div>
           </div>
+        </div>
+      )}
+      
+      {/* NEW: Start New Review Button (only when fully completed) */}
+      {isFullyCompleted && onStartNewReview && (
+        <div className="mt-6 pt-6 border-t border-slate-200">
+          <button
+            onClick={onStartNewReview}
+            className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold text-sm hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+          >
+            <span className="text-lg">🔄</span>
+            <span>Start New Review</span>
+          </button>
+          <p className="text-xs text-slate-500 text-center mt-2">
+            Clear workspace and begin a fresh KYC review
+          </p>
         </div>
       )}
 

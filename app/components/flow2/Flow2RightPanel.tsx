@@ -33,6 +33,8 @@ interface Flow2RightPanelProps {
   case3Active?: boolean;
   // Risk data for stage coloring
   riskData?: RiskData;
+  // NEW: Workspace reset callback
+  onStartNewReview?: () => void;
 }
 
 export default function Flow2RightPanel({
@@ -54,6 +56,7 @@ export default function Flow2RightPanel({
   onPhase8Complete,
   case3Active = false,
   riskData,
+  onStartNewReview,
 }: Flow2RightPanelProps) {
   
   const hasDocuments = flow2Documents.length > 0;
@@ -94,6 +97,7 @@ export default function Flow2RightPanel({
           checkpointMetadata={flowMonitorMetadata}
           onStatusChange={onFlowStatusChange}
           riskData={riskData}
+          onStartNewReview={onStartNewReview}
         />
         
         {/* PHASE 8: Post-Reject Analysis (tasks, skills, findings) */}

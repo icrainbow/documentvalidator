@@ -3817,6 +3817,56 @@ function DocumentPageContent() {
       );
     }
   };
+  
+  /**
+   * NEW: Handle Start New Review (reset Flow2 workspace)
+   */
+  const handleStartNewReview = () => {
+    if (!isFlow2) return; // GUARD
+    
+    console.log('[Flow2] Starting new review - resetting workspace');
+    
+    // Clear all Flow2 state
+    setFlow2Documents([]);
+    setOrchestrationResult(null);
+    setGraphReviewTrace(null);
+    setGraphTopics([]);
+    setCurrentIssues([]);
+    setConflicts([]);
+    setCoverageGaps([]);
+    setFlow2TopicSummaries([]);
+    setTopicSummariesRunId(null);
+    setItBulletinTopicSummaries([]);
+    setItTopicSummariesRunId(null);
+    setHumanGateState(null);
+    setHumanGateData(null);
+    setIsDegraded(false);
+    setDegradedReason('');
+    setCase3Active(false);
+    setCase4Active(false);
+    
+    // Reset Flow Monitor
+    setFlowMonitorStatus('idle');
+    setFlowMonitorRunId(null);
+    setFlowMonitorMetadata(null);
+    
+    // Reset Post-Reject Analysis
+    setPostRejectAnalysisData(null);
+    
+    // Clear URL params (remove docKey)
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete('docKey');
+    window.history.pushState({}, '', newUrl);
+    
+    // Reset messages
+    setMessages([{
+      role: 'agent',
+      agent: 'System',
+      content: '🔄 Workspace cleared. Ready for a new review.\n\nUpload documents to begin.'
+    }]);
+    
+    console.log('[Flow2] ✓ Workspace reset complete');
+  };
 
   const handleExitITReview = () => {
     setCase4Active(false);
@@ -4296,6 +4346,7 @@ function DocumentPageContent() {
                     warningsCount: currentIssues.filter((i: any) => i.severity === 'medium').length,
                     riskSignals: currentIssues.filter((i: any) => i.category === 'kyc_risk')
                   }}
+                  onStartNewReview={handleStartNewReview}
                 />
               ) : (
                 // FLOW1: Original right panel with all features
