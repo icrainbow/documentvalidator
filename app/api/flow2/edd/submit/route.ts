@@ -128,6 +128,7 @@ export async function GET(request: NextRequest) {
     await saveCheckpoint(checkpoint);
     console.log(`[EDD/Submit] ✅ EDD approved for run ${run_id}`);
     
+    // Return JSON for API calls (from the page's handleApprove function)
     return NextResponse.json({
       ok: true,
       message: 'EDD approved successfully',

@@ -3,7 +3,7 @@
 import Flow2InfoPanel from './Flow2InfoPanel';
 import Flow2ReviewStatus from './Flow2ReviewStatus';
 import Flow2MonitorPanel, { type FlowStatus, type CheckpointMetadata } from './Flow2MonitorPanel';
-import Flow2LogicGraphPreview from './Flow2LogicGraphPreview';
+// import Flow2LogicGraphPreview from './Flow2LogicGraphPreview'; // Hidden: info duplicates Flow Monitor
 import Flow2EvidenceDashboard from './Flow2EvidenceDashboard';
 import PostRejectAnalysisPanel, { type PostRejectAnalysisData } from './PostRejectAnalysisPanel';
 
@@ -145,12 +145,13 @@ export default function Flow2RightPanel({
           </button>
         </div>
 
-        {/* Logic Graph Preview (shows injected EDD node if demo active) */}
+        {/* Logic Graph Preview - HIDDEN: duplicates Flow Monitor's dynamic step info
         {flowMonitorRunId && (
           <div className="mb-6">
             <Flow2LogicGraphPreview injectedNode={phase8InjectedNode || null} />
           </div>
         )}
+        */}
 
         {/* Evidence Dashboard (Phase 8 or demo fallback) */}
         {(postRejectAnalysisData?.triggered || isDemoEdd) && phase8Evidence && (

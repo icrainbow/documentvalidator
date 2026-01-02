@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeDecision, type DecisionMetadata } from '@/app/lib/flow2/submitDecision';
+import { getTokenMetadata } from '@/app/lib/flow2/checkpointStore';
 
 export const runtime = 'nodejs'; // Required for fs operations
 
@@ -55,6 +56,18 @@ export async function GET(request: NextRequest) {
       status: 'validation_failed',
       error_code: 'INVALID_ACTION',
       message: 'GET only supports action=approve. Use POST for reject.',
+    }, { status: 400 });
+  }
+  
+  // CHECK: Reject EDD tokens (they should use /api/flow2/edd/submit)
+  const tokenMetadata = await getTokenMetadata(token.trim());
+  if (tokenMetadata && tokenMetadata.type === 'edd') {
+    return NextResponse.json({
+      ok: false,
+      status: 'validation_failed',
+      error_code: 'WRONG_ENDPOINT',
+      message: 'This is an EDD token. Please use the EDD approval page at /flow2/edd/approve',
+      correct_url: `/flow2/edd/approve?token=${token}`,
     }, { status: 400 });
   }
   

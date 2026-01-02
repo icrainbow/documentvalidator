@@ -7,7 +7,7 @@
  * 1) De-obfuscation tasks (A/B/C)
  * 2) Parallel skill invocation (3 skills) - WITH ANIMATION
  * 3) Highlight findings (SOF mismatch + policy)
- * 4) Evidence Dashboard + Logic Graph (rendered by parent)
+ * 4) Evidence Dashboard (rendered by parent)
  * 
  * DEMO ONLY - Read-only, deterministic output, no API calls from this component.
  * Fake concurrency animation with Skip/Replay controls.
@@ -396,16 +396,16 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
         </div>
       ) : null}
       
-      {/* Note about Evidence Dashboard and Logic Graph below */}
+      {/* Note about Evidence Dashboard below */}
       {phase !== 'idle' && (
         <div className="mt-4 pt-3 border-t border-purple-200">
           {phase === 'evidence' || phase === 'done' ? (
             <p className="text-xs text-green-700 font-semibold text-center flex items-center justify-center gap-1">
-              <span>✓</span> Evidence Dashboard and Logic Graph ready below
+              <span>✓</span> Evidence Dashboard ready below
             </p>
           ) : (
             <p className="text-xs text-purple-700 italic text-center">
-              ↓ Evidence Dashboard and Logic Graph rendered below ↓
+              ↓ Evidence Dashboard rendered below ↓
             </p>
           )}
         </div>
