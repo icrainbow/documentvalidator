@@ -1,38 +1,73 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { loadCheckpoint, saveCheckpoint } from '@/app/lib/flow2/checkpointStore';
-import { z } from 'zod';
-
-const RequestSchema = z.object({
-  run_id: z.string(),
-  animation_played: z.boolean(),
-});
-
 /**
- * Update checkpoint to mark post-reject animation as played
+ * API endpoint to update animation_played flag in checkpoint metadata
+ * Used to prevent Phase 8 animation from replaying on subsequent page loads
  */
-export async function POST(request: NextRequest) {
+
+import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
+
+const CHECKPOINTS_DIR = path.join(process.cwd(), 'data', 'flow2_checkpoints');
+
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json();
-    const validated = RequestSchema.parse(body);
+    const { run_id, animation_played } = await req.json();
 
-    const checkpoint = await loadCheckpoint(validated.run_id);
-    if (!checkpoint) {
-      return NextResponse.json({ ok: false, error: 'Checkpoint not found' }, { status: 404 });
+    // Validate input
+    if (!run_id || typeof run_id !== 'string') {
+      return NextResponse.json(
+        { error: 'Missing or invalid run_id' },
+        { status: 400 }
+      );
     }
 
-    // Update demo_evidence.animation_played
-    if (!checkpoint.demo_evidence) {
-      checkpoint.demo_evidence = {};
+    if (typeof animation_played !== 'boolean') {
+      return NextResponse.json(
+        { error: 'animation_played must be a boolean' },
+        { status: 400 }
+      );
     }
-    checkpoint.demo_evidence.animation_played = validated.animation_played;
 
-    await saveCheckpoint(checkpoint);
-    console.log(`[API/update-checkpoint-animation] Updated run ${validated.run_id}: animation_played=${validated.animation_played}`);
+    // Ensure checkpoints directory exists
+    if (!fs.existsSync(CHECKPOINTS_DIR)) {
+      fs.mkdirSync(CHECKPOINTS_DIR, { recursive: true });
+    }
 
-    return NextResponse.json({ ok: true, message: 'Animation played status updated' });
+    const checkpointPath = path.join(CHECKPOINTS_DIR, `${run_id}.json`);
+
+    // Check if checkpoint exists
+    if (!fs.existsSync(checkpointPath)) {
+      return NextResponse.json(
+        { error: 'Checkpoint not found' },
+        { status: 404 }
+      );
+    }
+
+    // Read existing checkpoint
+    const checkpointData = JSON.parse(fs.readFileSync(checkpointPath, 'utf-8'));
+
+    // Update animation_played flag in checkpoint_metadata
+    if (!checkpointData.checkpoint_metadata) {
+      checkpointData.checkpoint_metadata = {};
+    }
+    checkpointData.checkpoint_metadata.animation_played = animation_played;
+
+    // Write updated checkpoint back to disk
+    fs.writeFileSync(checkpointPath, JSON.stringify(checkpointData, null, 2), 'utf-8');
+
+    console.log(`[Flow2] ✓ Updated animation_played=${animation_played} for run_id=${run_id}`);
+
+    return NextResponse.json({
+      success: true,
+      run_id,
+      animation_played,
+    });
+
   } catch (error: any) {
-    console.error('[API/update-checkpoint-animation] Error:', error);
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    console.error('[Flow2] Error updating animation_played flag:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
-

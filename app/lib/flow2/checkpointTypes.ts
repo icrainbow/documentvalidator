@@ -112,6 +112,22 @@ export interface CheckpointMetadata {
   document_count: number;
   created_at: string;
   paused_at: string;
+  
+  // Phase 8 Animation Control
+  animation_played?: boolean; // True after Phase 8 animation plays once (prevent replay)
+  
+  // Demo Mode Detection
+  demo_mode?: boolean;
+  demo_evidence?: {
+    [key: string]: any;
+  };
+  
+  // Decision Tracking (for historical status policy)
+  decision?: 'approve' | 'reject'; // Stage 1 human decision
+  edd_stage?: EddStage; // EDD sub-review state (presence indicates rejection occurred)
+  
+  // Graph State (for historical status policy)
+  graph_state?: GraphState; // For node status policy
 }
 
 export interface HumanDecision {
