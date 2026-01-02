@@ -18,7 +18,8 @@
     "test:e2e:debug": "playwright test --debug",
     "test:all": "bash scripts/test-all.sh",
     "test:report": "playwright show-report test-results/html",
-    "skills:remote:start": "cd skills-remote-server && npx tsx index.ts"
+    "skills:remote:start": "cd skills-remote-server && npx tsx index.ts",
+    "export:flow2:n8n": "node tools/export-flow2-to-n8n.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

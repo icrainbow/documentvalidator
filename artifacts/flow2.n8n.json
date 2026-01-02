@@ -1,0 +1,276 @@
+{
+  "name": "Flow2 KYC Graph - flow2_kyc_v1 v1.0.0",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Extracts and organizes KYC topics from documents"
+      },
+      "id": "node-topic_assembler",
+      "name": "Topic Assembler",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Evaluates risk score and determines routing path"
+      },
+      "id": "node-risk_triage",
+      "name": "Risk Triage",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        500,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Runs conflict sweep, gap collector, policy flags in parallel",
+        "parallelism": "unlimited"
+      },
+      "id": "node-parallel_checks",
+      "name": "Parallel Checks",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Pauses execution for human approval/rejection (Phase 2 HITL)",
+        "pause_if_no_decision": true
+      },
+      "id": "node-human_review",
+      "name": "Human Review",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Self-reflection: analyzes trace and decides next action",
+        "maxReplans": 1,
+        "provider": "mock"
+      },
+      "id": "node-reflect_and_replan",
+      "name": "Reflect And Replan",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Routes based on reflection output (rerun/human/continue)"
+      },
+      "id": "node-routing_decision",
+      "name": "Routing Decision",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Pauses execution for human decision (EDD scope)",
+        "maxGates": 1
+      },
+      "id": "node-human_gate",
+      "name": "Human Gate",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Aggregates results and prepares final response"
+      },
+      "id": "node-finalize",
+      "name": "Finalize",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Handles execution errors and returns degraded response"
+      },
+      "id": "node-error_handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Topic Assembler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Topic Assembler": {
+      "main": [
+        [
+          {
+            "node": "Risk Triage",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Triage": {
+      "main": [
+        [
+          {
+            "node": "Parallel Checks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parallel Checks": {
+      "main": [
+        [
+          {
+            "node": "Human Review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Review": {
+      "main": [
+        [
+          {
+            "node": "Reflect And Replan",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Finalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reflect And Replan": {
+      "main": [
+        [
+          {
+            "node": "Routing Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Routing Decision": {
+      "main": [
+        [
+          {
+            "node": "Parallel Checks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Human Gate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Finalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Gate": {
+      "main": [
+        [
+          {
+            "node": "Finalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "id": "flow2",
+      "name": "flow2"
+    },
+    {
+      "id": "kyc",
+      "name": "kyc"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ed78bdedcff9"
+  }
+}

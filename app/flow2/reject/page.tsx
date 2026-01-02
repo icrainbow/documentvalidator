@@ -69,281 +69,95 @@ export default function RejectActionPage() {
   }
   
   return (
-    <>
-      <style>{`
-        @keyframes reject-spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-      
-      <div className="reject-page-container">
-        <div className="reject-card">
-          {status === 'form' && (
-            <div className="reject-content">
-              <div className="reject-icon reject-icon-warning">⚠️</div>
-              <h1 className="reject-title">Reject Workflow</h1>
-              <p className="reject-text">
-                You are about to reject this KYC review workflow. Please provide a reason for your decision.
-              </p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-400 via-purple-400 to-red-400 p-5 font-sans">
+      <div className="bg-white rounded-xl p-12 max-w-2xl w-full shadow-2xl">
+        {status === 'form' && (
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-6 text-4xl">
+              ⚠️
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Reject Workflow</h1>
+            <p className="text-gray-600 mt-4 leading-relaxed">
+              You are about to reject this KYC review workflow. Please provide a reason for your decision.
+            </p>
+            
+            <form onSubmit={handleSubmitRejection} className="mt-8 text-left">
+              <label htmlFor="reason" className="block font-semibold text-gray-700 mb-2 text-sm">
+                Rejection Reason <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g., Missing critical documents, High risk profile, Inconsistent information..."
+                className={`w-full p-3 border-2 rounded-md text-sm resize-y transition-colors ${
+                  reasonError ? 'border-red-500' : 'border-gray-300 focus:border-red-500'
+                } focus:outline-none`}
+                rows={4}
+                autoFocus
+              />
+              {reasonError && (
+                <p className="text-red-500 text-xs mt-2">{reasonError}</p>
+              )}
               
-              <form onSubmit={handleSubmitRejection} className="reject-form">
-                <label htmlFor="reason" className="reject-label">
-                  Rejection Reason <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <textarea
-                  id="reason"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="e.g., Missing critical documents, High risk profile, Inconsistent information..."
-                  className={`reject-textarea ${reasonError ? 'reject-textarea-error' : ''}`}
-                  rows={4}
-                  autoFocus
-                />
-                {reasonError && (
-                  <p className="reject-error">{reasonError}</p>
-                )}
-                
-                <div className="reject-form-actions">
-                  <button
-                    type="button"
-                    onClick={() => router.push('/document?flow=2')}
-                    className="reject-button reject-button-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="reject-button reject-button-danger"
-                  >
-                    Confirm Rejection
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-          
-          {status === 'loading' && (
-            <div className="reject-content">
-              <div className="reject-spinner" />
-              <h1 className="reject-title">Submitting Rejection...</h1>
-              <p className="reject-text">Please wait while we process your decision.</p>
-            </div>
-          )}
-          
-          {status === 'success' && (
-            <div className="reject-content">
-              <div className="reject-icon reject-icon-rejected">✓</div>
-              <h1 className="reject-title">Workflow Rejected</h1>
-              <p className="reject-text">{message}</p>
-              <div className="reject-reason-display">
-                <p className="reject-reason-label">Reason provided:</p>
-                <p className="reject-reason-text">{reason}</p>
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => router.push('/document?flow=2')}
+                  className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-md font-semibold text-sm hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-red-500 text-white rounded-md font-semibold text-sm hover:bg-red-600 transition-colors"
+                >
+                  Confirm Rejection
+                </button>
               </div>
-              <p className="reject-subtext">Redirecting to document page...</p>
+            </form>
+          </div>
+        )}
+        
+        {status === 'loading' && (
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-gray-200 border-t-red-500 rounded-full animate-spin mx-auto mb-6" />
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Submitting Rejection...</h1>
+            <p className="text-gray-600 mt-4">Please wait while we process your decision.</p>
+          </div>
+        )}
+        
+        {status === 'success' && (
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-red-500 text-white flex items-center justify-center mx-auto mb-6 text-3xl">
+              ✓
             </div>
-          )}
-          
-          {status === 'error' && (
-            <div className="reject-content">
-              <div className="reject-icon reject-icon-error">⚠</div>
-              <h1 className="reject-title">Error</h1>
-              <p className="reject-text">{message}</p>
-              <button
-                onClick={() => router.push('/document?flow=2')}
-                className="reject-button reject-button-primary"
-              >
-                Go to Document Page
-              </button>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Workflow Rejected</h1>
+            <p className="text-gray-600 mt-4">{message}</p>
+            <div className="bg-gray-100 border-l-4 border-red-500 p-4 rounded mt-6 text-left">
+              <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Reason provided:</p>
+              <p className="text-gray-900 leading-relaxed">{reason}</p>
             </div>
-          )}
-        </div>
+            <p className="text-gray-400 text-sm mt-4">Redirecting to document page...</p>
+          </div>
+        )}
+        
+        {status === 'error' && (
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-full bg-red-500 text-white flex items-center justify-center mx-auto mb-6 text-3xl">
+              ⚠
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Error</h1>
+            <p className="text-gray-600 mt-4">{message}</p>
+            <button
+              onClick={() => router.push('/document?flow=2')}
+              className="mt-6 px-6 py-3 bg-blue-500 text-white rounded-md font-semibold text-sm hover:bg-blue-600 transition-colors"
+            >
+              Go to Document Page
+            </button>
+          </div>
+        )}
       </div>
-      
-      <style jsx>{`
-        .reject-page-container {
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-          padding: 20px;
-        }
-        
-        .reject-card {
-          background: white;
-          border-radius: 12px;
-          padding: 48px;
-          max-width: 600px;
-          width: 100%;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-        }
-        
-        .reject-content {
-          text-align: center;
-        }
-        
-        .reject-form {
-          margin-top: 32px;
-          text-align: left;
-        }
-        
-        .reject-label {
-          display: block;
-          font-weight: 600;
-          color: #374151;
-          margin-bottom: 8px;
-          font-size: 14px;
-        }
-        
-        .reject-textarea {
-          width: 100%;
-          padding: 12px;
-          border: 2px solid #d1d5db;
-          border-radius: 6px;
-          font-size: 14px;
-          font-family: inherit;
-          resize: vertical;
-          transition: border-color 0.2s;
-        }
-        
-        .reject-textarea:focus {
-          outline: none;
-          border-color: #ef4444;
-        }
-        
-        .reject-textarea-error {
-          border-color: #ef4444;
-        }
-        
-        .reject-error {
-          color: #ef4444;
-          font-size: 13px;
-          margin: 8px 0 0 0;
-        }
-        
-        .reject-form-actions {
-          display: flex;
-          gap: 12px;
-          margin-top: 24px;
-        }
-        
-        .reject-spinner {
-          width: 48px;
-          height: 48px;
-          border: 4px solid #e5e7eb;
-          border-top-color: #ef4444;
-          border-radius: 50%;
-          animation: reject-spin 1s linear infinite;
-          margin: 0 auto 24px;
-        }
-        
-        .reject-icon {
-          width: 64px;
-          height: 64px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 24px;
-          font-size: 32px;
-        }
-        
-        .reject-icon-warning {
-          background: #fef3c7;
-          font-size: 36px;
-        }
-        
-        .reject-icon-rejected {
-          background: #ef4444;
-          color: white;
-        }
-        
-        .reject-icon-error {
-          background: #ef4444;
-          color: white;
-        }
-        
-        .reject-title {
-          font-size: 24px;
-          color: #1f2937;
-          margin-bottom: 8px;
-        }
-        
-        .reject-text {
-          color: #6b7280;
-          margin: 16px 0 0 0;
-          line-height: 1.6;
-        }
-        
-        .reject-reason-display {
-          background: #f3f4f6;
-          border-left: 4px solid #ef4444;
-          padding: 16px;
-          border-radius: 4px;
-          margin: 24px 0;
-          text-align: left;
-        }
-        
-        .reject-reason-label {
-          font-size: 12px;
-          font-weight: 600;
-          color: #6b7280;
-          margin: 0 0 8px 0;
-          text-transform: uppercase;
-        }
-        
-        .reject-reason-text {
-          color: #1f2937;
-          margin: 0;
-          line-height: 1.5;
-        }
-        
-        .reject-subtext {
-          color: #9ca3af;
-          font-size: 14px;
-          margin: 16px 0 0 0;
-        }
-        
-        .reject-button {
-          flex: 1;
-          padding: 12px 24px;
-          border: none;
-          border-radius: 6px;
-          font-weight: 600;
-          cursor: pointer;
-          font-size: 14px;
-          transition: all 0.2s;
-        }
-        
-        .reject-button-primary {
-          background: #3b82f6;
-          color: white;
-        }
-        
-        .reject-button-primary:hover {
-          background: #2563eb;
-        }
-        
-        .reject-button-secondary {
-          background: #e5e7eb;
-          color: #374151;
-        }
-        
-        .reject-button-secondary:hover {
-          background: #d1d5db;
-        }
-        
-        .reject-button-danger {
-          background: #ef4444;
-          color: white;
-        }
-        
-        .reject-button-danger:hover {
-          background: #dc2626;
-        }
-      `}</style>
-    </>
+    </div>
   );
 }
-
