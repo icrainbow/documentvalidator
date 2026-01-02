@@ -17,6 +17,7 @@ import type { GenericTopicSummary } from '@/app/lib/topicSummaries/types';
 import { KYC_FLOW2_CONFIG, IT_BULLETIN_CONFIG } from '@/app/lib/topicSummaries/configs';
 import { KYC_TOPIC_IDS } from '@/app/lib/flow2/kycTopicsSchema';
 import { mapIssuesToRiskInputs } from '@/app/lib/flow2/issueAdapter';
+import { buildFlow2DemoEvidencePseudoDocs, hasFlow2DemoEvidence } from '@/app/lib/flow2/demoEvidencePseudoDocs';
 import type { FlowStatus, CheckpointMetadata, RiskData } from '../components/flow2/Flow2MonitorPanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -1717,18 +1718,55 @@ function DocumentPageContent() {
         // Update UI state to show issues/trace (but NOT approval controls)
         setCurrentIssues(data.issues || []);
         
-        // ✅ STEP 4: Call topic summaries endpoint (waiting_human path)
+        // ✅ STEP 4 + DEMO EVIDENCE INJECTION: Call topic summaries endpoint (waiting_human path)
+        // DEMO-ONLY: Check if post-reject analysis data should be injected
         const runIdForTopics = data.run_id || `run-${Date.now()}`;
-        callGenericTopicSummariesEndpoint(
+        
+        // Determine if this is Flow2 demo with evidence to inject
+        const isFlow2Demo = !!(data.checkpoint_metadata?.demo_mode || data.checkpoint_metadata?.demo_evidence);
+        
+        // Build topic input documents
+        let topicInputDocs = flow2Documents;
+        
+        if (isFlow2Demo && data.checkpoint_metadata) {
+          // Try to fetch post-reject analysis if available
+          try {
+            const analysisResp = await fetch(`/api/flow2/demo/post-reject-analysis?run_id=${runIdForTopics}`);
+            if (analysisResp.ok) {
+              const analysisData = await analysisResp.json();
+              if (analysisData.triggered && analysisData.evidence) {
+                console.log('[Flow2Demo] Injecting evidence dashboard artifacts into topic summary input');
+                const demoEvidenceDocs = buildFlow2DemoEvidencePseudoDocs(analysisData);
+                if (demoEvidenceDocs.length > 0) {
+                  topicInputDocs = [...flow2Documents, ...demoEvidenceDocs];
+                  console.log(`[Flow2Demo] Added ${demoEvidenceDocs.length} evidence pseudo-doc(s), total input: ${topicInputDocs.length} docs`);
+                }
+              }
+            }
+          } catch (evidenceError: any) {
+            console.warn('[Flow2Demo] Failed to fetch evidence for injection:', evidenceError.message);
+            // Non-blocking: proceed with original documents
+          }
+        }
+        
+        // Call topic summaries with (potentially augmented) document set
+        // CRITICAL: Await this call for demo gating
+        const topicSuccess = await callGenericTopicSummariesEndpoint(
           '/api/flow2/topic-summaries',
           runIdForTopics,
-          flow2Documents,
+          topicInputDocs,
           KYC_FLOW2_CONFIG.topic_ids,
           data.issues || [],
           setFlow2TopicSummaries,
           setIsLoadingTopicSummaries,
           setTopicSummariesRunId
         );
+        
+        // DEMO GATING: Block downstream EDD email/continuation if topic summary failed
+        if (isFlow2Demo && !topicSuccess) {
+          console.warn('[Flow2Demo] Topic summary failed; this would block downstream EDD reviewer email/continuation in real flow.');
+          console.warn('[Flow2Demo] For demo, email was already sent by orchestrator, so this is informational only.');
+        }
         
         setGraphReviewTrace(data.graphReviewTrace || null);
         setGraphTopics(data.topicSections || []);
@@ -1878,7 +1916,7 @@ function DocumentPageContent() {
    * ✅ Generic Topic Summaries Endpoint Call (KYC or IT)
    * 
    * Config-driven: can call any topic summaries endpoint.
-   * Non-blocking: failure doesn't break main review flow.
+   * Now returns Promise<boolean> for gating downstream actions.
    */
   const callGenericTopicSummariesEndpoint = async (
     endpoint: string,  // "/api/flow2/topic-summaries" or "/api/it-bulletin/topic-summaries"
@@ -1889,7 +1927,7 @@ function DocumentPageContent() {
     setSummaries: (data: GenericTopicSummary[]) => void,
     setLoading: (loading: boolean) => void,
     setRunId: (id: string) => void
-  ) => {
+  ): Promise<boolean> => {
     setLoading(true);
     
     try {
@@ -1942,13 +1980,18 @@ function DocumentPageContent() {
             // Non-blocking: topic summaries still work in UI
           }
         }
+        
+        return true; // SUCCESS
       } else if (data.ok === false) {
         console.warn(`[TopicSummaries/${endpoint}] API returned error:`, data.error);
+        return false; // FAILURE
       } else {
         console.error(`[TopicSummaries/${endpoint}] Invalid response shape:`, data);
+        return false; // FAILURE
       }
     } catch (error: any) {
       console.error(`[TopicSummaries/${endpoint}] Request failed:`, error.message);
+      return false; // FAILURE
     } finally {
       setLoading(false);
     }
