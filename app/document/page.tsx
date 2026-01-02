@@ -3238,19 +3238,35 @@ function DocumentPageContent() {
   const handleFlow1ChatSubmit = async (userInput: string, userMessage: Message) => {
     const lowerInput = userInput.toLowerCase();
 
+    // Helper: Parse user-facing section reference (e.g., "section 2", "Section 3")
+    // Returns the section object if found, null otherwise
+    const findSectionByUserReference = (userRef: string): typeof sections[0] | null => {
+      // Try to extract number from user input (e.g., "section 2" -> "2")
+      const match = userRef.match(/section\s+(\d+)/i);
+      if (!match) return null;
+      
+      const displayNumber = parseInt(match[1], 10);
+      
+      // Map display number (1-based position) to section
+      // User sees "Section 1, Section 2, Section 3" based on visual order
+      if (displayNumber < 1 || displayNumber > sections.length) return null;
+      
+      return sections[displayNumber - 1];
+    };
+
     // NEW: Check for "delete section N" command
     const deleteSectionMatch = lowerInput.match(/delete\s+section\s+(\d+)/);
     if (deleteSectionMatch) {
-      const sectionIdToDelete = parseInt(deleteSectionMatch[1], 10);
+      const displayNumber = parseInt(deleteSectionMatch[1], 10);
       
-      // Find section by ID (not position)
-      const sectionToDelete = sections.find(s => s.id === sectionIdToDelete);
+      // Find section by user-facing display number (position-based, 1-indexed)
+      const sectionToDelete = findSectionByUserReference(lowerInput);
       
       if (!sectionToDelete) {
         const errorMessage: Message = {
           role: 'agent',
           agent: 'System',
-          content: `⚠️ Section ${sectionIdToDelete} not found. Available sections: ${sections.map(s => `Section ${s.id}`).join(', ')}.`
+          content: `⚠️ Section ${displayNumber} not found. Available sections: ${sections.map((s, idx) => `Section ${idx + 1}: ${s.title}`).join(', ')}.`
         };
         setMessages([...messages, userMessage, errorMessage]);
         setInputValue('');
@@ -3258,13 +3274,16 @@ function DocumentPageContent() {
         return;
       }
       
-      // Delete the section
-      setSections(prev => prev.filter(s => s.id !== sectionIdToDelete));
+      const sectionTitle = sectionToDelete.title;
+      const sectionId = sectionToDelete.id;
+      
+      // Delete the section by ID
+      setSections(prev => prev.filter(s => s.id !== sectionId));
       
       const confirmMessage: Message = {
         role: 'agent',
         agent: 'System',
-        content: `✓ Section ${sectionIdToDelete} "${sectionToDelete.title}" has been deleted.`
+        content: `✓ Section ${displayNumber} "${sectionTitle}" has been deleted.`
       };
       
       setMessages([...messages, userMessage, confirmMessage]);
@@ -3309,16 +3328,16 @@ function DocumentPageContent() {
     // NEW: Check for "fix section N" command - auto-optimize with LLM
     const fixSectionMatch = lowerInput.match(/fix\s+section\s+(\d+)/);
     if (fixSectionMatch) {
-      const sectionId = parseInt(fixSectionMatch[1], 10);
+      const displayNumber = parseInt(fixSectionMatch[1], 10);
       
-      // Find section by ID (not position)
-      const targetSection = sections.find(s => s.id === sectionId);
+      // Find section by user-facing display number (position-based, 1-indexed)
+      const targetSection = findSectionByUserReference(lowerInput);
       
       if (!targetSection) {
         const errorMessage: Message = {
           role: 'agent',
           agent: 'System',
-          content: `⚠️ Section ${sectionId} not found. Available sections: ${sections.map(s => `Section ${s.id}`).join(', ')}.`
+          content: `⚠️ Section ${displayNumber} not found. Available sections: ${sections.map((s, idx) => `Section ${idx + 1}: ${s.title}`).join(', ')}.`
         };
         setMessages([...messages, userMessage, errorMessage]);
         setInputValue('');
@@ -3331,7 +3350,7 @@ function DocumentPageContent() {
       const processingMessage: Message = {
         role: 'agent',
         agent: 'Optimize Agent',
-        content: `Processing Section ${sectionId} "${targetSection.title}"... AI is generating optimized content.`
+        content: `Processing Section ${displayNumber} "${targetSection.title}"... AI is generating optimized content.`
       };
       setMessages(prev => [...prev, processingMessage]);
 
@@ -3392,16 +3411,16 @@ function DocumentPageContent() {
           const successMessage: Message = {
             role: 'agent',
             agent: 'Optimize Agent',
-            content: `✓ Section ${sectionId} "${targetSection.title}" has been automatically optimized with AI-generated content. Status updated to PASS.`
+            content: `✓ Section ${displayNumber} "${targetSection.title}" has been automatically optimized with AI-generated content. Status updated to PASS.`
           };
           setMessages(prev => [...prev, successMessage]);
           
           // NEW: Scroll to the updated section
           setTimeout(() => {
-            const sectionElement = document.getElementById(`sec-${sectionId}`);
+            const sectionElement = document.getElementById(`sec-${targetSection.id}`);
             if (sectionElement) {
               sectionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              console.log(`[Flow1] Scrolled to section ${sectionId}`);
+              console.log(`[Flow1] Scrolled to section ${displayNumber} (ID: ${targetSection.id})`);
             }
           }, 300);
         } else {
@@ -3411,7 +3430,7 @@ function DocumentPageContent() {
         const errorMessage: Message = {
           role: 'agent',
           agent: 'System',
-          content: `⚠️ Failed to optimize Section ${sectionId}: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or check your API configuration.`
+          content: `⚠️ Failed to optimize Section ${displayNumber}: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or check your API configuration.`
         };
         setMessages(prev => [...prev, errorMessage]);
       }
@@ -3551,7 +3570,7 @@ function DocumentPageContent() {
       agentMessage = {
         role: 'agent',
         agent: 'System',
-        content: '[System] Available commands:\n• "global evaluate" - Run full evaluation\n• "add section [name]" - Add a new section\n• "delete section N" - Delete section by ID\n• "fix section N" - Auto-optimize section N with AI (scrolls to section)\n• Mention section name to request AI improvements'
+        content: '[System] Available commands:\n• "global evaluate" - Run full evaluation\n• "add section [name]" - Add a new section\n• "delete section N" - Delete section by display number (e.g., "delete section 2")\n• "fix section N" - Auto-optimize section by display number (e.g., "fix section 3")\n• Mention section name to request AI improvements\n\n💡 Tip: Use the section number as shown in the UI (e.g., "Section 2: Executive Summary" → use "section 2")'
       };
     }
 
