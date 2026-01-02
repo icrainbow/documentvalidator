@@ -4234,6 +4234,8 @@ function DocumentPageContent() {
           graphReviewTrace={graphReviewTrace}
           skillCatalog={[]}
           onIssueClick={handleIssueClick}
+          demoTrace={(flowMonitorMetadata as any)?.demo_trace || null}
+          demoRunId={flowMonitorRunId}
         />
       ) : (
         <ReviewConfigDrawer

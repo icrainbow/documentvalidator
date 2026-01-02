@@ -6,6 +6,16 @@ import GraphDefinitionPanel from '../GraphDefinitionPanel';
 import SkillsPanel from '../SkillsPanel';
 import GapPanel from '../GapPanel';
 import ConflictPanel from '../ConflictPanel';
+import DemoTracePlayer from './DemoTracePlayer';
+
+interface DemoTraceEvent {
+  t: number;
+  kind: 'task' | 'skill' | 'finding' | 'action';
+  title: string;
+  detail?: string;
+  status?: 'start' | 'running' | 'done';
+  severity?: 'high' | 'medium' | 'low' | 'info';
+}
 
 interface Flow2ReviewConfigDrawerProps {
   isOpen: boolean;
@@ -13,6 +23,8 @@ interface Flow2ReviewConfigDrawerProps {
   graphReviewTrace: any | null;
   skillCatalog: any[];
   onIssueClick?: (issue: any) => void;
+  demoTrace?: DemoTraceEvent[] | null;
+  demoRunId?: string | null;
 }
 
 export default function Flow2ReviewConfigDrawer({
@@ -20,7 +32,9 @@ export default function Flow2ReviewConfigDrawer({
   onClose,
   graphReviewTrace,
   skillCatalog,
-  onIssueClick
+  onIssueClick,
+  demoTrace,
+  demoRunId
 }: Flow2ReviewConfigDrawerProps) {
   const [activeTab, setActiveTab] = useState<'graphTrace' | 'graph' | 'runs' | 'config'>('graphTrace');
   const [isSkillsExpanded, setIsSkillsExpanded] = useState(false);
@@ -32,6 +46,7 @@ export default function Flow2ReviewConfigDrawer({
   const conflicts = graphReviewTrace?.conflicts || [];
   const skillInvocations = graphReviewTrace?.skillInvocations || [];
   const issues = graphReviewTrace?.issues || [];
+  const hasDemoTrace = demoTrace && demoTrace.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50" onClick={onClose}>
@@ -105,6 +120,13 @@ export default function Flow2ReviewConfigDrawer({
           {/* Graph Trace Tab */}
           {activeTab === 'graphTrace' && (
             <div className="space-y-6">
+              {/* Demo Trace Player (if active) */}
+              {hasDemoTrace && (
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+                  <DemoTracePlayer trace={demoTrace} runId={demoRunId || null} />
+                </div>
+              )}
+              
               {graphReviewTrace ? (
                 <>
                   <GraphTrace trace={graphReviewTrace} />

@@ -4,14 +4,26 @@ import { useState } from 'react';
 import type { AgentParticipant } from '../lib/computeParticipants';
 import type { AgentMetadata } from '../lib/agentRegistry';
 import { getAllAgents } from '../lib/agentRegistry';
+import DemoTracePlayer from './flow2/DemoTracePlayer';
+
+interface DemoTraceEvent {
+  t: number;
+  kind: 'task' | 'skill' | 'finding' | 'action';
+  title: string;
+  detail?: string;
+  status?: 'start' | 'running' | 'done';
+  severity?: 'high' | 'medium' | 'low' | 'info';
+}
 
 interface AgentsDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   participants: AgentParticipant[];
+  demoTrace?: DemoTraceEvent[] | null;
+  demoRunId?: string | null;
 }
 
-export default function AgentsDrawer({ open, onOpenChange, participants }: AgentsDrawerProps) {
+export default function AgentsDrawer({ open, onOpenChange, participants, demoTrace, demoRunId }: AgentsDrawerProps) {
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const allAgents = getAllAgents();
   
@@ -20,6 +32,8 @@ export default function AgentsDrawer({ open, onOpenChange, participants }: Agent
   const toggleExpand = (agentId: string) => {
     setExpandedAgentId(prev => prev === agentId ? null : agentId);
   };
+  
+  const hasDemoTrace = demoTrace && demoTrace.length > 0;
   
   return (
     <>
@@ -50,6 +64,13 @@ export default function AgentsDrawer({ open, onOpenChange, participants }: Agent
         
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          
+          {/* Demo Trace Player (ONLY when demo_mode active) */}
+          {hasDemoTrace && (
+            <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+              <DemoTracePlayer trace={demoTrace} runId={demoRunId || null} />
+            </div>
+          )}
           
           {/* Section A: Runtime Participation */}
           <div>

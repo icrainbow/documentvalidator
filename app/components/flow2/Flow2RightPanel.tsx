@@ -3,6 +3,8 @@
 import Flow2InfoPanel from './Flow2InfoPanel';
 import Flow2ReviewStatus from './Flow2ReviewStatus';
 import Flow2MonitorPanel, { type FlowStatus, type CheckpointMetadata } from './Flow2MonitorPanel';
+import Flow2LogicGraphPreview from './Flow2LogicGraphPreview';
+import Flow2EvidenceDashboard from './Flow2EvidenceDashboard';
 
 interface Flow2RightPanelProps {
   flow2Documents: any[];
@@ -39,6 +41,11 @@ export default function Flow2RightPanel({
   
   const hasDocuments = flow2Documents.length > 0;
   const canRunReview = hasDocuments && !isOrchestrating;
+  
+  // Demo EDD fields
+  const isDemoEdd = flowMonitorMetadata?.demo_mode === 'edd_injection';
+  const demoEvidence = (flowMonitorMetadata as any)?.demo_evidence;
+  const demoInjectedNode = flowMonitorMetadata?.demo_injected_node;
 
   return (
     <div className="sticky top-6 h-[calc(100vh-4rem)] overflow-y-auto">
@@ -105,6 +112,28 @@ export default function Flow2RightPanel({
             )}
           </button>
         </div>
+
+        {/* Logic Graph Preview (shows injected EDD node if demo active) */}
+        {flowMonitorRunId && (
+          <div className="mb-6">
+            <Flow2LogicGraphPreview injectedNode={demoInjectedNode || null} />
+          </div>
+        )}
+
+        {/* Evidence Dashboard (demo only) */}
+        {isDemoEdd && demoEvidence && (
+          <div className="mb-6">
+            <Flow2EvidenceDashboard
+              visible={true}
+              rejectComment={flowMonitorMetadata?.decision_comment || ''}
+              pdfSnippetImageUrl={demoEvidence.pdf_snippet_image}
+              disclosureCurrent={demoEvidence.disclosure_current}
+              disclosureWealth={demoEvidence.disclosure_wealth}
+              regulationTitle={demoEvidence.regulation.title}
+              regulationEffectiveDate={demoEvidence.regulation.effective_date}
+            />
+          </div>
+        )}
 
         {/* Info Panel */}
         <Flow2InfoPanel />

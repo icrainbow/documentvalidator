@@ -10,6 +10,9 @@ export interface CheckpointMetadata {
   reminder_sent_at?: string;
   decision_comment?: string;
   decided_by?: string;
+  // Demo fields
+  demo_mode?: 'edd_injection';
+  demo_injected_node?: { id: string; label: string };
 }
 
 interface Flow2MonitorPanelProps {
@@ -322,6 +325,13 @@ export default function Flow2MonitorPanel({
             <p className="text-xs text-red-600 mt-2 bg-red-100 p-2 rounded">
               <strong>Reason:</strong> {checkpointMetadata.decision_comment}
             </p>
+          )}
+          {/* Demo EDD injection hint */}
+          {checkpointMetadata?.demo_mode === 'edd_injection' && checkpointMetadata.demo_injected_node && (
+            <div className="mt-3 p-2 bg-amber-100 border border-amber-300 rounded text-xs text-amber-900">
+              <strong>🔄 Dynamic step added:</strong>{' '}
+              {checkpointMetadata.demo_injected_node.label} — triggered by ambiguous rejection
+            </div>
           )}
           {runId && (
             <p className="text-xs text-red-500 mt-2">

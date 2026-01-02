@@ -65,6 +65,22 @@ export async function GET(request: Request) {
         timestamp: checkpoint.decided_at || new Date().toISOString(),
         reason: checkpoint.decision_comment,
       },
+      checkpoint_metadata: {
+        approval_email_to: checkpoint.approval_email_to,
+        approval_sent_at: checkpoint.approval_sent_at,
+        reminder_sent_at: checkpoint.reminder_sent_at,
+        decision_comment: checkpoint.decision_comment,
+        decided_by: checkpoint.decided_by,
+        decided_at: checkpoint.decided_at,
+        // Demo fields (optional)
+        ...(((checkpoint as any).demo_mode) && {
+          demo_mode: (checkpoint as any).demo_mode,
+          demo_reject_comment: (checkpoint as any).demo_reject_comment,
+          demo_injected_node: (checkpoint as any).demo_injected_node,
+          demo_evidence: (checkpoint as any).demo_evidence,
+          demo_trace: (checkpoint as any).demo_trace,
+        }),
+      },
       // Backward compatibility fields
       decided_at: checkpoint.decided_at,
       decided_by: checkpoint.decided_by,
@@ -159,6 +175,15 @@ export async function GET(request: Request) {
       approval_email_to: checkpoint.approval_email_to,
       approval_sent_at: checkpoint.approval_sent_at,
       reminder_sent_at: checkpoint.reminder_sent_at,
+      // Demo fields (optional) - should not be present in waiting_human state
+      // but include for consistency if somehow set
+      ...(((checkpoint as any).demo_mode) && {
+        demo_mode: (checkpoint as any).demo_mode,
+        demo_reject_comment: (checkpoint as any).demo_reject_comment,
+        demo_injected_node: (checkpoint as any).demo_injected_node,
+        demo_evidence: (checkpoint as any).demo_evidence,
+        demo_trace: (checkpoint as any).demo_trace,
+      }),
     },
     // Backward compatibility fields
     approval_sent_at: checkpoint.approval_sent_at,

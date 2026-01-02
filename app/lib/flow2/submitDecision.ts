@@ -11,6 +11,8 @@
 import { loadCheckpoint, updateCheckpointStatus, getRunIdByToken } from './checkpointStore';
 import { validateCheckpoint } from './checkpointValidation';
 import type { Flow2Checkpoint } from './checkpointTypes';
+import { isAmbiguousReject, getMatchSummary } from './ambiguousRejectDetector';
+import { generateDemoEddBundle } from './demoEddGenerator';
 
 export type FinalizeDecisionStatus = 
   | 'finalized'              // Successfully wrote decision
@@ -164,6 +166,23 @@ export async function finalizeDecision(
   
   if (decision === 'reject' && reason) {
     updates.decision_comment = reason.trim();
+    
+    // DEMO ONLY: Check for ambiguous reject pattern
+    if (isAmbiguousReject(reason)) {
+      console.log('[SubmitDecision/Demo] ✅ Ambiguous reject detected!');
+      console.log('[SubmitDecision/Demo] Matched patterns:', getMatchSummary(reason));
+      
+      const demoBundle = generateDemoEddBundle(reason.trim());
+      
+      // Inject demo metadata into checkpoint
+      (updates as any).demo_mode = demoBundle.demo_mode;
+      (updates as any).demo_reject_comment = demoBundle.demo_reject_comment;
+      (updates as any).demo_injected_node = demoBundle.demo_injected_node;
+      (updates as any).demo_evidence = demoBundle.demo_evidence;
+      (updates as any).demo_trace = demoBundle.demo_trace;
+      
+      console.log('[SubmitDecision/Demo] Injected EDD demo bundle into checkpoint');
+    }
   }
   
   // Step 7: Pre-write validation (validateCheckpoint expects full checkpoint)
