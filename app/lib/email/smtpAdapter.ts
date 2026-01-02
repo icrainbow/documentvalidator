@@ -114,10 +114,6 @@ export async function sendApprovalEmail(params: {
       to: params.recipient,
       subject: `[Flow2 Approval] Review Required - Run ${params.run_id.slice(0, 8)}`,
       messageId: customMessageId,
-      headers: {
-        'Content-Type': 'text/html; charset=UTF-8',
-        'MIME-Version': '1.0'
-      },
       html: `<!DOCTYPE html>
 <html lang="en">
 <head>
