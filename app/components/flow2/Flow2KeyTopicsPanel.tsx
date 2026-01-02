@@ -43,21 +43,21 @@ export default function Flow2KeyTopicsPanel({
       <div className="mb-6 bg-slate-50 border-2 border-slate-300 rounded-lg p-5">
         <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
           <span className="text-xl">📊</span>
-          KYC Topics Summary
+          Topic Summary
         </h3>
         <p className="text-sm text-slate-600 italic">
-          Upload documents to see KYC topic summaries
+          Upload documents to see topic summaries
         </p>
       </div>
     );
   }
   
-  if (isLoading) {
+    if (isLoading) {
     return (
       <div className="mb-6 bg-slate-50 border-2 border-slate-300 rounded-lg p-5">
         <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
           <span className="text-xl">📊</span>
-          KYC Topics Summary
+          Topic Summary
         </h3>
         <div className="flex items-center gap-2">
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-600"></div>
@@ -74,7 +74,7 @@ export default function Flow2KeyTopicsPanel({
       <div className="mb-6 bg-slate-50 border-2 border-slate-300 rounded-lg p-5">
         <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
           <span className="text-xl">📊</span>
-          KYC Topics Summary
+          Topic Summary
         </h3>
         <p className="text-sm text-slate-600">
           {documents.length} document(s) loaded. Run Graph KYC Review to generate summaries.
@@ -131,7 +131,7 @@ export default function Flow2KeyTopicsPanel({
     <div className="mb-6 bg-slate-50 border-2 border-slate-300 rounded-lg p-5">
       <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
         <span className="text-xl">📊</span>
-        KYC Topics Summary
+        Topic Summary
       </h3>
       <p className="text-xs text-slate-600 mb-3">
         LLM-generated summary of customer information across all documents

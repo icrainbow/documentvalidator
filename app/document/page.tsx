@@ -3749,8 +3749,8 @@ function DocumentPageContent() {
                 </div>
               )}
               
-              {/* Flow2: Key Topics Extracted Panel (replaces Demo Scenarios) */}
-              {isFlow2 && (
+              {/* Flow2: Topic Summary Panel - Only show for KYC Review, not IT Impact Review */}
+              {isFlow2 && !case4Active && (
                 <Flow2KeyTopicsPanel
                   documents={flow2Documents}
                   topicSummaries={flow2TopicSummaries}
