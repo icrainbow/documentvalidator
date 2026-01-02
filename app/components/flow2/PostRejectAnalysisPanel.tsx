@@ -202,7 +202,7 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete }: P
     scheduleAnimation();
   }, [scheduleAnimation, onAnimationComplete]);
   
-  // Auto-start on mount or runId change
+  // Auto-start on mount or when data changes
   useEffect(() => {
     if (!data.triggered) {
       console.log('[PostRejectAnalysis] Not triggered, skipping animation');
@@ -210,29 +210,24 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete }: P
     }
     
     const currentRunId = data.run_id || 'default';
-    console.log(`[PostRejectAnalysis] useEffect triggered: runId=${currentRunId}, hasStarted=${hasStartedRef.current}`);
+    console.log(`[PostRejectAnalysis] useEffect triggered: runId=${currentRunId}, hasStarted=${hasStartedRef.current}, prevRunId=${runIdRef.current}`);
     
-    // Reset if runId changes
-    if (runIdRef.current !== null && runIdRef.current !== currentRunId) {
-      console.log(`[PostRejectAnalysis] Run ID changed from ${runIdRef.current} to ${currentRunId}, resetting`);
+    // CRITICAL FIX: Always reset and restart if we have a run_id
+    // This fixes the "stuck in Running" bug after redirect
+    const shouldRestart = runIdRef.current !== currentRunId || !hasStartedRef.current;
+    
+    if (shouldRestart) {
+      console.log(`[PostRejectAnalysis] ${runIdRef.current !== currentRunId ? 'Run ID changed' : 'First start'} - restarting animation`);
       runIdRef.current = currentRunId;
       hasStartedRef.current = false;
       cleanup();
-      // Force immediate start after reset
-      setTimeout(() => scheduleAnimation(), 50);
-      return;
-    }
-    
-    // First time setup
-    if (runIdRef.current === null) {
-      console.log(`[PostRejectAnalysis] First time setup with runId: ${currentRunId}`);
-      runIdRef.current = currentRunId;
-    }
-    
-    // Start animation if not started
-    if (!hasStartedRef.current) {
-      console.log(`[PostRejectAnalysis] Starting animation for run_id: ${currentRunId}`);
-      scheduleAnimation();
+      // Force immediate start
+      setTimeout(() => {
+        if (!hasStartedRef.current) {
+          console.log('[PostRejectAnalysis] Starting animation after reset');
+          scheduleAnimation();
+        }
+      }, 100);
     }
     
     return () => {
@@ -240,7 +235,7 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete }: P
       cleanup();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.triggered, data.run_id]); // Minimal deps to avoid infinite loops
+  }, [data.triggered, data.run_id, scheduleAnimation]); // Include scheduleAnimation for safety
   
   const getSeverityColor = (severity: string) => {
     switch (severity) {
