@@ -458,7 +458,7 @@ export async function runGraphKycReview(
         // Phase 7-9: Include risk issues in response
         const allIssuesForPause = convertToIssues(execution, topicSections, riskIssues);
         
-        return {
+        const waitingHumanResponse = {
           status: 'waiting_human' as const,
           run_id: currentRunId,
           paused_at_node: 'human_review',
@@ -493,6 +493,9 @@ export async function runGraphKycReview(
             skillInvocations
           })
         };
+        
+        console.log(`[Flow2/HITL] Returning waiting_human response with ${allIssuesForPause.length} issues`);
+        return waitingHumanResponse;
       }
       
       // Continue: human decision approved/rejected
