@@ -585,6 +585,9 @@ function DocumentPageContent() {
   const [flowMonitorRunId, setFlowMonitorRunId] = useState<string | null>(null);
   const [flowMonitorMetadata, setFlowMonitorMetadata] = useState<CheckpointMetadata | null>(null);
   
+  // Phase 8: Post-reject analysis state
+  const [postRejectAnalysisData, setPostRejectAnalysisData] = useState<any | null>(null);
+  
   // Workspace limits
   const MAX_FLOW2_DOCUMENTS = 10;
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -741,6 +744,27 @@ function DocumentPageContent() {
         // Restore topics if present
         if (data.checkpoint_metadata?.graph_state?.topicSections) {
           setGraphTopics(data.checkpoint_metadata.graph_state.topicSections);
+        }
+        
+        // Phase 8: If status is rejected, fetch post-reject analysis
+        if (data.status === 'rejected') {
+          console.log('[Flow2/Phase8] Rejected workflow detected, fetching post-reject analysis...');
+          try {
+            const analysisResponse = await fetch(`/api/flow2/demo/post-reject-analysis?run_id=${docKey}`);
+            if (analysisResponse.ok) {
+              const analysisData = await analysisResponse.json();
+              console.log('[Flow2/Phase8] Post-reject analysis loaded:', analysisData);
+              
+              if (analysisData.triggered) {
+                setPostRejectAnalysisData(analysisData);
+                console.log('[Flow2/Phase8] ✅ Phase 8 EDD demo activated');
+              } else {
+                console.log('[Flow2/Phase8] Trigger not detected in reject comment');
+              }
+            }
+          } catch (error) {
+            console.error('[Flow2/Phase8] Failed to load post-reject analysis:', error);
+          }
         }
         
         // Add system message
@@ -3460,6 +3484,7 @@ function DocumentPageContent() {
                   flowMonitorStatus={flowMonitorStatus}
                   flowMonitorMetadata={flowMonitorMetadata}
                   onFlowStatusChange={setFlowMonitorStatus}
+                  postRejectAnalysisData={postRejectAnalysisData}
                 />
               ) : (
                 // FLOW1: Original right panel with all features

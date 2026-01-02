@@ -5,6 +5,7 @@ import Flow2ReviewStatus from './Flow2ReviewStatus';
 import Flow2MonitorPanel, { type FlowStatus, type CheckpointMetadata } from './Flow2MonitorPanel';
 import Flow2LogicGraphPreview from './Flow2LogicGraphPreview';
 import Flow2EvidenceDashboard from './Flow2EvidenceDashboard';
+import PostRejectAnalysisPanel, { type PostRejectAnalysisData } from './PostRejectAnalysisPanel';
 
 interface Flow2RightPanelProps {
   flow2Documents: any[];
@@ -21,6 +22,8 @@ interface Flow2RightPanelProps {
   flowMonitorStatus?: FlowStatus;
   flowMonitorMetadata?: CheckpointMetadata | null;
   onFlowStatusChange?: (status: FlowStatus) => void;
+  // Phase 8 props
+  postRejectAnalysisData?: PostRejectAnalysisData | null;
 }
 
 export default function Flow2RightPanel({
@@ -37,6 +40,7 @@ export default function Flow2RightPanel({
   flowMonitorStatus = 'idle',
   flowMonitorMetadata,
   onFlowStatusChange,
+  postRejectAnalysisData,
 }: Flow2RightPanelProps) {
   
   const hasDocuments = flow2Documents.length > 0;
@@ -46,6 +50,10 @@ export default function Flow2RightPanel({
   const isDemoEdd = flowMonitorMetadata?.demo_mode === 'edd_injection';
   const demoEvidence = (flowMonitorMetadata as any)?.demo_evidence;
   const demoInjectedNode = flowMonitorMetadata?.demo_injected_node;
+  
+  // Phase 8: Use post-reject analysis data if available, otherwise fallback to checkpoint metadata
+  const phase8Evidence = postRejectAnalysisData?.evidence || demoEvidence;
+  const phase8InjectedNode = postRejectAnalysisData?.graph_patch?.add_nodes?.[0] || demoInjectedNode;
 
   return (
     <div className="sticky top-6 h-[calc(100vh-4rem)] overflow-y-auto">
@@ -58,6 +66,11 @@ export default function Flow2RightPanel({
           checkpointMetadata={flowMonitorMetadata}
           onStatusChange={onFlowStatusChange}
         />
+        
+        {/* PHASE 8: Post-Reject Analysis (tasks, skills, findings) */}
+        {postRejectAnalysisData && postRejectAnalysisData.triggered && (
+          <PostRejectAnalysisPanel data={postRejectAnalysisData} />
+        )}
         
         {/* Status Display */}
         <Flow2ReviewStatus
@@ -116,21 +129,21 @@ export default function Flow2RightPanel({
         {/* Logic Graph Preview (shows injected EDD node if demo active) */}
         {flowMonitorRunId && (
           <div className="mb-6">
-            <Flow2LogicGraphPreview injectedNode={demoInjectedNode || null} />
+            <Flow2LogicGraphPreview injectedNode={phase8InjectedNode || null} />
           </div>
         )}
 
-        {/* Evidence Dashboard (demo only) */}
-        {isDemoEdd && demoEvidence && (
+        {/* Evidence Dashboard (Phase 8 or demo fallback) */}
+        {(postRejectAnalysisData?.triggered || isDemoEdd) && phase8Evidence && (
           <div className="mb-6">
             <Flow2EvidenceDashboard
               visible={true}
-              rejectComment={flowMonitorMetadata?.decision_comment || ''}
-              pdfSnippetImageUrl={demoEvidence.pdf_snippet_image}
-              disclosureCurrent={demoEvidence.disclosure_current}
-              disclosureWealth={demoEvidence.disclosure_wealth}
-              regulationTitle={demoEvidence.regulation.title}
-              regulationEffectiveDate={demoEvidence.regulation.effective_date}
+              rejectComment={flowMonitorMetadata?.decision_comment || postRejectAnalysisData?.reviewer_text || ''}
+              pdfSnippetImageUrl={phase8Evidence.pdf_highlight_image_url || phase8Evidence.pdf_snippet_image}
+              disclosureCurrent={phase8Evidence.disclosures?.current || phase8Evidence.disclosure_current}
+              disclosureWealth={phase8Evidence.disclosures?.wealth || phase8Evidence.disclosure_wealth}
+              regulationTitle={phase8Evidence.regulation?.title || phase8Evidence.regulation_title}
+              regulationEffectiveDate={phase8Evidence.regulation?.effective_date || phase8Evidence.regulation_effective_date}
             />
           </div>
         )}

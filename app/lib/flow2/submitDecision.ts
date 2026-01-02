@@ -11,7 +11,7 @@
 import { loadCheckpoint, updateCheckpointStatus, getRunIdByToken } from './checkpointStore';
 import { validateCheckpoint } from './checkpointValidation';
 import type { Flow2Checkpoint } from './checkpointTypes';
-import { isAmbiguousReject, getMatchSummary } from './ambiguousRejectDetector';
+import { isAmbiguousReject, isRouteEddTrigger, getMatchSummary } from './ambiguousRejectDetector';
 import { generateDemoEddBundle } from './demoEddGenerator';
 
 export type FinalizeDecisionStatus = 
@@ -167,10 +167,18 @@ export async function finalizeDecision(
   if (decision === 'reject' && reason) {
     updates.decision_comment = reason.trim();
     
-    // DEMO ONLY: Check for ambiguous reject pattern
-    if (isAmbiguousReject(reason)) {
-      console.log('[SubmitDecision/Demo] ✅ Ambiguous reject detected!');
-      console.log('[SubmitDecision/Demo] Matched patterns:', getMatchSummary(reason));
+    // DEMO ONLY: Check for Route: EDD trigger (PRIMARY) or complex ambiguous pattern (FALLBACK)
+    const isRouteEdd = isRouteEddTrigger(reason);
+    const isAmbiguous = !isRouteEdd && isAmbiguousReject(reason); // Only check complex pattern if simple trigger not found
+    
+    if (isRouteEdd || isAmbiguous) {
+      console.log('[SubmitDecision/Demo] ✅ EDD trigger detected!');
+      if (isRouteEdd) {
+        console.log('[SubmitDecision/Demo] Trigger: Route: EDD or [DEMO_EDD] token');
+      } else {
+        console.log('[SubmitDecision/Demo] Trigger: Ambiguous reject pattern');
+        console.log('[SubmitDecision/Demo] Matched patterns:', getMatchSummary(reason));
+      }
       
       const demoBundle = generateDemoEddBundle(reason.trim());
       

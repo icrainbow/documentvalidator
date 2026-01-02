@@ -8,6 +8,24 @@
  */
 
 /**
+ * SAMPLE REJECT TEXT for quick copy in demos:
+ * Use this exact text to trigger the full Phase 8 EDD demo experience.
+ */
+export const SAMPLE_EDD_REJECT_TEXT = `Reject. The identity details don't reconcile, and the stated source of funds appears inconsistent with prior disclosures in other channels. Please cross-check last year's Wealth documentation, perform UBO look-through on the offshore holding chain, and validate against the latest policy change. Route: EDD. [DEMO_EDD]`;
+
+/**
+ * Simple trigger: Check for "Route: EDD" or "[DEMO_EDD]" token
+ * This is the PRIMARY trigger for Phase 8 demo experience.
+ */
+export function isRouteEddTrigger(comment: string | undefined): boolean {
+  if (!comment || typeof comment !== 'string') {
+    return false;
+  }
+  const normalized = comment.toLowerCase().trim();
+  return normalized.includes('route: edd') || normalized.includes('[demo_edd]');
+}
+
+/**
  * Normalize text for robust pattern matching:
  * - Lowercase
  * - Trim
