@@ -57,7 +57,7 @@ const BUSINESS_STAGES = [
   { id: 6, label: 'Final Report', icon: '📊' },
 ];
 
-function getCurrentStageIndex(status: FlowStatus, eddStage?: { status: string }): number {
+function getCurrentStageIndex(status: FlowStatus, eddStage?: { status: string; decision?: string }): number {
   switch (status) {
     case 'idle': return 0;
     case 'running': return 2; // In progress at stages 2-3
@@ -68,13 +68,22 @@ function getCurrentStageIndex(status: FlowStatus, eddStage?: { status: string })
       }
       return 4; // Stage 1 waiting
     case 'resuming': return eddStage ? 5 : 4;
-    case 'completed': return 6; // All done
-    case 'rejected':
-      // Show which stage was rejected
-      if (eddStage && eddStage.status === 'rejected') {
-        return 5; // EDD rejected
+    case 'completed': 
+      // UNIVERSAL: If EDD approved, workflow is fully complete (stage 6)
+      if (eddStage && eddStage.decision === 'approve') {
+        return 6;
       }
-      return 4; // Stage 1 rejected (no EDD)
+      return 6; // All done
+    case 'rejected':
+      // UNIVERSAL: If EDD approved, workflow is fully complete (stage 6), not rejected
+      if (eddStage && eddStage.decision === 'approve') {
+        return 6;
+      }
+      // Show which stage was rejected (in progress, not complete)
+      if (eddStage && eddStage.status === 'rejected') {
+        return 5; // EDD rejected (in progress at stage 5)
+      }
+      return 4; // Stage 1 rejected (in progress at stage 4)
     case 'error': return 2;
     default: return 0;
   }
@@ -103,16 +112,9 @@ export default function Flow2MonitorPanel({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
   // NEW: Detect if workflow is fully completed
-  // Logic: Check if the LAST approval stage (whichever was executed) is approved
-  const isFullyCompleted = (() => {
-    // If EDD stage exists, it's the last approval stage - check its decision
-    if (checkpointMetadata?.edd_stage) {
-      return checkpointMetadata.edd_stage.decision === 'approve';
-    }
-    // Otherwise, Stage 1 (Human Review) is the last approval stage
-    // Check if status is completed AND Stage 1 was approved (not rejected)
-    return status === 'completed' && checkpointMetadata?.decision === 'approve';
-  })();
+  // UNIVERSAL RULE: If current stage reached the LAST stage (Final Report), it's fully completed
+  const currentStageIndex = getCurrentStageIndex(status, checkpointMetadata?.edd_stage);
+  const isFullyCompleted = currentStageIndex === BUSINESS_STAGES.length;
   
   // Helper: Get risk-based stage color
   const getRiskStageColor = (stageId: number): string => {
@@ -263,8 +265,6 @@ export default function Flow2MonitorPanel({
     ? (Date.now() - new Date(checkpointMetadata.reminder_sent_at).getTime()) < 300000
     : false;
 
-  const currentStageIndex = getCurrentStageIndex(status);
-
   return (
     <div className="mb-6 bg-white border-2 border-slate-300 rounded-xl p-5 shadow-sm">
       {/* Header */}
@@ -288,32 +288,27 @@ export default function Flow2MonitorPanel({
         )}
         {status === 'running' && (
           <div className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold flex items-center gap-2">
-            <span className="animate-pulse">🔄</span> RUNNING
+            <span className="animate-pulse">🔄</span> IN PROGRESS
           </div>
         )}
         {status === 'waiting_human' && (
           <div className="px-3 py-2 bg-orange-100 text-orange-700 rounded-lg text-sm font-semibold flex items-center gap-2">
-            ⏸️ PENDING HUMAN REVIEW
+            <span className="animate-pulse">⏳</span> AWAITING APPROVAL
           </div>
         )}
         {status === 'resuming' && (
+          <div className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold flex items-center gap-2">
+            <span className="animate-pulse">🔄</span> IN PROGRESS
+          </div>
+        )}
+        {isFullyCompleted && (
           <div className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold flex items-center gap-2">
-            <span className="animate-pulse">🔄</span> RESUMING
+            ✅ APPROVED & COMPLETED
           </div>
         )}
-        {status === 'completed' && (
-          <div className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold flex items-center gap-2">
-            ✅ {isFullyCompleted ? 'APPROVED & COMPLETED' : 'COMPLETED'}
-          </div>
-        )}
-        {status === 'rejected' && !isFullyCompleted && (
-          <div className="px-3 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-semibold flex items-center gap-2">
-            ❌ REJECTED
-          </div>
-        )}
-        {status === 'error' && (
-          <div className="px-3 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-semibold flex items-center gap-2">
-            ⚠️ ERROR
+        {!isFullyCompleted && (status === 'completed' || status === 'rejected' || status === 'error') && (
+          <div className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold flex items-center gap-2">
+            <span className="animate-pulse">🔄</span> IN PROGRESS
           </div>
         )}
       </div>
