@@ -81,6 +81,7 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
   
   // Schedule deterministic animation
   const scheduleAnimation = useCallback(() => {
+    console.log('[PostRejectAnalysis] scheduleAnimation called');
     cleanup();
     hasStartedRef.current = true;
     setAllowReplay(false);
@@ -186,24 +187,43 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
   
   // Auto-start on mount or runId change
   useEffect(() => {
+    if (!data.triggered) {
+      console.log('[PostRejectAnalysis] Not triggered, skipping animation');
+      return;
+    }
+    
     const currentRunId = data.run_id || 'default';
+    console.log(`[PostRejectAnalysis] useEffect triggered: runId=${currentRunId}, hasStarted=${hasStartedRef.current}`);
     
     // Reset if runId changes
-    if (runIdRef.current !== currentRunId) {
+    if (runIdRef.current !== null && runIdRef.current !== currentRunId) {
+      console.log(`[PostRejectAnalysis] Run ID changed from ${runIdRef.current} to ${currentRunId}, resetting`);
       runIdRef.current = currentRunId;
       hasStartedRef.current = false;
       cleanup();
+      // Force immediate start after reset
+      setTimeout(() => scheduleAnimation(), 50);
+      return;
     }
     
-    // Start animation (Strict Mode safe)
-    if (!hasStartedRef.current && data.triggered) {
+    // First time setup
+    if (runIdRef.current === null) {
+      console.log(`[PostRejectAnalysis] First time setup with runId: ${currentRunId}`);
+      runIdRef.current = currentRunId;
+    }
+    
+    // Start animation if not started
+    if (!hasStartedRef.current) {
+      console.log(`[PostRejectAnalysis] Starting animation for run_id: ${currentRunId}`);
       scheduleAnimation();
     }
     
     return () => {
+      console.log('[PostRejectAnalysis] Cleanup on unmount');
       cleanup();
     };
-  }, [data.triggered, data.run_id, scheduleAnimation, cleanup]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.triggered, data.run_id]); // Minimal deps to avoid infinite loops
   
   const getSeverityColor = (severity: string) => {
     switch (severity) {
