@@ -55,9 +55,9 @@ export async function sendApprovalEmail(params: {
     
     const customMessageId = `<flow2-${params.run_id}@${process.env.SMTP_DOMAIN || 'localhost'}>`;
     
-    // Build approval URLs
-    const approveUrl = `${params.base_url}/flow2/approvals/approve?token=${params.approval_token}`;
-    const rejectUrl = `${params.base_url}/flow2/approvals/reject?token=${params.approval_token}`;
+    // Build approval URLs (fix: use page routes, not API routes)
+    const approveUrl = `${params.base_url}/flow2/approve?token=${params.approval_token}`;
+    const rejectUrl = `${params.base_url}/flow2/reject?token=${params.approval_token}`;
     
     // Build issues summary from checkpoint
     const issues = params.checkpoint.graph_state?.issues || [];
@@ -217,9 +217,9 @@ export async function sendReminderEmail(params: {
       (Date.now() - new Date(params.checkpoint.approval_sent_at || params.checkpoint.paused_at).getTime()) / 60000
     );
     
-    // Build approval URLs (same as approval email)
-    const approveUrl = `${params.base_url}/flow2/approvals/approve?token=${params.approval_token}`;
-    const rejectUrl = `${params.base_url}/flow2/approvals/reject?token=${params.approval_token}`;
+    // Build approval URLs (fix: use page routes, not API routes)
+    const approveUrl = `${params.base_url}/flow2/approve?token=${params.approval_token}`;
+    const rejectUrl = `${params.base_url}/flow2/reject?token=${params.approval_token}`;
     
     // Build issues summary from checkpoint (same as approval email)
     const issues = params.checkpoint.graph_state?.issues || [];
