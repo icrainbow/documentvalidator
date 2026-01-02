@@ -398,6 +398,35 @@ export async function runGraphKycReview(
         await saveCheckpoint(pauseCheckpoint);
         console.log(`[Flow2/HITL] Checkpoint saved: ${currentRunId}`);
         
+        // NEW: Generate topic summaries BEFORE sending email
+        try {
+          console.log('[Flow2/HITL] Generating topic summaries for email...');
+          const { callTopicSummariesEngine } = await import('../topicSummaries/engine');
+          const { KYC_FLOW2_CONFIG } = await import('../topicSummaries/configs');
+          
+          const apiKey = process.env.ANTHROPIC_API_KEY;
+          if (apiKey) {
+            const engineOutput = await callTopicSummariesEngine({
+              config: KYC_FLOW2_CONFIG,
+              documents: pauseCheckpoint.documents.map(d => ({
+                doc_id: d.doc_id,
+                filename: d.filename,
+                text: d.text,
+              })),
+            }, apiKey);
+            
+            // Save topic summaries to checkpoint
+            pauseCheckpoint.topic_summaries = engineOutput.topic_summaries;
+            await saveCheckpoint(pauseCheckpoint);
+            console.log(`[Flow2/HITL] ✓ Generated ${engineOutput.topic_summaries.length} topic summaries for email`);
+          } else {
+            console.warn('[Flow2/HITL] ANTHROPIC_API_KEY not set, skipping topic summaries generation');
+          }
+        } catch (error: any) {
+          console.error('[Flow2/HITL] Failed to generate topic summaries:', error.message);
+          // Non-blocking: email will be sent without topic summaries
+        }
+        
         // Phase 4: Send approval email (with attachment)
         let emailSent = false;
         let messageId: string | undefined;
