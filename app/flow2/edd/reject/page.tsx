@@ -53,9 +53,9 @@ export default function EddRejectPage() {
         setRunId(data.run_id);
         setStatus('success');
         
-        // Redirect to document page after 2 seconds
+        // Redirect to document page after 2 seconds (with flow=2 to ensure Flow2 UI)
         setTimeout(() => {
-          router.push(`/document?docKey=${data.run_id}`);
+          router.push(`/document?flow=2&docKey=${data.run_id}`);
         }, 2000);
       } else {
         setStatus('error');
