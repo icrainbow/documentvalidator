@@ -272,7 +272,13 @@ function DocumentPageContent() {
     // SSR guard
     if (typeof window === 'undefined') return;
     
-    console.log("[document] Priority 1 useEffect triggered, docKey:", docKey, "loadedFromStorage:", loadedFromStorage);
+    console.log("[document] Priority 1 useEffect triggered, docKey:", docKey, "loadedFromStorage:", loadedFromStorage, "isFlow2:", isFlow2);
+    
+    // CRITICAL: Skip for Flow2 mode - Flow2 uses checkpoint restoration, not sessionStorage sections
+    if (isFlow2) {
+      console.log("[document] Skipping Priority 1 - Flow2 mode uses checkpoint restoration");
+      return;
+    }
     
     // Skip if already loaded to prevent resetting section statuses
     if (loadedFromStorage) {
@@ -334,11 +340,17 @@ function DocumentPageContent() {
       console.error("[document] ✗ failed to parse storage", error);
       // Fall through to legacy loading logic
     }
-  }, [docKey]);
+  }, [docKey, isFlow2]);
 
   // PRIORITY 2: Legacy loading logic (only if NOT loaded from new storage)
   useEffect(() => {
-    console.log("[document] Priority 2 useEffect triggered, docKey:", docKey, "loadedFromStorage:", loadedFromStorage);
+    console.log("[document] Priority 2 useEffect triggered, docKey:", docKey, "loadedFromStorage:", loadedFromStorage, "isFlow2:", isFlow2);
+    
+    // CRITICAL: Skip for Flow2 mode - Flow2 uses checkpoint restoration, not sessionStorage sections
+    if (isFlow2) {
+      console.log("[document] Skipping Priority 2 - Flow2 mode uses checkpoint restoration");
+      return;
+    }
     
     // If docKey exists, Priority 1 handles loading - do not run Priority 2
     if (docKey) {

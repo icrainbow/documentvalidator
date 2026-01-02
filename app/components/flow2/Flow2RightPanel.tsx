@@ -154,9 +154,9 @@ export default function Flow2RightPanel({
               {onEnterITReview && (
                 <button
                   onClick={onEnterITReview}
-                  disabled={!hasDocuments || case3Active}
+                  disabled={!hasDocuments || case3Active || isOrchestrating}
                   className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
-                    !hasDocuments || case3Active
+                    !hasDocuments || case3Active || isOrchestrating
                       ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                       : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
                   }`}
@@ -165,6 +165,8 @@ export default function Flow2RightPanel({
                       ? 'Load documents first' 
                       : case3Active 
                       ? 'Review blocked - resolve guardrail alert first'
+                      : isOrchestrating
+                      ? 'KYC review in progress - please wait'
                       : ''
                   }
                 >
