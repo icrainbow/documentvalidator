@@ -1365,7 +1365,8 @@ function DocumentPageContent() {
       const requestBody: any = {
         mode: 'langgraph_kyc',
         documents,
-        runId: `flow2_${Date.now()}`
+        // runId will be generated server-side with proper UUID format
+        // DO NOT pass runId from client to avoid format mismatch with checkpoint validation
       };
       
       // MILESTONE C: If humanGateState exists, we're resuming
