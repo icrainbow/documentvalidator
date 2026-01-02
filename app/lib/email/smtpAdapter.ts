@@ -60,53 +60,76 @@ export async function sendApprovalEmail(params: {
     
     const customMessageId = `<flow2-${params.run_id}@${process.env.SMTP_DOMAIN || 'localhost'}>`;
     
+    // Build document summaries for email body
+    const documentsSummary = params.checkpoint.documents.map((doc, idx) => {
+      const preview = doc.text.slice(0, 300).replace(/\s+/g, ' ').trim();
+      const wordCount = doc.text.split(/\s+/).length;
+      return `
+        <div style="border-left: 3px solid #3b82f6; padding-left: 12px; margin: 12px 0;">
+          <p style="margin: 4px 0; font-weight: 600; color: #1e40af;">${idx + 1}. ${doc.filename}</p>
+          <p style="margin: 4px 0; font-size: 13px; color: #6b7280;">~${wordCount} words</p>
+          <p style="margin: 8px 0; font-size: 14px; color: #374151; line-height: 1.5;">${preview}${doc.text.length > 300 ? '...' : ''}</p>
+        </div>
+      `;
+    }).join('');
+    
+    // Build issues summary
+    const issuesSummary = packet.issues.length > 0 ? `
+      <div style="background: #fee2e2; border: 1px solid #fca5a5; border-radius: 8px; padding: 16px; margin: 20px 0;">
+        <h3 style="margin: 0 0 12px 0; color: #dc2626; font-size: 16px;">⚠️ ${packet.issues.length} Issue(s) Detected</h3>
+        ${packet.issues.map(issue => `
+          <div style="margin: 8px 0; padding: 8px; background: white; border-radius: 4px;">
+            <p style="margin: 0; font-weight: 600; color: ${issue.severity === 'critical' ? '#dc2626' : issue.severity === 'warning' ? '#ea580c' : '#6b7280'};">
+              ${issue.severity === 'critical' ? '🔴' : issue.severity === 'warning' ? '🟠' : 'ℹ️'} ${issue.message}
+            </p>
+            ${issue.section ? `<p style="margin: 4px 0 0 0; font-size: 12px; color: #6b7280;">Section: ${issue.section}</p>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    ` : '';
+    
     const mailOptions = {
       from: `Flow2 Reviews <${process.env.SMTP_USER || process.env.FLOW2_SMTP_USER}>`,
       to: params.recipient,
       subject: `[Flow2 Approval] Review Required - Run ${packet.run_short_id}`,
       messageId: customMessageId,
       html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #1e40af;">Flow2 Review Awaiting Approval</h2>
-          <p>A Flow2 review requires your decision.</p>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 650px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #1e40af; margin-bottom: 8px;">Flow2 KYC Review Awaiting Approval</h2>
+          <p style="color: #6b7280; margin-top: 0;">A KYC review workflow has paused and requires your decision.</p>
           
           <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 4px 0;"><strong>Run ID:</strong> ${params.run_id}</p>
-            <p style="margin: 4px 0;"><strong>Documents:</strong> ${params.checkpoint.documents.length} files</p>
-            <p style="margin: 4px 0;"><strong>Status:</strong> Awaiting human approval</p>
+            <p style="margin: 4px 0;"><strong>Run ID:</strong> <code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">${params.run_id.slice(0, 13)}...</code></p>
+            <p style="margin: 4px 0;"><strong>Documents:</strong> ${params.checkpoint.documents.length} file(s) uploaded</p>
+            <p style="margin: 4px 0;"><strong>Paused At:</strong> ${new Date(params.checkpoint.paused_at).toLocaleString()}</p>
           </div>
           
-          <div style="margin: 32px 0;">
+          ${issuesSummary}
+          
+          <h3 style="color: #374151; font-size: 16px; margin: 24px 0 12px 0;">📄 Uploaded Documents</h3>
+          ${documentsSummary}
+          
+          <div style="margin: 32px 0; padding: 20px; background: #f9fafb; border-radius: 8px; text-align: center;">
+            <p style="margin: 0 0 16px 0; color: #374151; font-weight: 600;">Choose an action:</p>
             <a href="${packet.actions.approve_url}" 
-               style="display: inline-block; padding: 14px 28px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; margin-right: 12px; font-weight: 600; font-size: 16px;">
-              ✅ Approve
+               style="display: inline-block; padding: 14px 32px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
+              ✅ Approve & Continue
             </a>
             <a href="${packet.actions.reject_url}" 
-               style="display: inline-block; padding: 14px 28px; background: #ef4444; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+               style="display: inline-block; padding: 14px 32px; background: #ef4444; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
               ❌ Reject
             </a>
           </div>
           
-          <div style="margin-top: 32px; padding: 16px; background: #fef3c7; border-left: 4px solid #fbbf24; border-radius: 4px;">
-            <p style="margin: 0; color: #92400e;">
-              📎 <strong>Attached:</strong> Complete approval context is attached as an HTML file (<code>${packetFilename}</code>). 
-              Open the attachment for full details including execution progress, warnings, issues, and uploaded documents.
-            </p>
-          </div>
-          
-          <p style="color: #6b7280; font-size: 12px; margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
-            Flow2 Approval System | Message-ID: ${customMessageId}<br/>
-            Token: ${params.approval_token}
+          <p style="color: #6b7280; font-size: 12px; margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center;">
+            Flow2 Approval System<br/>
+            Message ID: ${customMessageId}<br/>
+            Token: ${params.approval_token.slice(0, 8)}...
           </p>
         </div>
       `,
-      attachments: [
-        {
-          filename: packetFilename,
-          content: packetHtml,
-          contentType: 'text/html; charset=utf-8',
-        },
-      ],
+      // Removed attachments - Gmail displays HTML attachments as source code
+      // All necessary context is now in the email body
     };
     
     const result = await transporter.sendMail(mailOptions);
