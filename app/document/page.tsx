@@ -3654,20 +3654,6 @@ function DocumentPageContent() {
               {isFlow2 && (
                 <div className="mb-6 space-y-4">
                   {/* IT Review Button */}
-                  <div className="mb-4">
-                    <button
-                      onClick={handleEnterITReview}
-                      disabled={case4Active}
-                      className={`w-full px-6 py-3 rounded-lg font-bold text-sm transition-colors shadow-md ${
-                        case4Active
-                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                          : 'bg-purple-600 text-white hover:bg-purple-700'
-                      }`}
-                    >
-                      🔧 IT Review – Cross-Bulletin Impact Simulation
-                    </button>
-                  </div>
-                  
                   <Flow2UploadPanel 
                     onDocumentsLoaded={handleFlow2Upload}
                     disabled={flow2Documents.length >= MAX_FLOW2_DOCUMENTS || isOrchestrating}
@@ -4062,6 +4048,21 @@ function DocumentPageContent() {
                       >
                         {isOrchestrating ? '🔄 Running Review...' : isFlow2 ? '🕸️ Run Graph KYC Review' : '🔍 Run Full Review'}
                       </button>
+                      
+                      {/* Flow2: IT Impact Review button */}
+                      {isFlow2 && (
+                        <button
+                          onClick={handleEnterITReview}
+                          disabled={case4Active}
+                          className={`w-full px-5 py-3 rounded-lg font-bold text-sm transition-all shadow-md ${
+                            case4Active
+                              ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                              : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
+                          }`}
+                        >
+                          🔧 Run IT Impact Review
+                        </button>
+                      )}
                       
                       {documentStatus.status === 'REQUIRES_SIGN_OFF' && !signOff && (
                         <button
