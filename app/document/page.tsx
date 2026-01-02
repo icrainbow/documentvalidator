@@ -52,6 +52,7 @@ import { mapIssueToTopic } from '../lib/flow2/issueTopicMapping';
 import Case2ProcessBanner, { type Case2State } from '../components/case2/Case2ProcessBanner';
 import { CASE2_DEMO_DATA, type Case2DemoData } from '../lib/case2/demoCase2Data';
 import { detectCase2Trigger } from '../lib/case2/case2Trigger';
+import Case4Container from '../components/case4/Case4Container';
 
 // Flow2: Input mode type (Phase 1.1)
 type Flow2InputMode = 'empty' | 'demo' | 'upload';
@@ -601,6 +602,9 @@ function DocumentPageContent() {
   const [case2UploadedFiles, setCase2UploadedFiles] = useState<File[]>([]);
   const [case2Id, setCase2Id] = useState<string | null>(null);
   const [case2Query, setCase2Query] = useState<string>(''); // Store original query
+  
+  // Case 4: IT Review state
+  const [case4Active, setCase4Active] = useState(false);
   
   // Workspace limits
   const MAX_FLOW2_DOCUMENTS = 10;
@@ -3247,6 +3251,15 @@ function DocumentPageContent() {
     setHasNewChatMessage(true);
   };
 
+  // Case 4 Handlers
+  const handleEnterITReview = () => {
+    setCase4Active(true);
+  };
+
+  const handleExitITReview = () => {
+    setCase4Active(false);
+  };
+
   const getSectionColor = (status: SectionStatus) => {
     switch (status) {
       case 'pass':
@@ -3290,6 +3303,11 @@ function DocumentPageContent() {
       setHumanGateState(null);
     }
   }, [isFlow2, humanGateState]);
+
+  // Case 4: Early return if IT Review Mode is active
+  if (case4Active) {
+    return <Case4Container onExit={handleExitITReview} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -3355,6 +3373,21 @@ function DocumentPageContent() {
               {/* MILESTONE C: Flow2 Workspace (Upload + Paste + Docs List) */}
               {isFlow2 && (
                 <div className="mb-6 space-y-4">
+                  {/* IT Review Button */}
+                  <div className="mb-4">
+                    <button
+                      onClick={handleEnterITReview}
+                      disabled={case4Active}
+                      className={`w-full px-6 py-3 rounded-lg font-bold text-sm transition-colors shadow-md ${
+                        case4Active
+                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                          : 'bg-purple-600 text-white hover:bg-purple-700'
+                      }`}
+                    >
+                      🔧 IT Review – Cross-Bulletin Impact Simulation
+                    </button>
+                  </div>
+                  
                   <Flow2UploadPanel 
                     onDocumentsLoaded={handleFlow2Upload}
                     disabled={flow2Documents.length >= MAX_FLOW2_DOCUMENTS || isOrchestrating}
