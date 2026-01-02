@@ -12,12 +12,19 @@ describe('Flow2 Reflection API', () => {
   });
   
   it('reflection=false shows disabled trace', async () => {
+    // Use a trigger document to ensure HITL pause (required for reflection testing)
+    const triggerContent = `CLIENT KYC RISK ASSESSMENT
+Full Name: Test Client
+PEP Status: CONFIRMED - Former government official
+Sanctions Screening: OFAC watchlist flagged - requires enhanced due diligence
+Risk Rating: HIGH - Human review MANDATORY per AML regulations`;
+    
     const response = await fetch(`${TEST_API_BASE}/api/orchestrate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'langgraph_kyc',
-        documents: [{ name: 'test.txt', content: 'Test KYC document content with sufficient length for validation requirements' }],
+        documents: [{ name: 'test.txt', content: triggerContent }],
         features: { reflection: false }
       })
     });
@@ -44,12 +51,20 @@ describe('Flow2 Reflection API', () => {
   });
   
   it('reflection=true shows reflect_and_replan node', async () => {
+    // Use a trigger document to ensure HITL pause
+    const triggerContent = `CLIENT DUE DILIGENCE ALERT
+Full Name: Test Subject
+Ultimate Beneficial Owner: UNKNOWN - refused to disclose
+Offshore Structure: British Virgin Islands shell company detected
+Layering Pattern: Multiple jurisdictions, structuring indicators present
+Risk Assessment: CRITICAL - Enhanced due diligence required, human approval mandatory`;
+    
     const response = await fetch(`${TEST_API_BASE}/api/orchestrate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'langgraph_kyc',
-        documents: [{ name: 'test.txt', content: 'Test KYC document with sufficient content length for API validation' }],
+        documents: [{ name: 'test.txt', content: triggerContent }],
         features: { reflection: true }
       })
     });
@@ -99,12 +114,19 @@ describe('Flow2 Reflection API', () => {
   });
   
   it('validates response structure for langgraph_kyc with reflection', async () => {
+    // Use trigger document with sufficient length
+    const triggerContent = `KYC RISK REPORT - Enhanced Due Diligence Required
+Client: Test Entity
+Sanctions Screening Result: MATCH FOUND - OFAC list
+PEP Exposure: YES - Former government official
+Assessment: HIGH RISK - Requires human approval before account opening`;
+    
     const response = await fetch(`${TEST_API_BASE}/api/orchestrate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'langgraph_kyc',
-        documents: [{ name: 'test.txt', content: 'Test KYC' }],
+        documents: [{ name: 'test.txt', content: triggerContent }],
         features: { reflection: true, negotiation: false, memory: false }
       })
     });
