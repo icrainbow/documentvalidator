@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ReviewConfigDrawer from '../components/ReviewConfigDrawer';
 import Flow2ReviewConfigDrawer from '../components/flow2/Flow2ReviewConfigDrawer';
@@ -3819,6 +3819,33 @@ function DocumentPageContent() {
   };
   
   /**
+   * NEW: Mark animation as played in checkpoint
+   */
+  const handleAnimationPlayed = useCallback(async () => {
+    if (!flowMonitorRunId) return;
+    
+    console.log('[Flow2] Marking animation as played for run:', flowMonitorRunId);
+    
+    // Update local state immediately
+    setPostRejectAnalysisData(prev => prev ? { ...prev, animation_played: true } : null);
+    
+    // Update checkpoint on server
+    try {
+      await fetch('/api/flow2/update-checkpoint-animation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          run_id: flowMonitorRunId,
+          animation_played: true,
+        }),
+      });
+      console.log('[Flow2] ✓ Animation played status saved to checkpoint');
+    } catch (error: any) {
+      console.error('[Flow2] Failed to update animation played status:', error);
+    }
+  }, [flowMonitorRunId]);
+
+  /**
    * NEW: Handle Start New Review (reset Flow2 workspace)
    */
   const handleStartNewReview = () => {
@@ -3853,10 +3880,8 @@ function DocumentPageContent() {
     // Reset Post-Reject Analysis
     setPostRejectAnalysisData(null);
     
-    // Clear URL params (remove docKey)
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.delete('docKey');
-    window.history.pushState({}, '', newUrl);
+    // Clear URL params (remove docKey) - use router.push to trigger re-render
+    router.push('/document?flow=2');
     
     // Reset messages
     setMessages([{
@@ -4338,6 +4363,7 @@ function DocumentPageContent() {
                   onFlowStatusChange={setFlowMonitorStatus}
                   postRejectAnalysisData={postRejectAnalysisData}
                   onPhase8Complete={handlePhase8Complete}
+                  onAnimationPlayed={handleAnimationPlayed}
                   case3Active={case3Active}
                   case4Active={case4Active}
                   riskData={{

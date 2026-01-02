@@ -28,12 +28,13 @@ interface Flow2RightPanelProps {
   onFlowStatusChange?: (status: FlowStatus) => void;
   // Phase 8 props
   postRejectAnalysisData?: PostRejectAnalysisData | null;
-  onPhase8Complete?: () => void; // NEW: Callback when Phase 8 findings should be appended
+  onPhase8Complete?: () => void; // Callback when Phase 8 findings should be appended
+  onAnimationPlayed?: () => void; // NEW: Callback to mark animation as played
   // Case 3 props
   case3Active?: boolean;
   // Risk data for stage coloring
   riskData?: RiskData;
-  // NEW: Workspace reset callback
+  // Workspace reset callback
   onStartNewReview?: () => void;
 }
 
@@ -54,6 +55,7 @@ export default function Flow2RightPanel({
   onFlowStatusChange,
   postRejectAnalysisData,
   onPhase8Complete,
+  onAnimationPlayed,
   case3Active = false,
   riskData,
   onStartNewReview,
@@ -105,6 +107,7 @@ export default function Flow2RightPanel({
           <PostRejectAnalysisPanel 
             data={postRejectAnalysisData}
             onAnimationComplete={handlePhase8AnimationComplete}
+            onAnimationPlayed={onAnimationPlayed}
           />
         )}
         

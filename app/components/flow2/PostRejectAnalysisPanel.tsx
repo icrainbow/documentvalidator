@@ -45,11 +45,13 @@ export interface PostRejectAnalysisData {
   evidence?: any;
   graph_patch?: any;
   run_id?: string; // For cleanup key
+  animation_played?: boolean; // NEW: Track if animation already played
 }
 
 interface PostRejectAnalysisPanelProps {
   data: PostRejectAnalysisData;
-  onAnimationComplete?: (isComplete: boolean) => void; // NEW: Callback when animation finishes
+  onAnimationComplete?: (isComplete: boolean) => void; // Callback when animation finishes
+  onAnimationPlayed?: () => void; // NEW: Callback to mark animation as played
 }
 
 type Phase = 'idle' | 'tasks' | 'skills' | 'findings' | 'evidence' | 'done';
@@ -60,7 +62,7 @@ interface SkillState {
   progress: number; // 0-100
 }
 
-export default function PostRejectAnalysisPanel({ data, onAnimationComplete }: PostRejectAnalysisPanelProps) {
+export default function PostRejectAnalysisPanel({ data, onAnimationComplete, onAnimationPlayed }: PostRejectAnalysisPanelProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [skillStates, setSkillStates] = useState<Map<number, SkillState>>(new Map());
   const [allowReplay, setAllowReplay] = useState(false);
@@ -71,6 +73,9 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete }: P
   const runIdRef = useRef<string | null>(null);
   
   if (!data.triggered) return null;
+  
+  // Check if animation should be skipped (already played)
+  const shouldSkipAnimation = data.animation_played === true;
   
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -209,6 +214,17 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete }: P
       return;
     }
     
+    // NEW: Skip animation if already played
+    if (shouldSkipAnimation) {
+      console.log('[PostRejectAnalysis] Animation already played, showing final state');
+      setPhase('done');
+      setAllowReplay(true);
+      if (onAnimationComplete) {
+        onAnimationComplete(true);
+      }
+      return;
+    }
+    
     const currentRunId = data.run_id || 'default';
     console.log(`[PostRejectAnalysis] useEffect triggered: runId=${currentRunId}, hasStarted=${hasStartedRef.current}, prevRunId=${runIdRef.current}`);
     
@@ -226,6 +242,10 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete }: P
         if (!hasStartedRef.current) {
           console.log('[PostRejectAnalysis] Starting animation after reset');
           scheduleAnimation();
+          // Mark animation as played after starting
+          if (onAnimationPlayed) {
+            onAnimationPlayed();
+          }
         }
       }, 100);
     }
@@ -235,7 +255,7 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete }: P
       cleanup();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.triggered, data.run_id, scheduleAnimation]); // Include scheduleAnimation for safety
+  }, [data.triggered, data.run_id, shouldSkipAnimation, scheduleAnimation, onAnimationPlayed]); // Include shouldSkipAnimation
   
   const getSeverityColor = (severity: string) => {
     switch (severity) {

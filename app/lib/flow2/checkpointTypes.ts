@@ -96,6 +96,12 @@ export interface Flow2Checkpoint {
   edd_stage?: EddStage;           // EDD stage state (optional, only if triggered)
   final_decision?: FinalDecision; // Overall outcome after all stages
   event_log?: EventLogEntry[];    // Audit trail (append-only)
+  
+  // ========== DEMO FIELDS ==========
+  demo_evidence?: {
+    animation_played?: boolean;
+    [key: string]: any;
+  };
 }
 
 export interface CheckpointMetadata {
