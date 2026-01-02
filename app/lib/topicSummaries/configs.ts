@@ -17,8 +17,8 @@ import type { TopicSummaryConfig } from './types';
  */
 export const KYC_FLOW2_CONFIG: TopicSummaryConfig = {
   template_id: 'kyc_flow2',
-  panel_title: 'KYC Topics Summary',
-  panel_subtitle: 'LLM-generated summary of customer information across all documents',
+  panel_title: 'Topic Summary',
+  panel_subtitle: 'KYC: LLM-generated summary of customer information across all documents',
   topic_ids: [
     'customer_identity_profile',
     'relationship_purpose',
@@ -51,8 +51,8 @@ export const KYC_FLOW2_CONFIG: TopicSummaryConfig = {
  */
 export const IT_BULLETIN_CONFIG: TopicSummaryConfig = {
   template_id: 'it_bulletin',
-  panel_title: 'IT Bulletin Topics Summary',
-  panel_subtitle: 'LLM-generated impact analysis across all change bulletins',
+  panel_title: 'Topic Summary',
+  panel_subtitle: 'IT Bulletin: LLM-generated impact analysis across all change bulletins',
   topic_ids: [
     'system_components_identifiers',
     'regions_environments_scope',
