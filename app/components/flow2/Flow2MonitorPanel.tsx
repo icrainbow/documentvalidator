@@ -10,9 +10,13 @@ export interface CheckpointMetadata {
   reminder_sent_at?: string;
   decision_comment?: string;
   decided_by?: string;
+  decided_at?: string;
   // Demo fields
   demo_mode?: 'edd_injection';
   demo_injected_node?: { id: string; label: string };
+  // Restoration fields
+  documents?: any[];
+  graph_state?: any;
 }
 
 interface Flow2MonitorPanelProps {
