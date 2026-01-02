@@ -11,6 +11,7 @@ import Flow2RightPanel from '../components/flow2/Flow2RightPanel';
 import Flow2DerivedTopics from '../components/flow2/Flow2DerivedTopics';
 import Flow2TopicMoreInputs from '../components/flow2/Flow2TopicMoreInputs';
 import Flow2ModeSwitchModal from '../components/flow2/Flow2ModeSwitchModal';
+import Flow2KeyTopicsPanel from '../components/flow2/Flow2KeyTopicsPanel';
 import type { FlowStatus, CheckpointMetadata } from '../components/flow2/Flow2MonitorPanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -3206,7 +3207,7 @@ function DocumentPageContent() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-[60%_40%] gap-6 pb-[450px]">
+            <div className="grid grid-cols-1 lg:grid-cols-[42%_58%] gap-6 pb-[450px]">
               {/* Left Column: Sections */}
               <div className="space-y-4">
               
@@ -3274,57 +3275,14 @@ function DocumentPageContent() {
                 </div>
               )}
               
-              {/* Flow2: Demo Scenario Loader (ISOLATED - only visible in Flow2) */}
+              {/* Flow2: Key Topics Extracted Panel (replaces Demo Scenarios) */}
               {isFlow2 && (
-                <div className="mb-6 bg-purple-50 border-2 border-purple-300 rounded-lg p-5">
-                  <h3 className="font-bold text-purple-800 mb-3 flex items-center gap-2">
-                    <span className="text-xl">🎯</span>
-                    Demo Scenarios (Flow2 Testing)
-                  </h3>
-                  <div className="flex gap-3 items-end mb-3">
-                    <div className="flex-1">
-                      <label className="block text-sm font-semibold text-purple-700 mb-1">
-                        Select Test Scenario
-                      </label>
-                      <select 
-                        value={flow2ActiveScenario}
-                        onChange={(e) => setFlow2ActiveScenario(e.target.value)}
-                        className="w-full px-3 py-2 border-2 border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                        aria-label="Select demo scenario for testing"
-                      >
-                        <option value="">Choose a test scenario...</option>
-                        {DEMO_SCENARIOS.map(s => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} (→ {s.expected.path})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button
-                      onClick={handleLoadDemoScenario}
-                      disabled={!flow2ActiveScenario}
-                      data-testid="flow2-load-sample-button"
-                      className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                        flow2ActiveScenario
-                          ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-md'
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      }`}
-                    >
-                      Load Sample KYC Pack
-                    </button>
-                  </div>
-                  {flow2ActiveScenario && getDemoScenario(flow2ActiveScenario) && (
-                    <div className="p-3 bg-purple-100 rounded border border-purple-300">
-                      <p className="text-sm text-purple-800">
-                        <span className="font-semibold">Description:</span>{' '}
-                        {getDemoScenario(flow2ActiveScenario)?.description}
-                      </p>
-                      <p className="text-xs text-purple-700 mt-1">
-                        {getDemoScenario(flow2ActiveScenario)?.documents.length} documents will be loaded
-                      </p>
-                    </div>
-                  )}
-                </div>
+                <Flow2KeyTopicsPanel
+                  documents={flow2Documents}
+                  reviewIssues={currentIssues}
+                  postRejectData={postRejectAnalysisData}
+                  checkpointMetadata={flowMonitorMetadata}
+                />
               )}
               
               {/* Flow1 ONLY: Render document sections */}

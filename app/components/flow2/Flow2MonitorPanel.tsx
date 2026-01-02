@@ -151,6 +151,17 @@ export default function Flow2MonitorPanel({
     }
   }, [runId]);
 
+  // Scroll to evidence section handler
+  const handleScrollToEvidence = () => {
+    const evidenceElement = document.getElementById('flow2-evidence');
+    if (evidenceElement) {
+      evidenceElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }
+  };
+
   const showToast = (message: string) => {
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), 5000);
@@ -224,24 +235,29 @@ export default function Flow2MonitorPanel({
               const isCompleted = idx < currentStageIndex;
               const isCurrent = idx === currentStageIndex - 1;
               const isPending = idx >= currentStageIndex;
+              
+              // Special case: Human Review (stage 4) should be RED if workflow was rejected
+              const isRejectedAtHumanReview = status === 'rejected' && stage.id === 4;
 
               return (
                 <div key={stage.id} className="flex items-center flex-1">
                   <div className="flex flex-col items-center">
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                        isCompleted
+                        isRejectedAtHumanReview
+                          ? 'bg-red-500 text-white'
+                          : isCompleted
                           ? 'bg-green-500 text-white'
                           : isCurrent
                           ? 'bg-blue-500 text-white ring-4 ring-blue-200'
                           : 'bg-slate-200 text-slate-500'
                       }`}
                     >
-                      {isCompleted ? '✓' : stage.icon}
+                      {isRejectedAtHumanReview ? '✗' : isCompleted ? '✓' : stage.icon}
                     </div>
                     <div
                       className={`mt-1 text-xs font-medium text-center ${
-                        isCurrent ? 'text-blue-700' : 'text-slate-600'
+                        isRejectedAtHumanReview ? 'text-red-700' : isCurrent ? 'text-blue-700' : 'text-slate-600'
                       }`}
                       style={{ maxWidth: '80px' }}
                     >
@@ -306,7 +322,11 @@ export default function Flow2MonitorPanel({
       
       {/* Rejection Details */}
       {status === 'rejected' && checkpointMetadata?.decision_comment && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+        <div 
+          className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 cursor-pointer hover:bg-red-100 transition-colors"
+          onClick={handleScrollToEvidence}
+          title="Click to view evidence details"
+        >
           <div className="flex items-start gap-3">
             <span className="text-2xl">❌</span>
             <div className="flex-1">
@@ -326,6 +346,9 @@ export default function Flow2MonitorPanel({
                   <strong>Date:</strong> {formatTimeAgo(checkpointMetadata.decided_at)}
                 </p>
               )}
+              <p className="text-xs text-red-700 mt-2 italic">
+                💡 Click to view evidence details below
+              </p>
             </div>
           </div>
         </div>

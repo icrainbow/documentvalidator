@@ -135,7 +135,7 @@ export default function Flow2RightPanel({
 
         {/* Evidence Dashboard (Phase 8 or demo fallback) */}
         {(postRejectAnalysisData?.triggered || isDemoEdd) && phase8Evidence && (
-          <div className="mb-6">
+          <div className="mb-6" id="flow2-evidence">
             <Flow2EvidenceDashboard
               visible={true}
               rejectComment={flowMonitorMetadata?.decision_comment || postRejectAnalysisData?.reviewer_text || ''}
