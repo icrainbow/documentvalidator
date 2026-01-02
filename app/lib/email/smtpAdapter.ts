@@ -17,13 +17,19 @@ import { buildApprovalPacket, renderApprovalPacketHtml, getApprovalPacketFilenam
  * Create nodemailer transporter (reusable)
  */
 function createTransporter() {
+  const smtpHost = process.env.SMTP_HOST || process.env.FLOW2_SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || process.env.FLOW2_SMTP_PORT || '587');
+  const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+  const smtpUser = process.env.SMTP_USER || process.env.FLOW2_SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.FLOW2_SMTP_PASS;
+  
   return nodemailer.createTransport({
-    host: process.env.FLOW2_SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.FLOW2_SMTP_PORT || '587'),
-    secure: false, // TLS on port 587
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure, // true for 465 (SSL), false for 587 (TLS)
     auth: {
-      user: process.env.FLOW2_SMTP_USER,
-      pass: process.env.FLOW2_SMTP_PASS,
+      user: smtpUser,
+      pass: smtpPass,
     },
   });
 }
@@ -55,7 +61,7 @@ export async function sendApprovalEmail(params: {
     const customMessageId = `<flow2-${params.run_id}@${process.env.SMTP_DOMAIN || 'localhost'}>`;
     
     const mailOptions = {
-      from: `Flow2 Reviews <${process.env.FLOW2_SMTP_USER}>`,
+      from: `Flow2 Reviews <${process.env.SMTP_USER || process.env.FLOW2_SMTP_USER}>`,
       to: params.recipient,
       subject: `[Flow2 Approval] Review Required - Run ${packet.run_short_id}`,
       messageId: customMessageId,
@@ -143,7 +149,7 @@ export async function sendReminderEmail(params: {
     );
     
     const mailOptions = {
-      from: `Flow2 Reviews <${process.env.FLOW2_SMTP_USER}>`,
+      from: `Flow2 Reviews <${process.env.SMTP_USER || process.env.FLOW2_SMTP_USER}>`,
       to: params.recipient,
       subject: `[Flow2 Approval] ⏰ REMINDER - Run ${packet.run_short_id}`,
       messageId: customMessageId,
