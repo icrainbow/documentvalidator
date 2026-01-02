@@ -49,3 +49,4 @@ export default function Case4ReasoningTrace({ steps, currentTime }: Case4Reasoni
   );
 }
 
+

@@ -41,3 +41,4 @@ export function detectCase2Trigger(input: string): boolean {
   return allGroupsPresent && hasRiskAppetite;
 }
 
+

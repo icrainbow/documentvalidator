@@ -491,6 +491,11 @@ function DocumentPageContent() {
   const [editingSectionId, setEditingSectionId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState<string>('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  
+  // Case 1: Approval Evidence Attestation
+  // User must confirm they have reviewed approval evidence before submitting
+  const [case1Attested, setCase1Attested] = useState(false);
+  
   const [selectedFlowId, setSelectedFlowId] = useState<string>('compliance-review-v1');
   const [orchestrationResult, setOrchestrationResult] = useState<any | null>(null);
   const [isOrchestrating, setIsOrchestrating] = useState(false);
@@ -999,6 +1004,16 @@ function DocumentPageContent() {
   };
 
   const handleSubmit = () => {
+    // Case 1: Guard - require attestation before submission
+    if (!isFlow2 && !case1Attested) {
+      setMessages([...messages, {
+        role: 'agent',
+        agent: 'System',
+        content: '⚠️ Submission blocked: Please review the Approval Evidence and confirm the attestation checkbox before submitting.'
+      }]);
+      return;
+    }
+    
     setIsSubmitted(true);
     setMessages([...messages, {
       role: 'agent',
@@ -2176,6 +2191,17 @@ function DocumentPageContent() {
   const documentStatus = useMemo(() => {
     return computeRealDocumentStatus(currentIssues, signOff);
   }, [currentIssues, signOff, reviewRunId]);
+  
+  /**
+   * Reset Case 1 attestation when evidence changes (new review run or status change)
+   * User must re-attest to new evidence before submitting
+   */
+  useEffect(() => {
+    // Only applies to Case 1 (non-Flow2 mode)
+    if (!isFlow2) {
+      setCase1Attested(false);
+    }
+  }, [reviewRunId, documentStatus.status, isFlow2]);
   
   /**
    * Compute participating agents from current review results
@@ -3503,8 +3529,8 @@ function DocumentPageContent() {
                     />
                   )}
                   
-                  {/* Case 3: Demo Samples Panel */}
-                  <Case3DemoSamples />
+                  {/* Case 3: Demo Samples Panel - ONLY in Flow2 mode */}
+                  {isFlow2 && <Case3DemoSamples />}
                   
                   {/* Derived Topics (Phase 3) */}
                   {derivedTopics.length > 0 && (
@@ -3884,14 +3910,41 @@ function DocumentPageContent() {
                         </button>
                       )}
                       
+                      {/* Case 1: Approval Evidence Attestation (only when ready to submit) */}
+                      {!isFlow2 && documentStatus.isSubmittable && !isSubmitted && (
+                        <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                          <label className="flex items-start gap-3 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={case1Attested}
+                              onChange={(e) => setCase1Attested(e.target.checked)}
+                              className="mt-0.5 w-5 h-5 text-blue-600 border-2 border-blue-400 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <div className="flex-1">
+                              <span className="text-sm font-semibold text-blue-900 group-hover:text-blue-700">
+                                I have reviewed the Approval Evidence
+                              </span>
+                              <p className="text-xs text-blue-600 mt-1">
+                                Submission requires confirmation that the audit trail has been reviewed.
+                              </p>
+                            </div>
+                          </label>
+                        </div>
+                      )}
+                      
                       <button
                         onClick={handleSubmit}
-                        disabled={isSubmitted || !documentStatus.isSubmittable}
+                        disabled={isSubmitted || !documentStatus.isSubmittable || (!isFlow2 && !case1Attested)}
                         className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
-                          isSubmitted || !documentStatus.isSubmittable
+                          isSubmitted || !documentStatus.isSubmittable || (!isFlow2 && !case1Attested)
                             ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                             : 'bg-slate-700 text-white hover:bg-slate-800 hover:shadow-lg'
                         }`}
+                        title={
+                          !isFlow2 && !case1Attested && documentStatus.isSubmittable && !isSubmitted
+                            ? 'Please review the Approval Evidence and confirm before submitting.'
+                            : ''
+                        }
                       >
                         {isSubmitted ? '✓ Submitted' : '📤 Submit Document'}
                       </button>
