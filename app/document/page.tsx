@@ -11,7 +11,7 @@ import Flow2RightPanel from '../components/flow2/Flow2RightPanel';
 import Flow2DerivedTopics from '../components/flow2/Flow2DerivedTopics';
 import Flow2TopicMoreInputs from '../components/flow2/Flow2TopicMoreInputs';
 import Flow2ModeSwitchModal from '../components/flow2/Flow2ModeSwitchModal';
-import HumanGatePanel from '../components/flow2/HumanGatePanel';
+import type { FlowStatus, CheckpointMetadata } from '../components/flow2/Flow2MonitorPanel';
 import { useSpeech } from '../hooks/useSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { computeParticipants } from '../lib/computeParticipants';
@@ -579,6 +579,11 @@ function DocumentPageContent() {
   const [humanGateState, setHumanGateState] = useState<HumanGateState | null>(null);
   const [isDegraded, setIsDegraded] = useState(false);
   const [degradedReason, setDegradedReason] = useState('');
+  
+  // Flow Monitor state (SSOT for runtime status)
+  const [flowMonitorStatus, setFlowMonitorStatus] = useState<FlowStatus>('idle');
+  const [flowMonitorRunId, setFlowMonitorRunId] = useState<string | null>(null);
+  const [flowMonitorMetadata, setFlowMonitorMetadata] = useState<CheckpointMetadata | null>(null);
   
   // Workspace limits
   const MAX_FLOW2_DOCUMENTS = 10;
@@ -1353,6 +1358,9 @@ function DocumentPageContent() {
     setIsDegraded(false); // MILESTONE C: Clear degraded state
     setDegradedReason('');
     
+    // Flow Monitor: Set to running
+    setFlowMonitorStatus('running');
+    
     console.log('[Flow2] Starting Graph KYC review with', flow2Documents.length, 'documents');
     
     try {
@@ -1404,30 +1412,25 @@ function DocumentPageContent() {
       if (data.status === 'waiting_human') {
         console.log('[Flow2/HITL] Workflow paused - awaiting human approval');
         
-        // Update UI state to show HITL panel
+        // Flow Monitor: Set to waiting_human with metadata
+        setFlowMonitorStatus('waiting_human');
+        setFlowMonitorRunId(data.run_id || null);
+        setFlowMonitorMetadata(data.checkpoint_metadata || null);
+        
+        // Update UI state to show issues/trace (but NOT approval controls)
         setCurrentIssues(data.issues || []);
         setGraphReviewTrace(data.graphReviewTrace || null);
         setGraphTopics(data.topicSections || []);
         setConflicts(data.conflicts || []);
         setCoverageGaps(data.coverageGaps || []);
         
-        // Set HITL state (new format)
-        setHumanGateState({
-          gateId: 'hitl_checkpoint',
-          prompt: `Human review required: ${(data.issues || []).filter((i: any) => i.category === 'kyc_risk' && i.severity === 'FAIL').length} high-risk KYC issue(s) detected`,
-          options: ['approve', 'reject'],
-          context: JSON.stringify({
-            run_id: data.run_id,
-            paused_at_node: data.paused_at_node,
-            checkpoint_metadata: data.checkpoint_metadata
-          }),
-          resumeToken: data.run_id || '' // Use run_id as resume token
-        });
+        // DO NOT SET humanGateState - this prevents approval UI from showing on Document page
+        // Approval is done via email only
         
         setMessages(prev => [...prev, {
           role: 'agent',
           agent: 'KYC Risk Analyzer',
-          content: `⏸️ **Workflow Paused for Human Review**\n\n${(data.issues || []).filter((i: any) => i.category === 'kyc_risk').length} KYC risk issue(s) detected.\n\nPlease review the issues and approve or reject to continue.`
+          content: `⏸️ **Workflow Paused for Human Review**\n\n${(data.issues || []).filter((i: any) => i.category === 'kyc_risk').length} KYC risk issue(s) detected.\n\nReview email sent to approver. Check Flow Monitor for status.`
         }]);
         
         setIsOrchestrating(false);
@@ -1458,6 +1461,10 @@ function DocumentPageContent() {
       }
       
       // Normal completion path
+      // Flow Monitor: Set to completed
+      setFlowMonitorStatus('completed');
+      setFlowMonitorRunId(data.run_id || data.graphReviewTrace?.summary?.runId || null);
+      
       // Update issues
       setCurrentIssues(data.issues || []);
       
@@ -1525,6 +1532,9 @@ function DocumentPageContent() {
         },
         degraded: true
       });
+      
+      // Flow Monitor: Set to error
+      setFlowMonitorStatus('error');
       
       setMessages(prev => [...prev, {
         role: 'agent',
@@ -3127,19 +3137,9 @@ function DocumentPageContent() {
                 </div>
               )}
               
-              {/* MILESTONE C: Flow2 Human Gate Panel */}
-              {isFlow2 && humanGateState && (
-                <HumanGatePanel
-                  gateId={humanGateState.gateId}
-                  prompt={humanGateState.prompt}
-                  options={humanGateState.options}
-                  context={humanGateState.context}
-                  onSubmit={handleHumanGateSubmit}
-                  onCancel={handleHumanGateCancel}
-                  isSubmitting={isOrchestrating}
-                />
-              )}
-              
+              {/* REMOVED: Flow2 Human Gate Panel - approval is done via email only, not on Document page */}
+              {/* Initiator must NEVER see approve/reject controls (C1 constraint) */}
+
               {/* MILESTONE C: Flow2 Degraded Mode Banner */}
               {isFlow2 && isDegraded && (
                 <div className="mb-4 bg-red-50 border-2 border-red-400 rounded-lg p-4">
@@ -3364,7 +3364,7 @@ function DocumentPageContent() {
 
               {/* Right Column: Review Results Panel */}
               {isFlow2 ? (
-                // FLOW2: Clean, minimal right panel
+                // FLOW2: Clean, minimal right panel with Flow Monitor
                 <Flow2RightPanel
                   flow2Documents={flow2Documents}
                   isOrchestrating={isOrchestrating}
@@ -3375,6 +3375,10 @@ function DocumentPageContent() {
                   onRetry={handleFlow2Retry}
                   onOpenAgents={() => setShowAgentsDrawer(true)}
                   agentParticipants={agentParticipants}
+                  flowMonitorRunId={flowMonitorRunId}
+                  flowMonitorStatus={flowMonitorStatus}
+                  flowMonitorMetadata={flowMonitorMetadata}
+                  onFlowStatusChange={setFlowMonitorStatus}
                 />
               ) : (
                 // FLOW1: Original right panel with all features

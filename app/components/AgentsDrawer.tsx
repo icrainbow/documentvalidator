@@ -34,8 +34,8 @@ export default function AgentsDrawer({ open, onOpenChange, participants }: Agent
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b-2 border-slate-200 bg-slate-50">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800">Agents</h2>
-            <p className="text-sm text-slate-600 mt-1">Visibility & Explainability</p>
+            <h2 className="text-2xl font-bold text-slate-800">Execution Inspector</h2>
+            <p className="text-sm text-slate-600 mt-1">Agent reasoning & debug view</p>
           </div>
           <button
             onClick={() => onOpenChange(false)}

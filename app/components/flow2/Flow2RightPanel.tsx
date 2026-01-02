@@ -2,6 +2,7 @@
 
 import Flow2InfoPanel from './Flow2InfoPanel';
 import Flow2ReviewStatus from './Flow2ReviewStatus';
+import Flow2MonitorPanel, { type FlowStatus, type CheckpointMetadata } from './Flow2MonitorPanel';
 
 interface Flow2RightPanelProps {
   flow2Documents: any[];
@@ -13,6 +14,11 @@ interface Flow2RightPanelProps {
   onRetry: () => void;
   onOpenAgents: () => void;
   agentParticipants: any[];
+  // Flow Monitor props
+  flowMonitorRunId?: string | null;
+  flowMonitorStatus?: FlowStatus;
+  flowMonitorMetadata?: CheckpointMetadata | null;
+  onFlowStatusChange?: (status: FlowStatus) => void;
 }
 
 export default function Flow2RightPanel({
@@ -24,7 +30,11 @@ export default function Flow2RightPanel({
   onRunReview,
   onRetry,
   onOpenAgents,
-  agentParticipants
+  agentParticipants,
+  flowMonitorRunId,
+  flowMonitorStatus = 'idle',
+  flowMonitorMetadata,
+  onFlowStatusChange,
 }: Flow2RightPanelProps) {
   
   const hasDocuments = flow2Documents.length > 0;
@@ -33,6 +43,14 @@ export default function Flow2RightPanel({
   return (
     <div className="sticky top-6 h-[calc(100vh-4rem)] overflow-y-auto">
       <div className="bg-white border-2 border-slate-300 rounded-xl p-6">
+        
+        {/* Flow Monitor - SSOT for runtime status */}
+        <Flow2MonitorPanel
+          runId={flowMonitorRunId || null}
+          initialStatus={flowMonitorStatus}
+          checkpointMetadata={flowMonitorMetadata}
+          onStatusChange={onFlowStatusChange}
+        />
         
         {/* Status Display */}
         <Flow2ReviewStatus

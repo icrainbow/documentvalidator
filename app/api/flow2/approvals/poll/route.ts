@@ -21,29 +21,51 @@ export async function GET(request: Request) {
   const run_id = searchParams.get('run_id');
   
   if (!run_id) {
-    return NextResponse.json({ ok: false, error: 'Missing run_id parameter' }, { status: 400 });
+    return NextResponse.json({ 
+      ok: false, 
+      error: 'Missing run_id parameter',
+      status: 'not_found' 
+    }, { status: 400 });
   }
   
   // Validate run_id format (UUID v4)
   const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
   if (!uuidRegex.test(run_id)) {
-    return NextResponse.json({ ok: false, error: 'Invalid run_id format' }, { status: 400 });
+    return NextResponse.json({ 
+      ok: false, 
+      error: 'Invalid run_id format',
+      status: 'not_found' 
+    }, { status: 400 });
   }
   
   // Load checkpoint
   const checkpoint = await loadCheckpoint(run_id);
   if (!checkpoint) {
-    return NextResponse.json({ ok: false, error: 'Checkpoint not found' }, { status: 404 });
+    return NextResponse.json({ 
+      ok: false, 
+      error: 'Checkpoint not found',
+      run_id,
+      status: 'not_found' 
+    }, { status: 404 });
   }
   
   // Check if decision already exists
   if (checkpoint.decision) {
     // Decision made - return decided status
+    const action = checkpoint.decision === 'approve' ? 'approve' : 'reject';
+    const status = checkpoint.decision === 'approve' ? 'approved' : 'rejected';
+    
     return NextResponse.json({
       ok: true,
       run_id,
-      status: 'decided',
-      decision: checkpoint.decision,
+      status,
+      decision: {
+        action,
+        approver: checkpoint.decided_by || 'Unknown',
+        timestamp: checkpoint.decided_at || new Date().toISOString(),
+        reason: checkpoint.decision_comment,
+      },
+      // Backward compatibility fields
       decided_at: checkpoint.decided_at,
       decided_by: checkpoint.decided_by,
       decision_comment: checkpoint.decision_comment,
@@ -132,7 +154,13 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: true,
     run_id,
-    status: 'waiting',
+    status: 'waiting_human',
+    checkpoint_metadata: {
+      approval_email_to: checkpoint.approval_email_to,
+      approval_sent_at: checkpoint.approval_sent_at,
+      reminder_sent_at: checkpoint.reminder_sent_at,
+    },
+    // Backward compatibility fields
     approval_sent_at: checkpoint.approval_sent_at,
     elapsed_seconds,
     reminder_sent: checkpoint.reminder_email_sent || false,
