@@ -123,10 +123,18 @@ export default function Flow2MonitorPanel({
   const handleRiskStageClick = () => {
     const riskElement = document.getElementById('risk-details');
     if (riskElement) {
-      riskElement.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
+      // Get the element's position relative to viewport
+      const rect = riskElement.getBoundingClientRect();
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const targetY = rect.top + scrollTop - 100; // 100px offset from top
+      
+      // Scroll the window (not the container)
+      window.scrollTo({ 
+        top: targetY,
+        behavior: 'smooth' 
       });
+    } else {
+      console.warn('[Flow Monitor] Risk details element not found (id="risk-details")');
     }
   };
 

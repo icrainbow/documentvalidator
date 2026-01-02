@@ -3698,7 +3698,7 @@ function DocumentPageContent() {
               )}
               
               {/* Flow2: Risk Details Panel */}
-              {isFlow2 && orchestrationResult && (
+              {isFlow2 && currentIssues.length > 0 && (
                 <Flow2RiskDetailsPanel
                   riskLevel={computeRiskLevel(currentIssues, coverageGaps)}
                   riskSignals={currentIssues.filter((i: any) => i.category === 'kyc_risk')}
