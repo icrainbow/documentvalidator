@@ -3,6 +3,8 @@
  * Single source of truth for Flow2 (KYC Graph Review) data structures.
  */
 
+import type { GuardrailIssue } from '../case3/types';
+
 export type Flow2DocTypeHint =
   | "Client Identity"
   | "Source of Wealth"
@@ -15,6 +17,10 @@ export interface Flow2Document {
   filename: string;
   doc_type_hint: Flow2DocTypeHint;
   text: string;
+  
+  // Case 3: Guardrail optional fields (demo-only)
+  guardrailBlocked?: boolean;
+  guardrailIssue?: GuardrailIssue;
 }
 
 export interface HumanGateState {

@@ -56,9 +56,20 @@ const Flow2DocumentsList: React.FC<Flow2DocumentsListProps> = ({
               <div className="flex items-start gap-2 mb-2">
                 <span className="text-2xl">📄</span>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-slate-800 text-sm truncate" title={doc.filename}>
-                    {doc.filename}
-                  </h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-semibold text-slate-800 text-sm truncate" title={doc.filename}>
+                      {doc.filename}
+                    </h4>
+                    {/* Case 3: Blocked badge */}
+                    {doc.guardrailBlocked && (
+                      <span 
+                        className="px-2 py-0.5 bg-orange-100 border border-orange-400 text-orange-800 text-xs font-bold rounded whitespace-nowrap"
+                        title="This document triggered a guardrail alert"
+                      >
+                        ⚠️ BLOCKED
+                      </span>
+                    )}
+                  </div>
                   <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                     {doc.doc_type_hint}
                   </span>

@@ -1,0 +1,28 @@
+ELECTRIC UTILITY BILL
+Provider: Metropolitan Power & Light Company
+Customer Service: 1-800-555-0123
+
+CUSTOMER INFORMATION:
+Customer Name: John Michael Doe
+Service Address: 789 Oak Avenue, Apartment 4B
+                Chicago, IL 60601
+Account Number: ELEC-456789-2024
+
+BILLING PERIOD: December 1-31, 2024
+
+CHARGES:
+Electricity Usage (450 kWh @ $0.21/kWh):  $95.00
+Service Fee:                              $12.00
+Distribution Charge:                      $8.00
+Tax (8%):                                 $9.20
+                                        --------
+TOTAL DUE:                               $124.20
+
+Payment Due Date: January 15, 2025
+
+This document is completely irrelevant for KYC (Know Your Customer) review.
+A utility bill does not provide the identity verification or financial information
+required for compliance purposes.
+
+[GUARDRAIL_WRONG_DOCUMENT]
+

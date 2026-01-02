@@ -53,6 +53,10 @@ import Case2ProcessBanner, { type Case2State } from '../components/case2/Case2Pr
 import { CASE2_DEMO_DATA, type Case2DemoData } from '../lib/case2/demoCase2Data';
 import { detectCase2Trigger } from '../lib/case2/case2Trigger';
 import Case4Container from '../components/case4/Case4Container';
+import Case3GuardrailBanner from '../components/case3/Case3GuardrailBanner';
+import Case3DemoSamples from '../components/case3/Case3DemoSamples';
+import { detectGuardrailIssue } from '../lib/case3/detectGuardrailIssue';
+import type { GuardrailIssue } from '../lib/case3/types';
 
 // Flow2: Input mode type (Phase 1.1)
 type Flow2InputMode = 'empty' | 'demo' | 'upload';
@@ -605,6 +609,11 @@ function DocumentPageContent() {
   
   // Case 4: IT Review state
   const [case4Active, setCase4Active] = useState(false);
+  
+  // Case 3: Guardrail minimal state (Flow2-only)
+  const [case3Active, setCase3Active] = useState(false);
+  const [case3BlockedDocId, setCase3BlockedDocId] = useState<string | null>(null);
+  const [case3Issue, setCase3Issue] = useState<GuardrailIssue | null>(null);
   
   // Workspace limits
   const MAX_FLOW2_DOCUMENTS = 10;
@@ -1404,12 +1413,29 @@ function DocumentPageContent() {
       return;
     }
     
+    // Case 3: Guardrail detection (deterministic, upload-only trigger)
+    const processed = docs.map(doc => {
+      const issue = detectGuardrailIssue(doc);
+      if (issue.isBlocked) {
+        return { ...doc, guardrailBlocked: true, guardrailIssue: issue };
+      }
+      return doc;
+    });
+    
+    // Find first blocked document
+    const blocked = processed.find(d => d.guardrailBlocked);
+    if (blocked) {
+      setCase3Active(true);
+      setCase3BlockedDocId(blocked.doc_id);
+      setCase3Issue(blocked.guardrailIssue || null);
+    }
+    
     // ISOLATED WRITE: Only Flow2 state
-    setFlow2Documents(prev => [...prev, ...docs]);
+    setFlow2Documents(prev => [...prev, ...processed]);
     setMessages(prev => [...prev, {
       role: 'agent',
       agent: 'System',
-      content: `✓ Added ${docs.length} document(s) to Flow2 workspace. Total: ${flow2Documents.length + docs.length}`
+      content: `✓ Added ${docs.length} document(s) to Flow2 workspace. Total: ${flow2Documents.length + docs.length}${blocked ? ' 🚨 Guardrail triggered: Resolve the orange alert to start review.' : ''}`
     }]);
   };
   
@@ -1441,11 +1467,18 @@ function DocumentPageContent() {
     const doc = flow2Documents.find(d => d.doc_id === docId);
     setFlow2Documents(prev => prev.filter(d => d.doc_id !== docId));
     
+    // Case 3: If removed document was blocked, clear guardrail state
+    if (case3BlockedDocId === docId) {
+      setCase3Active(false);
+      setCase3BlockedDocId(null);
+      setCase3Issue(null);
+    }
+    
     if (doc) {
       setMessages(prev => [...prev, {
         role: 'agent',
         agent: 'System',
-        content: `🗑️ Removed "${doc.filename}" from workspace.`
+        content: `🗑️ Removed "${doc.filename}" from workspace.${case3BlockedDocId === docId ? ' Guardrail cleared.' : ''}`
       }]);
     }
   };
@@ -1467,10 +1500,64 @@ function DocumentPageContent() {
     setIsDegraded(false);
     setDegradedReason('');
     
+    // Case 3: Clear guardrail state
+    setCase3Active(false);
+    setCase3BlockedDocId(null);
+    setCase3Issue(null);
+    
     setMessages(prev => [...prev, {
       role: 'agent',
       agent: 'System',
       content: `🧹 Flow2 workspace cleared (${docCount} document(s) removed).`
+    }]);
+  };
+
+  /**
+   * Case 3: Handle Guardrail Resolution
+   * 
+   * Called when user fixes BR or replaces document.
+   * Clears guardrail flags and allows review to proceed.
+   */
+  const handleCase3Resolve = (opts?: { mode: 'fix_br' | 'replace_doc'; patch?: Partial<Flow2Document> }) => {
+    if (!case3BlockedDocId) return;
+
+    setFlow2Documents(prev => prev.map(doc => {
+      if (doc.doc_id !== case3BlockedDocId) return doc;
+
+      // Apply patch if replacing document
+      const patch = opts?.patch || {};
+      const next: any = { ...doc, ...patch };
+      
+      // Always clear guardrail flags
+      delete next.guardrailBlocked;
+      delete next.guardrailIssue;
+      
+      return next;
+    }));
+
+    // Clear Case 3 state
+    setCase3Active(false);
+    setCase3BlockedDocId(null);
+    setCase3Issue(null);
+
+    setMessages(prev => [...prev, {
+      role: 'agent',
+      agent: 'System',
+      content: '✅ Guardrail resolved. You can now start the review.'
+    }]);
+  };
+
+  /**
+   * Case 3: Handle Guardrail Cancel
+   * 
+   * User dismissed guardrail without resolving.
+   * Keep blocked state but inform user.
+   */
+  const handleCase3Cancel = () => {
+    setMessages(prev => [...prev, { 
+      role: 'agent', 
+      agent: 'System', 
+      content: 'Guardrail remains active until resolved.' 
     }]);
   };
 
@@ -1484,6 +1571,16 @@ function DocumentPageContent() {
     // GUARD: Only works in Flow2 mode
     if (!isFlow2) {
       console.warn('[Flow2] handleGraphKycReview called but not in Flow2 mode');
+      return;
+    }
+    
+    // GUARD: Case 3 guardrail blocks review start
+    if (case3Active) {
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: '🚨 Review blocked: Please resolve the guardrail alert first (see orange banner above).'
+      }]);
       return;
     }
     
@@ -3406,6 +3503,9 @@ function DocumentPageContent() {
                     />
                   )}
                   
+                  {/* Case 3: Demo Samples Panel */}
+                  <Case3DemoSamples />
+                  
                   {/* Derived Topics (Phase 3) */}
                   {derivedTopics.length > 0 && (
                     <Flow2DerivedTopics
@@ -3416,6 +3516,27 @@ function DocumentPageContent() {
                   )}
                 </div>
               )}
+              
+              {/* Case 3: Guardrail Alert Banner (renders ABOVE Case 2 banner) */}
+              {isFlow2 && case3Active && case3BlockedDocId && case3Issue && (() => {
+                const blockedDoc = flow2Documents.find(d => d.doc_id === case3BlockedDocId);
+                if (!blockedDoc) {
+                  // Document was removed - auto-clear guardrail state
+                  setCase3Active(false);
+                  setCase3BlockedDocId(null);
+                  setCase3Issue(null);
+                  return null;
+                }
+                return (
+                  <Case3GuardrailBanner
+                    blockedDocId={case3BlockedDocId}
+                    blockedDocument={blockedDoc}
+                    issue={case3Issue}
+                    onResolve={handleCase3Resolve}
+                    onCancel={handleCase3Cancel}
+                  />
+                );
+              })()}
               
               {/* Case 2 Demo Flow Banner */}
               {isFlow2 && case2State !== 'idle' && case2Data && (
@@ -3630,6 +3751,7 @@ function DocumentPageContent() {
                   flowMonitorMetadata={flowMonitorMetadata}
                   onFlowStatusChange={setFlowMonitorStatus}
                   postRejectAnalysisData={postRejectAnalysisData}
+                  case3Active={case3Active}
                 />
               ) : (
                 // FLOW1: Original right panel with all features

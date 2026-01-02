@@ -1,0 +1,27 @@
+PASSPORT
+Country: UNITED STATES OF AMERICA
+
+PERSONAL INFORMATION:
+Surname: SMITH
+Given Names: JANE ELIZABETH
+Date of Birth: March 15, 1985
+Place of Birth: New York, New York, USA
+Gender: Female
+Nationality: American
+Height: 5'6" (168 cm)
+Eye Color: Brown
+
+PASSPORT DETAILS:
+Passport Number: AB1234567
+Type: P (Regular Passport)
+Issue Date: January 10, 2020
+Expiry Date: January 9, 2030
+Issuing Authority: U.S. Department of State
+                   Washington, D.C.
+
+SIGNATURE: [Jane E. Smith]
+
+This is a valid identity verification document suitable for KYC (Know Your Customer)
+compliance review. It contains the necessary personal identification information
+required for customer onboarding and verification processes.
+

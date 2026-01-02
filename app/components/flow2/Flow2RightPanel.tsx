@@ -24,6 +24,8 @@ interface Flow2RightPanelProps {
   onFlowStatusChange?: (status: FlowStatus) => void;
   // Phase 8 props
   postRejectAnalysisData?: PostRejectAnalysisData | null;
+  // Case 3 props
+  case3Active?: boolean;
 }
 
 export default function Flow2RightPanel({
@@ -41,10 +43,11 @@ export default function Flow2RightPanel({
   flowMonitorMetadata,
   onFlowStatusChange,
   postRejectAnalysisData,
+  case3Active = false,
 }: Flow2RightPanelProps) {
   
   const hasDocuments = flow2Documents.length > 0;
-  const canRunReview = hasDocuments && !isOrchestrating;
+  const canRunReview = hasDocuments && !isOrchestrating && !case3Active;
   
   // Demo EDD fields
   const isDemoEdd = flowMonitorMetadata?.demo_mode === 'edd_injection';
@@ -96,19 +99,35 @@ export default function Flow2RightPanel({
               {isOrchestrating ? '🔄 Running...' : '🔄 Retry Review'}
             </button>
           ) : (
-            <button
-              onClick={onRunReview}
-              disabled={!canRunReview}
-              data-testid="flow2-run-graph-review"
-              className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
-                !canRunReview
-                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
-              }`}
-              title={!hasDocuments ? 'Load documents first' : ''}
-            >
-              {isOrchestrating ? '🔄 Running Review...' : '🕸️ Run Graph KYC Review'}
-            </button>
+            <>
+              <button
+                onClick={onRunReview}
+                disabled={!canRunReview}
+                data-testid="flow2-run-graph-review"
+                className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
+                  !canRunReview
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
+                }`}
+                title={
+                  !hasDocuments 
+                    ? 'Load documents first' 
+                    : case3Active 
+                    ? 'Review blocked - resolve guardrail alert first'
+                    : ''
+                }
+              >
+                {case3Active && '🚫 '}
+                {isOrchestrating ? '🔄 Running Review...' : '🕸️ Run Graph KYC Review'}
+              </button>
+              
+              {/* Case 3: Guardrail helper text */}
+              {case3Active && (
+                <p className="text-xs text-orange-600 mt-2 text-center">
+                  ⚠️ Review blocked: Resolve the guardrail alert above to continue.
+                </p>
+              )}
+            </>
           )}
           
           {/* Agents Button */}
