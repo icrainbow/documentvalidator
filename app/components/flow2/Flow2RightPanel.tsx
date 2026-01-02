@@ -28,6 +28,7 @@ interface Flow2RightPanelProps {
   onFlowStatusChange?: (status: FlowStatus) => void;
   // Phase 8 props
   postRejectAnalysisData?: PostRejectAnalysisData | null;
+  onPhase8Complete?: () => void; // NEW: Callback when Phase 8 findings should be appended
   // Case 3 props
   case3Active?: boolean;
   // Risk data for stage coloring
@@ -50,6 +51,7 @@ export default function Flow2RightPanel({
   flowMonitorMetadata,
   onFlowStatusChange,
   postRejectAnalysisData,
+  onPhase8Complete,
   case3Active = false,
   riskData,
 }: Flow2RightPanelProps) {
@@ -64,7 +66,13 @@ export default function Flow2RightPanel({
   const handlePhase8AnimationComplete = useCallback((isComplete: boolean) => {
     console.log(`[Flow2RightPanel] Phase 8 animation complete status: ${isComplete}`);
     setIsPhase8AnimationComplete(isComplete);
-  }, []);
+    
+    // NEW: Trigger Phase 8 findings append when animation completes
+    if (isComplete && onPhase8Complete) {
+      console.log('[Flow2RightPanel] Triggering Phase 8 findings append');
+      onPhase8Complete();
+    }
+  }, [onPhase8Complete]);
   
   // Demo EDD fields
   const isDemoEdd = flowMonitorMetadata?.demo_mode === 'edd_injection';

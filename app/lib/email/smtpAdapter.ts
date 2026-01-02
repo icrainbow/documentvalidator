@@ -88,6 +88,42 @@ export async function sendApprovalEmail(params: {
       </div>
     ` : '';
     
+    // Build topic summaries section from checkpoint (NEW)
+    const topicSummaries = params.checkpoint.topic_summaries || [];
+    const topicSummariesHtml = topicSummaries.length > 0 ? `
+      <h3 style="color: #374151; font-size: 16px; margin: 32px 0 12px 0;">📊 Topic Summary (KYC Analysis)</h3>
+      <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        ${topicSummaries.map(topic => {
+          const coverageColor = topic.coverage === 'PRESENT' ? '#10b981' : 
+                               topic.coverage === 'WEAK' ? '#f59e0b' : '#6b7280';
+          const coverageIcon = topic.coverage === 'PRESENT' ? '✓' : 
+                              topic.coverage === 'WEAK' ? '⚠' : '○';
+          
+          return `
+            <div style="margin: 16px 0; padding: 12px; background: white; border-radius: 6px; border-left: 4px solid ${coverageColor};">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h4 style="margin: 0; color: #1e40af; font-size: 14px;">${topic.title}</h4>
+                <span style="font-size: 11px; font-weight: 600; color: ${coverageColor}; background: ${coverageColor}15; padding: 4px 8px; border-radius: 4px;">
+                  ${coverageIcon} ${topic.coverage}
+                </span>
+              </div>
+              ${topic.bullets.length > 0 ? `
+                <ul style="margin: 8px 0; padding-left: 20px; color: #374151; font-size: 13px; line-height: 1.6;">
+                  ${topic.bullets.slice(0, 4).map(bullet => `<li style="margin: 4px 0;">${bullet}</li>`).join('')}
+                  ${topic.bullets.length > 4 ? `<li style="margin: 4px 0; color: #6b7280; font-style: italic;">...and ${topic.bullets.length - 4} more points</li>` : ''}
+                </ul>
+              ` : ''}
+              ${topic.evidence && topic.evidence.length > 0 ? `
+                <p style="margin: 8px 0 0 0; padding: 8px; background: #f9fafb; border-radius: 4px; font-size: 12px; color: #6b7280; font-style: italic;">
+                  📎 Evidence: "${topic.evidence[0].quote.slice(0, 120)}${topic.evidence[0].quote.length > 120 ? '...' : ''}"
+                </p>
+              ` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : '';
+    
     const mailOptions = {
       from: `Flow2 Reviews <${process.env.SMTP_USER || process.env.FLOW2_SMTP_USER}>`,
       to: params.recipient,
@@ -105,6 +141,8 @@ export async function sendApprovalEmail(params: {
           </div>
           
           ${issuesSummary}
+          
+          ${topicSummariesHtml}
           
           <h3 style="color: #374151; font-size: 16px; margin: 24px 0 12px 0;">📄 Uploaded Documents</h3>
           ${documentsSummary}
@@ -128,8 +166,12 @@ export async function sendApprovalEmail(params: {
           </p>
         </div>
       `,
-      // Removed attachments - Gmail displays HTML attachments as source code
-      // All necessary context is now in the email body
+      // Add uploaded documents as attachments (NEW)
+      attachments: params.checkpoint.documents.map((doc, idx) => ({
+        filename: doc.filename || `document-${idx + 1}.txt`,
+        content: doc.text,
+        contentType: 'text/plain; charset=utf-8',
+      })),
     };
     
     const result = await transporter.sendMail(mailOptions);

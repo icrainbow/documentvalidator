@@ -810,6 +810,13 @@ function DocumentPageContent() {
           setGraphTopics(data.checkpoint_metadata.graph_state.topicSections);
         }
         
+        // NEW: Restore topic summaries from checkpoint (persists after approve/reject)
+        if (data.checkpoint_metadata?.topic_summaries && data.checkpoint_metadata.topic_summaries.length > 0) {
+          console.log('[Flow2/Restore] Restoring', data.checkpoint_metadata.topic_summaries.length, 'topic summaries from checkpoint');
+          setFlow2TopicSummaries(data.checkpoint_metadata.topic_summaries);
+          setTopicSummariesRunId(docKey);
+        }
+        
         // Phase 8: If status is rejected, fetch post-reject analysis
         if (data.status === 'rejected') {
           console.log('[Flow2/Phase8] Rejected workflow detected, fetching post-reject analysis...');
@@ -1916,6 +1923,24 @@ function DocumentPageContent() {
         setSummaries(data.topic_summaries);
         setRunId(runId);
         console.log(`[TopicSummaries/${endpoint}] ✓ Loaded ${data.topic_summaries.length} summaries`);
+        
+        // NEW: If this is KYC endpoint, save topic summaries to checkpoint for email inclusion
+        if (endpoint === '/api/flow2/topic-summaries' && isFlow2) {
+          try {
+            await fetch('/api/flow2/update-checkpoint-topics', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                run_id: runId,
+                topic_summaries: data.topic_summaries,
+              }),
+            });
+            console.log(`[TopicSummaries] ✓ Saved ${data.topic_summaries.length} summaries to checkpoint for email`);
+          } catch (error: any) {
+            console.error('[TopicSummaries] Failed to save to checkpoint:', error.message);
+            // Non-blocking: topic summaries still work in UI
+          }
+        }
       } else if (data.ok === false) {
         console.warn(`[TopicSummaries/${endpoint}] API returned error:`, data.error);
       } else {
@@ -3568,6 +3593,8 @@ function DocumentPageContent() {
     // Trigger IT topic summaries generation
     if (flow2Documents.length > 0) {
       const itRunId = `it-review-${Date.now()}`;
+      setItTopicSummariesRunId(itRunId);
+      
       callGenericTopicSummariesEndpoint(
         '/api/it-bulletin/topic-summaries',
         itRunId,
@@ -3583,6 +3610,80 @@ function DocumentPageContent() {
 
   const handleExitITReview = () => {
     setCase4Active(false);
+  };
+  
+  // NEW: Phase 8 - Append findings to topic summaries when animation completes
+  const handlePhase8Complete = () => {
+    if (!postRejectAnalysisData || !postRejectAnalysisData.findings) {
+      return;
+    }
+    
+    console.log('[Phase8] Appending', postRejectAnalysisData.findings.length, 'findings to topic summaries');
+    
+    // Map findings to topic IDs based on content
+    const findingsToTopicMap: Record<string, string> = {
+      'Source of Funds': 'source_of_funds',
+      'source': 'source_of_funds',
+      'funds': 'source_of_funds',
+      'wealth': 'source_of_wealth',
+      'Offshore': 'ownership_ubo_control',
+      'UBO': 'ownership_ubo_control',
+      'ownership': 'ownership_ubo_control',
+      'Policy': 'sanctions_pep_adverse_media',
+      'regulation': 'sanctions_pep_adverse_media',
+      'jurisdiction': 'geography_jurisdiction_risk',
+    };
+    
+    // Create a copy of current summaries
+    const updatedSummaries = [...flow2TopicSummaries];
+    
+    // For each finding, append to relevant topic
+    postRejectAnalysisData.findings.forEach((finding: any) => {
+      // Find matching topic based on keywords
+      let targetTopicId: string | null = null;
+      for (const [keyword, topicId] of Object.entries(findingsToTopicMap)) {
+        if (finding.title.includes(keyword) || finding.detail.includes(keyword)) {
+          targetTopicId = topicId;
+          break;
+        }
+      }
+      
+      if (targetTopicId) {
+        const topicIndex = updatedSummaries.findIndex(t => t.topic_id === targetTopicId);
+        if (topicIndex !== -1) {
+          // Append finding as a bullet point with severity indicator
+          const severityIcon = finding.severity === 'high' ? '🔴' : finding.severity === 'medium' ? '🟠' : 'ℹ️';
+          const newBullet = `${severityIcon} [EDD Finding] ${finding.detail}`;
+          
+          updatedSummaries[topicIndex] = {
+            ...updatedSummaries[topicIndex],
+            bullets: [...updatedSummaries[topicIndex].bullets, newBullet],
+            coverage: finding.severity === 'high' ? 'WEAK' : updatedSummaries[topicIndex].coverage, // Downgrade if high severity
+          };
+          
+          console.log(`[Phase8] Appended finding to topic: ${targetTopicId}`);
+        }
+      }
+    });
+    
+    // Update state
+    setFlow2TopicSummaries(updatedSummaries);
+    
+    // Save to checkpoint
+    if (flowMonitorRunId) {
+      fetch('/api/flow2/update-checkpoint-topics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          run_id: flowMonitorRunId,
+          topic_summaries: updatedSummaries,
+        }),
+      }).then(() => {
+        console.log('[Phase8] ✓ Saved updated summaries to checkpoint');
+      }).catch(error => {
+        console.error('[Phase8] Failed to save updated summaries:', error);
+      });
+    }
   };
 
   const getSectionColor = (status: SectionStatus) => {
@@ -3976,7 +4077,9 @@ function DocumentPageContent() {
                   flowMonitorMetadata={flowMonitorMetadata}
                   onFlowStatusChange={setFlowMonitorStatus}
                   postRejectAnalysisData={postRejectAnalysisData}
+                  onPhase8Complete={handlePhase8Complete}
                   case3Active={case3Active}
+                  case4Active={case4Active}
                   riskData={{
                     riskLevel: computeRiskLevel(currentIssues, coverageGaps),
                     hasHighRisk: currentIssues.some((i: any) => (i.severity === 'high' || i.severity === 'critical') && i.category === 'kyc_risk'),

@@ -59,6 +59,16 @@ export interface Flow2Checkpoint {
   resumed_at?: string; // ISO timestamp (optional)
   status: CheckpointStatus;
   
+  // ========== Topic Summaries (for email and persistence) ==========
+  topic_summaries?: Array<{
+    topic_id: string;
+    title: string;
+    coverage: string;
+    bullets: string[];
+    evidence?: Array<{ quote: string; doc_id?: string }>;
+    linked_risks?: Array<{ risk_id: string; severity: string; title: string }>;
+  }>;
+  
   // ========== HITL Email Approval Fields (Phase 1) ==========
   approval_token?: string; // 32-char hex token for approval links
   approval_email_to?: string; // Approver email address
