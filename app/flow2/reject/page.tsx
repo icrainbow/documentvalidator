@@ -53,117 +53,133 @@ export default function RejectActionPage() {
   }, [token, router]);
   
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    }}>
-      <div style={{
-        background: 'white',
-        borderRadius: '12px',
-        padding: '48px',
-        maxWidth: '500px',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        textAlign: 'center',
-      }}>
-        {status === 'loading' && (
-          <>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              border: '4px solid #e5e7eb',
-              borderTopColor: '#ef4444',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto 24px',
-            }} />
-            <h1 style={{ fontSize: '24px', color: '#1f2937', marginBottom: '8px' }}>
-              Processing Rejection...
-            </h1>
-            <p style={{ color: '#6b7280', margin: 0 }}>
-              Please wait while we process your decision.
-            </p>
-          </>
-        )}
-        
-        {status === 'success' && (
-          <>
-            <div style={{
-              width: '64px',
-              height: '64px',
-              background: '#ef4444',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 24px',
-              fontSize: '32px',
-              color: 'white',
-            }}>
-              ✕
+    <>
+      <style>{`
+        @keyframes reject-spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+      
+      <div className="reject-page-container">
+        <div className="reject-card">
+          {status === 'loading' && (
+            <div className="reject-content">
+              <div className="reject-spinner" />
+              <h1 className="reject-title">Processing Rejection...</h1>
+              <p className="reject-text">Please wait while we process your decision.</p>
             </div>
-            <h1 style={{ fontSize: '24px', color: '#1f2937', marginBottom: '8px' }}>
-              Workflow Rejected
-            </h1>
-            <p style={{ color: '#6b7280', margin: '16px 0 0 0' }}>
-              {message}
-            </p>
-            <p style={{ color: '#9ca3af', fontSize: '14px', margin: '16px 0 0 0' }}>
-              Redirecting to document page...
-            </p>
-          </>
-        )}
-        
-        {status === 'error' && (
-          <>
-            <div style={{
-              width: '64px',
-              height: '64px',
-              background: '#ef4444',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 24px',
-              fontSize: '32px',
-              color: 'white',
-            }}>
-              ⚠
+          )}
+          
+          {status === 'success' && (
+            <div className="reject-content">
+              <div className="reject-icon reject-icon-rejected">✕</div>
+              <h1 className="reject-title">Workflow Rejected</h1>
+              <p className="reject-text">{message}</p>
+              <p className="reject-subtext">Redirecting to document page...</p>
             </div>
-            <h1 style={{ fontSize: '24px', color: '#1f2937', marginBottom: '8px' }}>
-              Error
-            </h1>
-            <p style={{ color: '#6b7280', margin: '16px 0 0 0' }}>
-              {message}
-            </p>
-            <button
-              onClick={() => router.push('/document?flow=2')}
-              style={{
-                marginTop: '24px',
-                padding: '12px 24px',
-                background: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: '600',
-                cursor: 'pointer',
-              }}
-            >
-              Go to Document Page
-            </button>
-          </>
-        )}
-        
-        <style jsx>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+          )}
+          
+          {status === 'error' && (
+            <div className="reject-content">
+              <div className="reject-icon reject-icon-error">⚠</div>
+              <h1 className="reject-title">Error</h1>
+              <p className="reject-text">{message}</p>
+              <button
+                onClick={() => router.push('/document?flow=2')}
+                className="reject-button"
+              >
+                Go to Document Page
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+      
+      <style jsx>{`
+        .reject-page-container {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        
+        .reject-card {
+          background: white;
+          border-radius: 12px;
+          padding: 48px;
+          max-width: 500px;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .reject-content {
+          text-align: center;
+        }
+        
+        .reject-spinner {
+          width: 48px;
+          height: 48px;
+          border: 4px solid #e5e7eb;
+          border-top-color: #ef4444;
+          border-radius: 50%;
+          animation: reject-spin 1s linear infinite;
+          margin: 0 auto 24px;
+        }
+        
+        .reject-icon {
+          width: 64px;
+          height: 64px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 24px;
+          font-size: 32px;
+          color: white;
+        }
+        
+        .reject-icon-rejected {
+          background: #ef4444;
+        }
+        
+        .reject-icon-error {
+          background: #ef4444;
+        }
+        
+        .reject-title {
+          font-size: 24px;
+          color: #1f2937;
+          margin-bottom: 8px;
+        }
+        
+        .reject-text {
+          color: #6b7280;
+          margin: 16px 0 0 0;
+        }
+        
+        .reject-subtext {
+          color: #9ca3af;
+          font-size: 14px;
+          margin: 16px 0 0 0;
+        }
+        
+        .reject-button {
+          margin-top: 24px;
+          padding: 12px 24px;
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        
+        .reject-button:hover {
+          background: #2563eb;
+        }
+      `}</style>
+    </>
   );
 }
 
