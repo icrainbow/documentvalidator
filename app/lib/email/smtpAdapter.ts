@@ -129,44 +129,65 @@ export async function sendApprovalEmail(params: {
       to: params.recipient,
       subject: `[Flow2 Approval] Review Required - Run ${packet.run_short_id}`,
       messageId: customMessageId,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 650px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #1e40af; margin-bottom: 8px;">Flow2 KYC Review Awaiting Approval</h2>
-          <p style="color: #6b7280; margin-top: 0;">A KYC review workflow has paused and requires your decision.</p>
-          
-          <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
-            <p style="margin: 4px 0;"><strong>Run ID:</strong> <code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">${params.run_id.slice(0, 13)}...</code></p>
-            <p style="margin: 4px 0;"><strong>Documents:</strong> ${params.checkpoint.documents.length} file(s) uploaded</p>
-            <p style="margin: 4px 0;"><strong>Paused At:</strong> ${new Date(params.checkpoint.paused_at).toLocaleString()}</p>
-          </div>
-          
-          ${issuesSummary}
-          
-          ${topicSummariesHtml}
-          
-          <h3 style="color: #374151; font-size: 16px; margin: 24px 0 12px 0;">📄 Uploaded Documents</h3>
-          ${documentsSummary}
-          
-          <div style="margin: 32px 0; padding: 20px; background: #f9fafb; border-radius: 8px; text-align: center;">
-            <p style="margin: 0 0 16px 0; color: #374151; font-weight: 600;">Choose an action:</p>
-            <a href="${packet.actions.approve_url}" 
-               style="display: inline-block; padding: 14px 32px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
-              ✅ Approve & Continue
-            </a>
-            <a href="${packet.actions.reject_url}" 
-               style="display: inline-block; padding: 14px 32px; background: #ef4444; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
-              ❌ Reject
-            </a>
-          </div>
-          
-          <p style="color: #6b7280; font-size: 12px; margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center;">
-            Flow2 Approval System<br/>
-            Message ID: ${customMessageId}<br/>
-            Token: ${params.approval_token.slice(0, 8)}...
-          </p>
-        </div>
-      `,
-      // Add uploaded documents as attachments (NEW)
+      headers: {
+        'Content-Type': 'text/html; charset=UTF-8',
+        'MIME-Version': '1.0'
+      },
+      html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow2 Approval Required</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f5f5;">
+  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
+    <h2 style="color: #1e40af; margin-bottom: 8px;">Flow2 KYC Review Awaiting Approval</h2>
+    <p style="color: #6b7280; margin-top: 0;">A KYC review workflow has paused and requires your decision.</p>
+    
+    <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+      <p style="margin: 4px 0;"><strong>Run ID:</strong> <code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">${params.run_id.slice(0, 13)}...</code></p>
+      <p style="margin: 4px 0;"><strong>Documents:</strong> ${params.checkpoint.documents.length} file(s) uploaded (see attachments)</p>
+      <p style="margin: 4px 0;"><strong>Paused At:</strong> ${new Date(params.checkpoint.paused_at).toLocaleString()}</p>
+    </div>
+    
+    ${issuesSummary}
+    
+    ${topicSummariesHtml}
+    
+    <h3 style="color: #374151; font-size: 16px; margin: 24px 0 12px 0;">📄 Uploaded Documents (Attached)</h3>
+    <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 16px; margin: 16px 0;">
+      <p style="margin: 0; font-size: 14px; color: #15803d;">
+        ✓ ${params.checkpoint.documents.length} document(s) attached to this email
+      </p>
+      ${params.checkpoint.documents.map((doc, idx) => `
+        <p style="margin: 8px 0 0 0; font-size: 13px; color: #166534;">
+          📎 ${idx + 1}. ${doc.filename}
+        </p>
+      `).join('')}
+    </div>
+    
+    <div style="margin: 32px 0; padding: 20px; background: #f9fafb; border-radius: 8px; text-align: center;">
+      <p style="margin: 0 0 16px 0; color: #374151; font-weight: 600;">Choose an action:</p>
+      <a href="${packet.actions.approve_url}" 
+         style="display: inline-block; padding: 14px 32px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
+        ✅ Approve & Continue
+      </a>
+      <a href="${packet.actions.reject_url}" 
+         style="display: inline-block; padding: 14px 32px; background: #ef4444; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
+        ❌ Reject
+      </a>
+    </div>
+    
+    <p style="color: #6b7280; font-size: 12px; margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center;">
+      Flow2 Approval System<br/>
+      Message ID: ${customMessageId}<br/>
+      Token: ${params.approval_token.slice(0, 8)}...
+    </p>
+  </div>
+</body>
+</html>`,
+      // Add uploaded documents as attachments
       attachments: params.checkpoint.documents.map((doc, idx) => ({
         filename: doc.filename || `document-${idx + 1}.txt`,
         content: doc.text,

@@ -47,7 +47,7 @@ export default function HomePage() {
               <path d="M8 16h8v2H8zm0-4h8v2H8zm0-4h5v2H8z"/>
             </svg>
             <h1 className="text-5xl font-bold text-white">
-              Document Review System
+              Agentic Frameworks for Proactive Governance
             </h1>
           </div>
           <p className="text-slate-300 text-lg">
