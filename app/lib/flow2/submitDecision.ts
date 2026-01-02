@@ -13,6 +13,7 @@ import { validateCheckpoint } from './checkpointValidation';
 import type { Flow2Checkpoint } from './checkpointTypes';
 import { isAmbiguousReject, isRouteEddTrigger, getMatchSummary } from './ambiguousRejectDetector';
 import { generateDemoEddBundle } from './demoEddGenerator';
+import { startEddSubReview } from './eddSubReview';
 
 export type FinalizeDecisionStatus = 
   | 'finalized'              // Successfully wrote decision
@@ -190,6 +191,28 @@ export async function finalizeDecision(
       (updates as any).demo_trace = demoBundle.demo_trace;
       
       console.log('[SubmitDecision/Demo] Injected EDD demo bundle into checkpoint');
+      
+      // NEW: Kick off EDD sub-review immediately (Stage 2)
+      console.log('[SubmitDecision/Demo] Initiating EDD sub-review...');
+      
+      // Prepare checkpoint with stage 1 updates applied
+      const checkpointWithStage1 = { ...checkpoint, ...updates };
+      
+      // Start EDD sub-review (MUST be idempotent)
+      const eddResult = await startEddSubReview(checkpointWithStage1, reason.trim());
+      
+      if (eddResult.ok) {
+        if (eddResult.already_started) {
+          console.log('[SubmitDecision/Demo] ⚠️ EDD sub-review already started (idempotent)');
+        } else {
+          console.log('[SubmitDecision/Demo] ✅ EDD sub-review started, Email #2 sent');
+          // Merge EDD updates into existing updates
+          Object.assign(updates, eddResult.updates);
+        }
+      } else {
+        console.error('[SubmitDecision/Demo] ❌ EDD sub-review failed:', eddResult.errors);
+        // Non-critical: stage 1 rejection still proceeds
+      }
     }
   }
   

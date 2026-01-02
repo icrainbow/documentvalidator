@@ -14,7 +14,8 @@ const TOKEN_INDEX_PATH = path.join(CHECKPOINT_DIR, '_token_index.json');
 // ========== Token Index Management (Phase 1.5) ==========
 
 interface TokenIndex {
-  [token: string]: string; // token -> run_id mapping
+  // Backward compatible: accepts string (legacy) or object (new)
+  [token: string]: string | { run_id: string; type: 'stage1' | 'edd' };
 }
 
 /**
@@ -52,7 +53,37 @@ export async function getRunIdByToken(token: string): Promise<string | null> {
   }
   
   const index = await loadTokenIndex();
-  return index[token] || null;
+  const entry = index[token];
+  
+  // Backward compatible: handle legacy string or new object format
+  if (typeof entry === 'string') {
+    return entry; // Legacy format
+  } else if (entry && typeof entry === 'object' && entry.run_id) {
+    return entry.run_id; // New format
+  }
+  
+  return null;
+}
+
+/**
+ * Get token metadata (type) if available
+ */
+export async function getTokenMetadata(token: string): Promise<{ run_id: string; type: 'stage1' | 'edd' } | null> {
+  if (!token || typeof token !== 'string') {
+    return null;
+  }
+  
+  const index = await loadTokenIndex();
+  const entry = index[token];
+  
+  if (typeof entry === 'string') {
+    // Legacy format: assume stage1
+    return { run_id: entry, type: 'stage1' };
+  } else if (entry && typeof entry === 'object' && entry.run_id) {
+    return entry;
+  }
+  
+  return null;
 }
 
 /**
@@ -106,15 +137,27 @@ export async function saveCheckpoint(checkpoint: Flow2Checkpoint): Promise<void>
   await fs.writeFile(tempPath, JSON.stringify(checkpoint, null, 2), 'utf-8');
   await fs.rename(tempPath, filePath);
   
-  // Phase 1.5: Update token index if approval_token exists
+  // Phase 1.5: Update token index if approval_token exists (stage 1)
   if (checkpoint.approval_token) {
     try {
       const index = await loadTokenIndex();
-      index[checkpoint.approval_token] = checkpoint.run_id;
+      index[checkpoint.approval_token] = { run_id: checkpoint.run_id, type: 'stage1' };
       await saveTokenIndex(index);
     } catch (error) {
-      console.error('[CheckpointStore] Failed to update token index:', error);
+      console.error('[CheckpointStore] Failed to update token index (stage1):', error);
       // Non-critical: checkpoint is saved, index update failed
+    }
+  }
+  
+  // NEW: Index EDD token if present (stage 2)
+  if (checkpoint.edd_stage?.approval_token) {
+    try {
+      const index = await loadTokenIndex();
+      index[checkpoint.edd_stage.approval_token] = { run_id: checkpoint.run_id, type: 'edd' };
+      await saveTokenIndex(index);
+    } catch (error) {
+      console.error('[CheckpointStore] Failed to update token index (edd):', error);
+      // Non-critical
     }
   }
 }

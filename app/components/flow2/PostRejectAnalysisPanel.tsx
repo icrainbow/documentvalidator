@@ -240,16 +240,27 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
   const showReplay = allowReplay && phase === 'done';
   
   return (
-    <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-5 mb-6 shadow-md">
+    <div id="post-reject-analysis" className="bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-5 mb-6 shadow-md">
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <div className="w-3 h-3 rounded-full bg-purple-500 animate-pulse" />
         <h3 className="text-base font-bold text-purple-900">
           Post-Reject Analysis (Phase 8)
         </h3>
-        <span className="ml-auto text-xs text-purple-700 bg-purple-100 px-2 py-1 rounded font-semibold">
-          EDD TRIGGERED
-        </span>
+        {/* Status Badge */}
+        {phase === 'idle' || phase === 'tasks' ? (
+          <span className="ml-auto text-xs text-blue-700 bg-blue-100 px-2 py-1 rounded font-semibold">
+            Running...
+          </span>
+        ) : phase === 'done' ? (
+          <span className="ml-auto text-xs text-green-700 bg-green-100 px-2 py-1 rounded font-semibold">
+            Complete
+          </span>
+        ) : (
+          <span className="ml-auto text-xs text-purple-700 bg-purple-100 px-2 py-1 rounded font-semibold">
+            ⏱️ Timeline started
+          </span>
+        )}
         
         {/* Skip/Replay Controls */}
         {showSkip && (

@@ -17,6 +17,16 @@ export interface CheckpointMetadata {
   // Restoration fields
   documents?: any[];
   graph_state?: any;
+  // NEW: EDD stage and final decision
+  edd_stage?: {
+    status: string;
+    approval_email_to?: string;
+    approval_sent_at?: string;
+    decision?: string;
+    decided_at?: string;
+    decided_by?: string;
+  };
+  final_decision?: string;
 }
 
 interface Flow2MonitorPanelProps {
@@ -32,18 +42,29 @@ const BUSINESS_STAGES = [
   { id: 2, label: 'Risk Assessment', icon: '⚠️' },
   { id: 3, label: 'Compliance Review', icon: '✓' },
   { id: 4, label: 'Human Review', icon: '👤' },
-  { id: 5, label: 'Final Report', icon: '📊' },
+  { id: 5, label: 'EDD Review', icon: '🔍' },      // NEW
+  { id: 6, label: 'Final Report', icon: '📊' },
 ];
 
-function getCurrentStageIndex(status: FlowStatus): number {
+function getCurrentStageIndex(status: FlowStatus, eddStage?: { status: string }): number {
   switch (status) {
     case 'idle': return 0;
-    case 'running': return 2; // In progress, show stage 2-3
-    case 'waiting_human': return 3; // Stage 4 (Human Review)
-    case 'resuming': return 4; // Moving to stage 5
-    case 'completed': return 5; // All done
-    case 'rejected': return 4; // Stopped at stage 4
-    case 'error': return 2; // Failed somewhere
+    case 'running': return 2; // In progress at stages 2-3
+    case 'waiting_human':
+      // If EDD stage exists and is waiting, show stage 5
+      if (eddStage && eddStage.status === 'waiting_edd_approval') {
+        return 5;
+      }
+      return 4; // Stage 1 waiting
+    case 'resuming': return eddStage ? 5 : 4;
+    case 'completed': return 6; // All done
+    case 'rejected':
+      // Show which stage was rejected
+      if (eddStage && eddStage.status === 'rejected') {
+        return 5; // EDD rejected
+      }
+      return 4; // Stage 1 rejected (no EDD)
+    case 'error': return 2;
     default: return 0;
   }
 }
@@ -78,7 +99,13 @@ export default function Flow2MonitorPanel({
   // Polling logic
   useEffect(() => {
     if (!runId) return;
-    if (status !== 'waiting_human' && status !== 'resuming') return;
+    
+    // Poll when waiting for stage 1 approval OR stage 2 EDD approval
+    const shouldPoll = status === 'waiting_human' || 
+                      status === 'resuming' || 
+                      checkpointMetadata?.edd_stage?.status === 'waiting_edd_approval';
+    
+    if (!shouldPoll) return;
 
     let intervalId: NodeJS.Timeout | null = null;
 
@@ -105,7 +132,7 @@ export default function Flow2MonitorPanel({
           onStatusChange?.('error');
           if (intervalId) clearInterval(intervalId);
         }
-        // If still waiting_human, continue polling
+        // If still waiting_human or waiting_edd_approval, continue polling
       } catch (error) {
         console.error('[Flow Monitor] Poll error:', error);
       }
@@ -120,7 +147,7 @@ export default function Flow2MonitorPanel({
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [runId, status, onStatusChange]);
+  }, [runId, status, checkpointMetadata?.edd_stage?.status, onStatusChange]);
 
   const handleSendReminder = useCallback(async () => {
     if (!runId) return;
@@ -232,28 +259,49 @@ export default function Flow2MonitorPanel({
         <div className="mb-4">
           <div className="flex items-center justify-between">
             {BUSINESS_STAGES.map((stage, idx) => {
+              const currentStageIndex = getCurrentStageIndex(status, checkpointMetadata?.edd_stage);
               const isCompleted = idx < currentStageIndex;
               const isCurrent = idx === currentStageIndex - 1;
               const isPending = idx >= currentStageIndex;
               
-              // Special case: Human Review (stage 4) should be RED if workflow was rejected
-              const isRejectedAtHumanReview = status === 'rejected' && stage.id === 4;
+              // Special case: Human Review (stage 4) rejected at stage 1
+              const isRejectedAtHumanReview = status === 'rejected' && stage.id === 4 && !checkpointMetadata?.edd_stage;
+              
+              // Special case: EDD Review (stage 5) states
+              let eddStepColor = '';
+              let eddStepIcon = stage.icon;
+              if (stage.id === 5 && checkpointMetadata?.edd_stage) {
+                const eddStatus = checkpointMetadata.edd_stage.status;
+                if (eddStatus === 'waiting_edd_approval') {
+                  eddStepColor = 'bg-orange-500 text-white ring-4 ring-orange-200'; // Waiting (current)
+                  eddStepIcon = '⏳';
+                } else if (eddStatus === 'approved') {
+                  eddStepColor = 'bg-green-500 text-white'; // Approved (completed)
+                  eddStepIcon = '✓';
+                } else if (eddStatus === 'rejected') {
+                  eddStepColor = 'bg-red-500 text-white'; // Rejected
+                  eddStepIcon = '✗';
+                } else if (eddStatus === 'running') {
+                  eddStepColor = 'bg-blue-500 text-white ring-4 ring-blue-200'; // Running
+                  eddStepIcon = '⚙️';
+                }
+              }
 
               return (
                 <div key={stage.id} className="flex items-center flex-1">
                   <div className="flex flex-col items-center">
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                        isRejectedAtHumanReview
+                        eddStepColor || (isRejectedAtHumanReview
                           ? 'bg-red-500 text-white'
                           : isCompleted
                           ? 'bg-green-500 text-white'
                           : isCurrent
                           ? 'bg-blue-500 text-white ring-4 ring-blue-200'
-                          : 'bg-slate-200 text-slate-500'
+                          : 'bg-slate-200 text-slate-500')
                       }`}
                     >
-                      {isRejectedAtHumanReview ? '✗' : isCompleted ? '✓' : stage.icon}
+                      {eddStepIcon || (isRejectedAtHumanReview ? '✗' : isCompleted ? '✓' : stage.icon)}
                     </div>
                     <div
                       className={`mt-1 text-xs font-medium text-center ${
@@ -354,7 +402,56 @@ export default function Flow2MonitorPanel({
         </div>
       )}
       
-      {/* Approval Details */}
+      {/* EDD Waiting State */}
+      {checkpointMetadata?.edd_stage?.status === 'waiting_edd_approval' && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">🔍</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-purple-900 mb-1">
+                EDD Approval Email Sent
+              </p>
+              <p className="text-xs text-purple-700 mb-1">
+                <strong>To:</strong> {checkpointMetadata.edd_stage.approval_email_to || 'Unknown'}
+              </p>
+              {checkpointMetadata.edd_stage.approval_sent_at && (
+                <p className="text-xs text-purple-600">
+                  <strong>Sent:</strong> {formatTimeAgo(checkpointMetadata.edd_stage.approval_sent_at)}
+                </p>
+              )}
+              <p className="text-xs text-purple-600 mt-2">
+                Auto-checking for EDD approval every 3 seconds...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDD Approved State */}
+      {checkpointMetadata?.edd_stage?.status === 'approved' && checkpointMetadata.final_decision === 'approved_with_edd' && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">✅</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-green-900 mb-2">
+                EDD Approved
+              </p>
+              {checkpointMetadata.edd_stage.decided_by && (
+                <p className="text-xs text-green-700 mt-1">
+                  <strong>Approved by:</strong> {checkpointMetadata.edd_stage.decided_by}
+                </p>
+              )}
+              {checkpointMetadata.edd_stage.decided_at && (
+                <p className="text-xs text-green-600 mt-1">
+                  <strong>Date:</strong> {formatTimeAgo(checkpointMetadata.edd_stage.decided_at)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Approval Details (Stage 1 approved, no EDD) */}
       {status === 'completed' && checkpointMetadata?.decided_by && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
           <div className="flex items-start gap-3">

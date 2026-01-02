@@ -232,3 +232,99 @@ export async function sendReminderEmail(params: {
   }
 }
 
+// ========================================
+// EDD APPROVAL EMAIL (STAGE 2)
+// ========================================
+
+export async function sendEddApprovalEmail(params: {
+  run_id: string;
+  approval_token: string;
+  recipient: string;
+  checkpoint: Flow2Checkpoint;
+  edd_findings: Array<{ severity: string; title: string; detail: string }>;
+  base_url: string;
+}): Promise<EmailResult> {
+  try {
+    const transporter = createTransporter();
+    
+    const customMessageId = `<flow2-edd-${params.run_id}@${process.env.SMTP_DOMAIN || 'localhost'}>`;
+    
+    // Build findings summary HTML
+    const findingsSummary = params.edd_findings.map(finding => {
+      const severityColor = finding.severity === 'high' ? '#dc2626' : finding.severity === 'medium' ? '#ea580c' : '#6b7280';
+      const severityIcon = finding.severity === 'high' ? '🔴' : finding.severity === 'medium' ? '🟠' : 'ℹ️';
+      
+      return `
+        <div style="margin: 12px 0; padding: 12px; background: #f9fafb; border-left: 4px solid ${severityColor}; border-radius: 4px;">
+          <p style="margin: 0; font-weight: 600; color: ${severityColor};">
+            ${severityIcon} ${finding.title}
+          </p>
+          <p style="margin: 4px 0 0 0; font-size: 13px; color: #374151;">
+            ${finding.detail}
+          </p>
+        </div>
+      `;
+    }).join('');
+    
+    const approveUrl = `${params.base_url}/flow2/edd/approve?token=${params.approval_token}`;
+    const rejectUrl = `${params.base_url}/flow2/edd/reject?token=${params.approval_token}`;
+    
+    const mailOptions = {
+      from: `Flow2 Reviews <${process.env.SMTP_USER || process.env.FLOW2_SMTP_USER}>`,
+      to: params.recipient,
+      subject: `[Flow2 EDD] Additional Approval Required - Run ${params.run_id.slice(0, 13)}...`,
+      messageId: customMessageId,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 650px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #7c3aed; margin-bottom: 8px;">🔍 Enhanced Due Diligence (EDD) Review Required</h2>
+          <p style="color: #6b7280; margin-top: 0;">The initial review was rejected due to identified risk factors. An EDD sub-review has been completed automatically.</p>
+          
+          <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 4px 0;"><strong>Run ID:</strong> <code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">${params.run_id.slice(0, 13)}...</code></p>
+            <p style="margin: 4px 0;"><strong>Stage:</strong> Enhanced Due Diligence (Stage 2)</p>
+          </div>
+          
+          <h3 style="color: #374151; font-size: 16px; margin: 24px 0 12px 0;">📋 EDD Findings</h3>
+          ${findingsSummary}
+          
+          <div style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 16px; margin: 24px 0;">
+            <p style="margin: 0; font-size: 14px; color: #78350f;">
+              <strong>⚠️ Action Required:</strong> Please review the EDD findings above and make a decision to approve or reject.
+            </p>
+          </div>
+          
+          <div style="margin: 32px 0; padding: 20px; background: #f9fafb; border-radius: 8px; text-align: center;">
+            <p style="margin: 0 0 16px 0; color: #374151; font-weight: 600;">Choose an action:</p>
+            <a href="${approveUrl}" 
+               style="display: inline-block; padding: 14px 32px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
+              ✅ Approve EDD & Continue
+            </a>
+            <a href="${rejectUrl}" 
+               style="display: inline-block; padding: 14px 32px; background: #ef4444; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
+              ❌ Reject EDD
+            </a>
+          </div>
+          
+          <p style="color: #6b7280; font-size: 12px; margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center;">
+            Flow2 EDD Approval System<br/>
+            Message ID: ${customMessageId}<br/>
+            Token: ${params.approval_token.slice(0, 8)}...
+          </p>
+        </div>
+      `,
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    
+    console.log(`[SMTP] EDD approval email sent: ${result.messageId}`);
+    
+    return {
+      messageId: result.messageId || customMessageId,
+      success: true,
+    };
+  } catch (error: any) {
+    console.error('[SMTP] Failed to send EDD approval email:', error.message);
+    throw error;
+  }
+}
+

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ReviewConfigDrawer from '../components/ReviewConfigDrawer';
 import Flow2ReviewConfigDrawer from '../components/flow2/Flow2ReviewConfigDrawer';
@@ -589,6 +589,9 @@ function DocumentPageContent() {
   // Phase 8: Post-reject analysis state
   const [postRejectAnalysisData, setPostRejectAnalysisData] = useState<any | null>(null);
   
+  // Phase 8: Auto-scroll guard
+  const didScrollToPhase8Ref = useRef<string | null>(null);
+  
   // Workspace limits
   const MAX_FLOW2_DOCUMENTS = 10;
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -786,6 +789,28 @@ function DocumentPageContent() {
     
     loadCheckpoint();
   }, [isFlow2, docKey, flow2Documents.length]);
+  
+  // Auto-scroll to Phase 8 panel when rejection + triggered (guarantee visibility)
+  useEffect(() => {
+    if (postRejectAnalysisData?.triggered && 
+        flowMonitorRunId && 
+        didScrollToPhase8Ref.current !== flowMonitorRunId) {
+      
+      // Guard: only scroll once per run_id
+      didScrollToPhase8Ref.current = flowMonitorRunId;
+      
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        const panel = document.getElementById('post-reject-analysis');
+        if (panel) {
+          console.log('[Flow2/Phase8] Auto-scrolling to Phase 8 panel');
+          panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          console.warn('[Flow2/Phase8] Panel element not found for scroll');
+        }
+      });
+    }
+  }, [postRejectAnalysisData?.triggered, flowMonitorRunId]);
   
   // Auto-save session on state changes
   useEffect(() => {

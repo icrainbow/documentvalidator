@@ -9,6 +9,43 @@ import type { Flow2Document } from '../graphKyc/demoData';
 
 export type CheckpointStatus = 'paused' | 'resumed' | 'completed' | 'failed';
 
+export type EddStageStatus = 
+  | 'idle'                    // Not started
+  | 'running'                 // EDD sub-review initiated
+  | 'waiting_edd_approval'    // Email #2 sent, awaiting decision
+  | 'approved'                // EDD approved
+  | 'rejected';               // EDD rejected
+
+export interface EddStage {
+  status: EddStageStatus;
+  started_at?: string;              // ISO timestamp when EDD sub-review started
+  approval_token?: string;          // 32-char hex token for Email #2
+  approval_email_to?: string;       // Same as stage 1 approver
+  approval_email_sent?: boolean;    // Whether Email #2 was sent
+  approval_sent_at?: string;        // ISO timestamp of Email #2 send
+  decision?: 'approve' | 'reject';  // EDD decision
+  decision_comment?: string;        // EDD rejection reason (if reject)
+  decided_at?: string;              // ISO timestamp of EDD decision
+  decided_by?: string;              // Email/identifier of EDD decision maker
+  // Demo-only deterministic outputs
+  demo_edd_outputs?: {
+    findings: Array<{ severity: string; title: string; detail: string }>;
+    evidence_summary: string;
+    graph_patch: { add_nodes: any[]; add_edges: any[] };
+  };
+}
+
+export type FinalDecision = 
+  | 'approved'              // Stage 1 approved (no EDD)
+  | 'rejected'              // Stage 1 rejected (no EDD) OR EDD rejected
+  | 'approved_with_edd';    // Stage 1 rejected → EDD approved
+
+export interface EventLogEntry {
+  timestamp: string;  // ISO timestamp
+  event: string;      // e.g., 'stage1_reject', 'edd_started', 'edd_approved'
+  details?: any;      // Optional structured data
+}
+
 export interface Flow2Checkpoint {
   run_id: string; // UUID v4
   graph_id: string; // e.g., "flow2_kyc_v1"
@@ -44,6 +81,11 @@ export interface Flow2Checkpoint {
   // Phase 6: Decision audit trail
   finalized_via?: 'email_link' | 'web_form'; // How decision was submitted
   token_hint?: string; // Last 8 chars of token (audit trail)
+  
+  // ========== STAGE 2: EDD SUB-REVIEW FIELDS ==========
+  edd_stage?: EddStage;           // EDD stage state (optional, only if triggered)
+  final_decision?: FinalDecision; // Overall outcome after all stages
+  event_log?: EventLogEntry[];    // Audit trail (append-only)
 }
 
 export interface CheckpointMetadata {

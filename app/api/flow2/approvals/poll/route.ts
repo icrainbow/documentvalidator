@@ -75,6 +75,9 @@ export async function GET(request: Request) {
         // Include documents and graph_state for restoration
         documents: checkpoint.documents,
         graph_state: checkpoint.graph_state,
+        // NEW: Include EDD stage and final decision
+        edd_stage: checkpoint.edd_stage,
+        final_decision: checkpoint.final_decision,
         // Demo fields (optional)
         ...(((checkpoint as any).demo_mode) && {
           demo_mode: (checkpoint as any).demo_mode,
