@@ -13,7 +13,7 @@
  * Fake concurrency animation with Skip/Replay controls.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 interface Task {
   id: string;
@@ -72,15 +72,15 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
   if (!data.triggered) return null;
   
   // Cleanup function
-  const cleanup = () => {
+  const cleanup = useCallback(() => {
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
     intervalsRef.current.forEach(clearInterval);
     intervalsRef.current = [];
-  };
+  }, []);
   
   // Schedule deterministic animation
-  const scheduleAnimation = () => {
+  const scheduleAnimation = useCallback(() => {
     cleanup();
     hasStartedRef.current = true;
     setAllowReplay(false);
@@ -160,10 +160,10 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
       cleanup(); // Clear intervals
     }, 3601);
     timersRef.current.push(doneTimer);
-  };
+  }, [data.skills, cleanup]);
   
   // Skip to final state
-  const handleSkip = () => {
+  const handleSkip = useCallback(() => {
     cleanup();
     
     // Set all skills to done
@@ -175,14 +175,14 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
     
     setPhase('done');
     setAllowReplay(true);
-  };
+  }, [data.skills, cleanup]);
   
   // Replay animation
-  const handleReplay = () => {
+  const handleReplay = useCallback(() => {
     hasStartedRef.current = false;
     setPhase('idle');
     scheduleAnimation();
-  };
+  }, [scheduleAnimation]);
   
   // Auto-start on mount or runId change
   useEffect(() => {
@@ -203,7 +203,7 @@ export default function PostRejectAnalysisPanel({ data }: PostRejectAnalysisPane
     return () => {
       cleanup();
     };
-  }, [data.triggered, data.run_id]);
+  }, [data.triggered, data.run_id, scheduleAnimation, cleanup]);
   
   const getSeverityColor = (severity: string) => {
     switch (severity) {
