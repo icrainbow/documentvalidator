@@ -51,44 +51,30 @@ export async function sendApprovalEmail(params: {
   base_url: string;
 }): Promise<EmailResult> {
   try {
-    // Build packet and render HTML
-    const packet = buildApprovalPacket(params.checkpoint, params.base_url);
-    const packetHtml = renderApprovalPacketHtml(packet);
-    const packetFilename = getApprovalPacketFilename(packet);
-    
     const transporter = createTransporter();
     
     const customMessageId = `<flow2-${params.run_id}@${process.env.SMTP_DOMAIN || 'localhost'}>`;
     
-    // Build document summaries for email body
-    const documentsSummary = params.checkpoint.documents.map((doc, idx) => {
-      const preview = doc.text.slice(0, 300).replace(/\s+/g, ' ').trim();
-      const wordCount = doc.text.split(/\s+/).length;
-      return `
-        <div style="border-left: 3px solid #3b82f6; padding-left: 12px; margin: 12px 0;">
-          <p style="margin: 4px 0; font-weight: 600; color: #1e40af;">${idx + 1}. ${doc.filename}</p>
-          <p style="margin: 4px 0; font-size: 13px; color: #6b7280;">~${wordCount} words</p>
-          <p style="margin: 8px 0; font-size: 14px; color: #374151; line-height: 1.5;">${preview}${doc.text.length > 300 ? '...' : ''}</p>
-        </div>
-      `;
-    }).join('');
+    // Build approval URLs
+    const approveUrl = `${params.base_url}/flow2/approvals/approve?token=${params.approval_token}`;
+    const rejectUrl = `${params.base_url}/flow2/approvals/reject?token=${params.approval_token}`;
     
-    // Build issues summary
-    const issuesSummary = packet.issues.length > 0 ? `
+    // Build issues summary from checkpoint
+    const issues = params.checkpoint.graph_state?.issues || [];
+    const issuesSummary = issues.length > 0 ? `
       <div style="background: #fee2e2; border: 1px solid #fca5a5; border-radius: 8px; padding: 16px; margin: 20px 0;">
-        <h3 style="margin: 0 0 12px 0; color: #dc2626; font-size: 16px;">⚠️ ${packet.issues.length} Issue(s) Detected</h3>
-        ${packet.issues.map(issue => `
+        <h3 style="margin: 0 0 12px 0; color: #dc2626; font-size: 16px;">⚠️ ${issues.length} Issue(s) Detected</h3>
+        ${issues.map((issue: any) => `
           <div style="margin: 8px 0; padding: 8px; background: white; border-radius: 4px;">
-            <p style="margin: 0; font-weight: 600; color: ${issue.severity === 'critical' ? '#dc2626' : issue.severity === 'warning' ? '#ea580c' : '#6b7280'};">
-              ${issue.severity === 'critical' ? '🔴' : issue.severity === 'warning' ? '🟠' : 'ℹ️'} ${issue.message}
+            <p style="margin: 0; font-weight: 600; color: ${issue.severity === 'critical' || issue.severity === 'high' ? '#dc2626' : issue.severity === 'warning' || issue.severity === 'medium' ? '#ea580c' : '#6b7280'};">
+              ${issue.severity === 'critical' || issue.severity === 'high' ? '🔴' : issue.severity === 'warning' || issue.severity === 'medium' ? '🟠' : 'ℹ️'} ${issue.message || issue.detail || issue.title}
             </p>
-            ${issue.section ? `<p style="margin: 4px 0 0 0; font-size: 12px; color: #6b7280;">Section: ${issue.section}</p>` : ''}
           </div>
         `).join('')}
       </div>
     ` : '';
     
-    // Build topic summaries section from checkpoint (NEW)
+    // Build topic summaries section from checkpoint
     const topicSummaries = params.checkpoint.topic_summaries || [];
     const topicSummariesHtml = topicSummaries.length > 0 ? `
       <h3 style="color: #374151; font-size: 16px; margin: 32px 0 12px 0;">📊 Topic Summary (KYC Analysis)</h3>
@@ -107,10 +93,9 @@ export async function sendApprovalEmail(params: {
                   ${coverageIcon} ${topic.coverage}
                 </span>
               </div>
-              ${topic.bullets.length > 0 ? `
+              ${topic.bullets && topic.bullets.length > 0 ? `
                 <ul style="margin: 8px 0; padding-left: 20px; color: #374151; font-size: 13px; line-height: 1.6;">
-                  ${topic.bullets.slice(0, 4).map(bullet => `<li style="margin: 4px 0;">${bullet}</li>`).join('')}
-                  ${topic.bullets.length > 4 ? `<li style="margin: 4px 0; color: #6b7280; font-style: italic;">...and ${topic.bullets.length - 4} more points</li>` : ''}
+                  ${topic.bullets.map(bullet => `<li style="margin: 4px 0;">${bullet}</li>`).join('')}
                 </ul>
               ` : ''}
               ${topic.evidence && topic.evidence.length > 0 ? `
@@ -127,7 +112,7 @@ export async function sendApprovalEmail(params: {
     const mailOptions = {
       from: `Flow2 Reviews <${process.env.SMTP_USER || process.env.FLOW2_SMTP_USER}>`,
       to: params.recipient,
-      subject: `[Flow2 Approval] Review Required - Run ${packet.run_short_id}`,
+      subject: `[Flow2 Approval] Review Required - Run ${params.run_id.slice(0, 8)}`,
       messageId: customMessageId,
       headers: {
         'Content-Type': 'text/html; charset=UTF-8',
@@ -147,7 +132,7 @@ export async function sendApprovalEmail(params: {
     
     <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
       <p style="margin: 4px 0;"><strong>Run ID:</strong> <code style="background: #e5e7eb; padding: 2px 6px; border-radius: 3px;">${params.run_id.slice(0, 13)}...</code></p>
-      <p style="margin: 4px 0;"><strong>Documents:</strong> ${params.checkpoint.documents.length} file(s) uploaded (see attachments)</p>
+      <p style="margin: 4px 0;"><strong>Documents:</strong> ${params.checkpoint.documents.length} file(s) uploaded (see attachments below)</p>
       <p style="margin: 4px 0;"><strong>Paused At:</strong> ${new Date(params.checkpoint.paused_at).toLocaleString()}</p>
     </div>
     
@@ -155,25 +140,28 @@ export async function sendApprovalEmail(params: {
     
     ${topicSummariesHtml}
     
-    <h3 style="color: #374151; font-size: 16px; margin: 24px 0 12px 0;">📄 Uploaded Documents (Attached)</h3>
+    <h3 style="color: #374151; font-size: 16px; margin: 24px 0 12px 0;">📎 Attached Documents</h3>
     <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 16px; margin: 16px 0;">
-      <p style="margin: 0; font-size: 14px; color: #15803d;">
-        ✓ ${params.checkpoint.documents.length} document(s) attached to this email
+      <p style="margin: 0 0 12px 0; font-size: 14px; color: #15803d; font-weight: 600;">
+        ✓ ${params.checkpoint.documents.length} original document(s) attached to this email:
       </p>
       ${params.checkpoint.documents.map((doc, idx) => `
-        <p style="margin: 8px 0 0 0; font-size: 13px; color: #166534;">
-          📎 ${idx + 1}. ${doc.filename}
+        <p style="margin: 6px 0; font-size: 13px; color: #166534; padding-left: 16px;">
+          📄 ${idx + 1}. ${doc.filename}
         </p>
       `).join('')}
+      <p style="margin: 12px 0 0 0; font-size: 12px; color: #6b7280; font-style: italic;">
+        💡 Download attachments to review the complete documents.
+      </p>
     </div>
     
     <div style="margin: 32px 0; padding: 20px; background: #f9fafb; border-radius: 8px; text-align: center;">
       <p style="margin: 0 0 16px 0; color: #374151; font-weight: 600;">Choose an action:</p>
-      <a href="${packet.actions.approve_url}" 
+      <a href="${approveUrl}" 
          style="display: inline-block; padding: 14px 32px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
         ✅ Approve & Continue
       </a>
-      <a href="${packet.actions.reject_url}" 
+      <a href="${rejectUrl}" 
          style="display: inline-block; padding: 14px 32px; background: #ef4444; color: white; text-decoration: none; border-radius: 6px; margin: 0 8px; font-weight: 600; font-size: 16px;">
         ❌ Reject
       </a>
@@ -187,7 +175,7 @@ export async function sendApprovalEmail(params: {
   </div>
 </body>
 </html>`,
-      // Add uploaded documents as attachments
+      // ATTACHMENTS: Only user-uploaded documents (NO HTML packet)
       attachments: params.checkpoint.documents.map((doc, idx) => ({
         filename: doc.filename || `document-${idx + 1}.txt`,
         content: doc.text,
