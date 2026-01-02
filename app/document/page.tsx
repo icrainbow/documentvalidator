@@ -54,7 +54,6 @@ import { CASE2_DEMO_DATA, type Case2DemoData } from '../lib/case2/demoCase2Data'
 import { detectCase2Trigger } from '../lib/case2/case2Trigger';
 import Case4Container from '../components/case4/Case4Container';
 import Case3GuardrailBanner from '../components/case3/Case3GuardrailBanner';
-import Case3DemoSamples from '../components/case3/Case3DemoSamples';
 import { detectGuardrailIssue } from '../lib/case3/detectGuardrailIssue';
 import type { GuardrailIssue } from '../lib/case3/types';
 
@@ -3589,9 +3588,6 @@ function DocumentPageContent() {
                       onClearAll={handleFlow2ClearWorkspace}
                     />
                   )}
-                  
-                  {/* Case 3: Demo Samples Panel - ONLY in Flow2 mode */}
-                  {isFlow2 && <Case3DemoSamples />}
                   
                   {/* Derived Topics (Phase 3) */}
                   {derivedTopics.length > 0 && (
