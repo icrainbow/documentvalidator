@@ -25,6 +25,7 @@ export interface GenericTopicSummary {
   evidence?: {
     quote: string;
     doc_id?: string;
+    image_url?: string;  // NEW: Support evidence images
   }[];
   linked_risks?: {
     risk_id: string;

@@ -197,14 +197,30 @@ export default function TopicSummariesPanel({
                   {topic.evidence && topic.evidence.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-slate-200">
                       <p className="text-xs font-semibold text-slate-700 mb-1">Evidence:</p>
-                      <ul className="text-xs text-slate-600 space-y-1">
+                      <ul className="text-xs text-slate-600 space-y-2">
                         {topic.evidence.map((ev, evIdx) => (
-                          <li key={evIdx} className="flex gap-1.5">
-                            <span className="text-slate-400 mt-0.5">→</span>
-                            <span>
-                              &quot;{ev.quote}&quot;
-                              {ev.doc_id && <span className="text-slate-500 ml-1">({ev.doc_id})</span>}
-                            </span>
+                          <li key={evIdx} className="flex flex-col gap-1">
+                            <div className="flex gap-1.5">
+                              <span className="text-slate-400 mt-0.5">→</span>
+                              <span>
+                                &quot;{ev.quote}&quot;
+                                {ev.doc_id && <span className="text-slate-500 ml-1">({ev.doc_id})</span>}
+                              </span>
+                            </div>
+                            {/* NEW: Display evidence image if present */}
+                            {ev.image_url && (
+                              <div className="ml-4 mt-1 border border-slate-200 rounded overflow-hidden bg-white">
+                                <img 
+                                  src={ev.image_url} 
+                                  alt="Evidence document excerpt"
+                                  className="w-full h-auto max-h-48 object-contain"
+                                  onError={(e) => {
+                                    // Hide broken images gracefully
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            )}
                           </li>
                         ))}
                       </ul>

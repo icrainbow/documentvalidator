@@ -51,6 +51,7 @@ This rejection triggered Enhanced Due Diligence (EDD) review due to identified r
   // Card 2: Wealth Report Extract (SOF mismatch)
   const disclosureCurrent = evidence.disclosures?.current || evidence.disclosure_current;
   const disclosureWealth = evidence.disclosures?.wealth || evidence.disclosure_wealth;
+  const wealthReportImageUrl = evidence.pdf_highlight_image_url || evidence.pdf_snippet_image;
   
   if (disclosureCurrent && disclosureWealth) {
     pseudoDocs.push({
@@ -60,6 +61,7 @@ This rejection triggered Enhanced Due Diligence (EDD) review due to identified r
       text: `DOCUMENT: Wealth Division Annual Report Extract
 SOURCE: Internal Q4 2024 Report, Page 47
 CLASSIFICATION: Internal Use Only
+IMAGE_EVIDENCE: ${wealthReportImageUrl || '/demo/evidence-wealth-50m.svg'}
 
 SOURCE OF FUNDS DISCREPANCY ANALYSIS:
 

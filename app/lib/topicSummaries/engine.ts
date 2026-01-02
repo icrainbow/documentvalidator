@@ -37,6 +37,7 @@ ${config.prompt_instructions}
    - coverage: "PRESENT" (clearly addressed), "WEAK" (partially/vaguely mentioned), or "MISSING" (not found)
    - bullets: Up to ${config.max_bullets} bullet points summarizing WHAT THE DOCUMENTS SAY (not risk assessment)
    - evidence: Up to ${config.max_evidence} short verbatim quotes from the documents (max 150 chars each) with doc_id attribution
+     * If a document contains "IMAGE_EVIDENCE: <url>", extract the URL and include it in the evidence object as "image_url"
 3. If a topic is not addressed in ANY document, return coverage="MISSING" with bullets=["This topic is not addressed in the provided documents."]
 4. Your summaries must be CONTENT SUMMARIES (what the documents say), NOT risk judgments
 5. Aggregate information across ALL documents for each topic (don't treat them separately)
@@ -57,7 +58,7 @@ ${documentsText}
     "coverage": "PRESENT" | "WEAK" | "MISSING",
     "bullets": ["bullet 1", "bullet 2", ...],
     "evidence": [
-      {"quote": "verbatim snippet max 150 chars", "doc_id": "doc-123"},
+      {"quote": "verbatim snippet max 150 chars", "doc_id": "doc-123", "image_url": "optional-url-if-found"},
       ...
     ]
   },

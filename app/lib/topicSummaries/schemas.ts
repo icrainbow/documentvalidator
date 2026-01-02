@@ -23,6 +23,7 @@ export function createLLMTopicSummarySchema(topicIds: readonly string[]) {
       z.object({
         quote: z.string().max(200),
         doc_id: z.string().optional(),
+        image_url: z.string().optional(), // NEW: Support evidence images
       })
     ).optional(),
   });
@@ -40,6 +41,7 @@ export const GenericTopicSummarySchema = z.object({
     z.object({
       quote: z.string().max(200),
       doc_id: z.string().optional(),
+      image_url: z.string().optional(), // NEW: Support evidence images
     })
   ).optional(),
   linked_risks: z.array(
