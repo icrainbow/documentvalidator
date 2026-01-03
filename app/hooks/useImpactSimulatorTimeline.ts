@@ -39,16 +39,17 @@ export function useImpactSimulatorTimeline({
   useEffect(() => {
     // Only run when simulator is active and phase is 'running'
     if (!active || phase !== 'running' || !selectedScenarioId) {
+      console.log('[ImpactTimeline] Skipping - Conditions not met:', { active, phase, selectedScenarioId });
       return;
     }
     
-    console.log('[ImpactTimeline] Starting animation for scenario:', selectedScenarioId);
+    console.log('[ImpactTimeline] ✅ Starting animation for scenario:', selectedScenarioId);
     
     // Build timeline actions (pure function, deterministic)
     const timelineActions = buildTimelineActions(selectedScenarioId);
     const maxTick = Math.max(...timelineActions.map(a => a.atTick));
     
-    console.log(`[ImpactTimeline] Timeline built: ${timelineActions.length} actions over ${maxTick} ticks`);
+    console.log(`[ImpactTimeline] 📋 Timeline built: ${timelineActions.length} actions over ${maxTick} ticks`);
     
     let currentTick = 0;
     const TICK_INTERVAL_MS = 250;
@@ -60,7 +61,7 @@ export function useImpactSimulatorTimeline({
       const actionsForTick = timelineActions.filter(a => a.atTick === currentTick);
       
       if (actionsForTick.length > 0) {
-        console.log(`[ImpactTimeline] Tick ${currentTick}: Dispatching ${actionsForTick.length} action(s)`);
+        console.log(`[ImpactTimeline] ⏱️  Tick ${currentTick}: Dispatching ${actionsForTick.length} action(s)`);
       }
       
       // Dispatch them in order
@@ -73,7 +74,7 @@ export function useImpactSimulatorTimeline({
       
       // If this was the COMPLETE action, notify parent
       if (actionsForTick.some(a => a.action.type === 'COMPLETE')) {
-        console.log('[ImpactTimeline] COMPLETE action dispatched, calling onComplete callback');
+        console.log('[ImpactTimeline] ✅ COMPLETE action dispatched, calling onComplete callback');
         onComplete?.(
           '✅ **Simulation Complete!**\n\n' +
           'Review the impact analysis results below.\n\n' +
@@ -83,15 +84,17 @@ export function useImpactSimulatorTimeline({
       
       // Stop after max tick + 1 (safety buffer)
       if (currentTick > maxTick + 1) {
-        console.log('[ImpactTimeline] Animation complete, stopping interval');
+        console.log('[ImpactTimeline] 🏁 Animation complete, stopping interval');
         clearInterval(intervalId);
       }
       
     }, TICK_INTERVAL_MS);
     
+    console.log('[ImpactTimeline] 🎬 Interval started with ID:', intervalId);
+    
     // Cleanup on unmount or phase change
     return () => {
-      console.log('[ImpactTimeline] Cleaning up interval (unmount or phase change)');
+      console.log('[ImpactTimeline] 🧹 Cleaning up interval (unmount or phase change)');
       clearInterval(intervalId);
     };
     

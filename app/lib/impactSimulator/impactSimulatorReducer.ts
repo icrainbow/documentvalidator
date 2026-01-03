@@ -49,6 +49,7 @@ export type SimulatorAction =
   | { type: 'TICK_TIMELINE_STEP'; payload: { stepId: string; status: TimelineStepStatus } }
   | { type: 'SET_IMPACT_STATS'; payload: { stats: ImpactStats } }
   | { type: 'COMPLETE' }
+  | { type: 'BACK' }        // Go back to scenario selection
   | { type: 'EXIT' }
   | { type: 'RESET' };
 
@@ -208,6 +209,31 @@ export function simulatorReducer(
           '✅ Simulation complete!',
           '📥 You can now review recommendations or exit the simulator.'
         ]
+      };
+    }
+    
+    case 'BACK': {
+      // Go back to scenario selection, keeping the simulator active
+      return {
+        ...getInitialSimulatorState(),
+        active: true,
+        phase: 'await_choice',
+        logs: [
+          '⬅️  Returning to scenario selection...',
+          '',
+          '📋 Select a decommissioning scenario:',
+          '  1️⃣  Full Decommission (CRITICAL impact)',
+          '  2️⃣  Decom with 6-Month Migration (HIGH impact)',
+          '  3️⃣  SOAP API Decom Only (MEDIUM impact)',
+          '  4️⃣  Protocol Upgrade (LOW impact)',
+          '',
+          '💬 Click a scenario button or type the number (1-4):'
+        ],
+        timelineSteps: getInitialSimulatorState().timelineSteps.map(step =>
+          step.id === 'step_init'
+            ? { ...step, status: 'done' }
+            : step
+        )
       };
     }
     
