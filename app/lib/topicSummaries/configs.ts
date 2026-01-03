@@ -73,3 +73,33 @@ export const IT_BULLETIN_CONFIG: TopicSummaryConfig = {
   max_evidence: 2,
 };
 
+/**
+ * Case2 CS Integration Exception Configuration (6 topics)
+ * Legacy client integration and risk appetite conflict analysis
+ */
+export const CASE2_CS_INTEGRATION_CONFIG: TopicSummaryConfig = {
+  template_id: 'case2_cs_integration',
+  panel_title: 'CS Integration Exception Analysis',
+  panel_subtitle: 'AI-generated analysis of legacy client integration and risk appetite conflicts',
+  topic_ids: [
+    'client_profile_legacy_context',
+    'jurisdiction_crossborder_constraints',
+    'risk_appetite_alignment',
+    'edd_triggers_red_flags',
+    'required_evidence_data_gaps',
+    'recommended_approval_path_governance',
+  ] as const,
+  topic_titles: {
+    client_profile_legacy_context: 'Client Profile & Legacy Context',
+    jurisdiction_crossborder_constraints: 'Jurisdiction & Cross-border Constraints',
+    risk_appetite_alignment: 'Risk Appetite Alignment',
+    edd_triggers_red_flags: 'EDD Triggers & Red Flags',
+    required_evidence_data_gaps: 'Required Evidence & Data Gaps',
+    recommended_approval_path_governance: 'Recommended Approval Path & Governance',
+  },
+  prompt_role: 'CS integration compliance analyst',
+  prompt_instructions: 'Analyze ALL documents and produce a consolidated summary for EACH of the 6 CS integration exception topics. Focus on: legacy CS onboarding requirements, UBS vs CS risk appetite conflicts, restricted jurisdiction implications, escalation paths, and required governance approvals.',
+  max_bullets: 5,
+  max_evidence: 2,
+};
+
