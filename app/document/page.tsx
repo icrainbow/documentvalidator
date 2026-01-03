@@ -268,7 +268,13 @@ function DocumentPageContent() {
     {
       role: 'agent',
       agent: 'System',
-      content: 'Document loaded. Sections are ready for review. Click "Run Full Review" to analyze a section with the orchestrator.'
+      content: isFlow2 
+        ? '👋 Welcome to Agentic Review Process!\n\n' +
+          '**Please choose your chat mode:**\n\n' +
+          '1️⃣ **Process Review Chat** - For KYC/Compliance review workflows\n' +
+          '2️⃣ **IT Impact Chat** - For mailbox decommissioning impact analysis\n\n' +
+          '💬 Reply with **"1"** for Process Review or **"2"** for IT Impact, or type your question directly.'
+        : 'Document loaded. Sections are ready for review. Click "Run Full Review" to analyze a section with the orchestrator.'
     }
   ]);
   const [loadedFromStorage, setLoadedFromStorage] = useState(false);
@@ -720,6 +726,10 @@ function DocumentPageContent() {
     simulatorReducer,
     getInitialSimulatorState()
   );
+  
+  // Chat mode selection (Flow2 only)
+  type ChatMode = 'unselected' | 'process_review' | 'it_impact';
+  const [chatMode, setChatMode] = useState<ChatMode>('unselected');
   
   // Workspace limits
   const MAX_FLOW2_DOCUMENTS = 10;
@@ -3772,6 +3782,55 @@ function DocumentPageContent() {
       return;
     }
 
+    // ========== PRIORITY 2: Chat Mode Selection (Flow2 only) ==========
+    if (chatMode === 'unselected') {
+      // Add user message
+      setMessages([...messages, userMessage]);
+      setInputValue('');
+      
+      const trimmedInput = userInput.trim();
+      
+      if (trimmedInput === '1') {
+        // Process Review Chat mode selected
+        setChatMode('process_review');
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          agent: 'System',
+          content: '✅ **Process Review Chat Mode** activated.\n\n' +
+                   'You can now:\n' +
+                   '• Ask about CS Integration Exception reviews\n' +
+                   '• Trigger Case 2 workflows\n' +
+                   '• Upload documents for compliance review\n\n' +
+                   '💬 Type your question or trigger phrase to begin.'
+        }]);
+      } else if (trimmedInput === '2') {
+        // IT Impact Chat mode selected
+        setChatMode('it_impact');
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          agent: 'System',
+          content: '✅ **IT Impact Chat Mode** activated.\n\n' +
+                   'Ready to analyze mailbox decommissioning impact.\n\n' +
+                   '💬 **To start the Impact Simulator, type:**\n' +
+                   '👉 `"What is the impact of mailbox decommissioning?"`\n\n' +
+                   'Or click the **🧩 Run Impact Simulator** button on the right.'
+        }]);
+      } else {
+        // Invalid selection - ask again
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          agent: 'System',
+          content: '❌ Invalid selection.\n\n' +
+                   'Please reply with:\n' +
+                   '• **"1"** for Process Review Chat\n' +
+                   '• **"2"** for IT Impact Chat'
+        }]);
+      }
+      
+      setHasNewChatMessage(true);
+      return;
+    }
+
     // GUARD: Block all chat input if review is in progress
     if (isOrchestrating || flowMonitorStatus === 'running') {
       setMessages([...messages, userMessage]);
@@ -3786,8 +3845,40 @@ function DocumentPageContent() {
       return;
     }
 
+    // ========== IT IMPACT CHAT MODE: Trigger Impact Simulator ==========
+    if (chatMode === 'it_impact') {
+      const itImpactTrigger = lowerInput.includes('impact of mailbox decommissioning') ||
+                              lowerInput.includes('mailbox decom') ||
+                              lowerInput.includes('impact of decommissioning');
+      
+      if (itImpactTrigger) {
+        // Trigger Impact Simulator
+        setMessages([...messages, userMessage]);
+        setInputValue('');
+        
+        handleEnterImpactSimulator();
+        setHasNewChatMessage(true);
+        return;
+      }
+      
+      // If not a trigger, provide guidance
+      setMessages([...messages, userMessage]);
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'System',
+        content: '💡 **IT Impact Chat Mode**\n\n' +
+                 'To analyze mailbox decommissioning impact, type:\n' +
+                 '👉 `"What is the impact of mailbox decommissioning?"`\n\n' +
+                 'Or click the **🧩 Run Impact Simulator** button on the right.'
+      }]);
+      setInputValue('');
+      setHasNewChatMessage(true);
+      return;
+    }
+
+    // ========== PROCESS REVIEW CHAT MODE: Case 2 and other flows ==========
     // CASE 2: Check for CS Integration Exception trigger (Flow2 only)
-    if (detectCase2Trigger(userInput)) {
+    if (chatMode === 'process_review' && detectCase2Trigger(userInput)) {
       // If Case 2 is already active, inform user and return
       if (case2State !== 'idle') {
         setMessages([...messages, userMessage]);
@@ -4206,11 +4297,18 @@ function DocumentPageContent() {
     // Reset Post-Reject Analysis
     setPostRejectAnalysisData(null);
     
-    // Reset messages FIRST (so user sees immediate feedback)
+    // Reset chat mode selection
+    setChatMode('unselected');
+    
+    // Reset messages FIRST (so user sees immediate feedback) with mode selection prompt
     setMessages([{
       role: 'agent',
       agent: 'System',
-      content: '🔄 Workspace cleared. Ready for a new review.\n\nUpload documents to begin.'
+      content: '🔄 Workspace cleared. Ready for a new review.\n\n' +
+               '**Please choose your chat mode:**\n\n' +
+               '1️⃣ **Process Review Chat** - For KYC/Compliance review workflows\n' +
+               '2️⃣ **IT Impact Chat** - For mailbox decommissioning impact analysis\n\n' +
+               '💬 Reply with **"1"** for Process Review or **"2"** for IT Impact.'
     }]);
     
     console.log('[Flow2] ✓ Workspace reset complete');
@@ -4246,12 +4344,19 @@ function DocumentPageContent() {
     setImpactSimulatorActive(false);
     impactSimulatorDispatch({ type: 'EXIT' });
     
-    // Add exit message
+    // Add exit message - prompt for mode selection again
     setMessages(prev => [...prev, {
       role: 'agent',
       agent: 'System',
-      content: '👋 Impact Simulator exited. Returning to normal Flow2 mode.'
+      content: '👋 Impact Simulator exited.\n\n' +
+               '**Choose your next action:**\n\n' +
+               '1️⃣ **Process Review Chat** - For KYC/Compliance review workflows\n' +
+               '2️⃣ **IT Impact Chat** - Continue with IT impact analysis\n\n' +
+               '💬 Reply with **"1"** or **"2"**.'
     }]);
+    
+    // Reset chat mode so user must re-select
+    setChatMode('unselected');
   }, []);
   
   // NEW: Phase 8 - Append findings to topic summaries when animation completes
