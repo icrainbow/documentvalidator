@@ -5750,8 +5750,8 @@ function DocumentPageContent() {
                 
                 {/* Input Bar (always visible) */}
                 <div className="flex flex-col">
-                  {/* Impact Simulator Mode Indicator */}
-                  {impactSimulatorActive && (
+                  {/* Impact Simulator Mode Indicator (ONLY show when expanded) */}
+                  {impactSimulatorActive && isChatExpanded && (
                     <div className="mb-2 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
                       <p className="text-xs font-bold text-purple-800">
                         🧩 MODE: Impact Simulator Active
