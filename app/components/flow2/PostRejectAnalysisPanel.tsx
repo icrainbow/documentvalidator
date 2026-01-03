@@ -335,7 +335,7 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete, onA
       <div className="flex items-center gap-2 mb-4">
         <div className="w-3 h-3 rounded-full bg-purple-500 animate-pulse" />
         <h3 className="text-base font-bold text-purple-900">
-          Post-Reject Analysis (Phase 8)
+          Post-Reject Analysis
         </h3>
         {/* Status Badge */}
         {phase === 'idle' || phase === 'tasks' ? (
