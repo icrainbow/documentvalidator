@@ -3692,6 +3692,20 @@ function DocumentPageContent() {
   const handleFlow2ChatSubmit = async (userInput: string, userMessage: Message) => {
     const lowerInput = userInput.toLowerCase();
 
+    // GUARD: Block all chat input if review is in progress
+    if (isOrchestrating || flowMonitorStatus === 'running') {
+      setMessages([...messages, userMessage]);
+      const blockMessage: Message = {
+        role: 'agent',
+        agent: 'System',
+        content: '⚠️ Review in process, please finish the current review process.'
+      };
+      setMessages(prev => [...prev, blockMessage]);
+      setInputValue('');
+      setHasNewChatMessage(true);
+      return;
+    }
+
     // CASE 2: Check for CS Integration Exception trigger (Flow2 only)
     if (detectCase2Trigger(userInput)) {
       // If Case 2 is already active, inform user and return
@@ -3751,16 +3765,57 @@ function DocumentPageContent() {
       return;
     }
 
-    // Default Flow2 response for unrecognized input
+    // REAL LLM RESPONSE: Call Anthropic for general queries
     setMessages([...messages, userMessage]);
-    const defaultMessage: Message = {
-      role: 'agent',
-      agent: 'System',
-      content: 'Flow2 mode active. You can ask about CS integration, restricted jurisdictions, or high-net-worth client exceptions to trigger Case 2 analysis.'
-    };
-    setMessages(prev => [...prev, defaultMessage]);
     setInputValue('');
+    
+    // Show thinking indicator
+    const thinkingMessage: Message = {
+      role: 'agent',
+      agent: 'AI Assistant',
+      content: '🤔 Thinking...'
+    };
+    setMessages(prev => [...prev, thinkingMessage]);
     setHasNewChatMessage(true);
+    
+    try {
+      // Call LLM API
+      const response = await fetch('/api/chat/general', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userInput,
+          context: 'flow2_kyc_review'
+        })
+      });
+      
+      const data = await response.json();
+      
+      // Remove thinking message and add real response
+      setMessages(prev => {
+        const filtered = prev.filter(m => m.content !== '🤔 Thinking...');
+        return [...filtered, {
+          role: 'agent',
+          agent: 'AI Assistant',
+          content: data.response || 'I apologize, but I encountered an error processing your request.'
+        }];
+      });
+      setHasNewChatMessage(true);
+      
+    } catch (error: any) {
+      console.error('[Flow2Chat] LLM call failed:', error);
+      
+      // Remove thinking message and show error
+      setMessages(prev => {
+        const filtered = prev.filter(m => m.content !== '🤔 Thinking...');
+        return [...filtered, {
+          role: 'agent',
+          agent: 'System',
+          content: '❌ Failed to get AI response. Please try again.'
+        }];
+      });
+      setHasNewChatMessage(true);
+    }
   };
 
   /**

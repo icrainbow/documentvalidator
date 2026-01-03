@@ -161,7 +161,7 @@ export default function Flow2RightPanel({
                 }
               >
                 {case3Active && '🚫 '}
-                {isOrchestrating ? '🔄 Running Review...' : '🕸️ Run Graph KYC Review'}
+                {isOrchestrating ? '🔄 Running Review...' : '🕸️ Run Process Review'}
               </button>
               
               {/* IT Impact Review Button */}
