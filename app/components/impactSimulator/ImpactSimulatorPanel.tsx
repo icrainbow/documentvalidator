@@ -98,20 +98,26 @@ export default function ImpactSimulatorPanel({
       
       {/* Awaiting Confirmation Prompt */}
       {state.phase === 'await_confirm' && (
-        <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">💬</span>
-            <div className="flex-1">
-              <h3 className="text-sm font-bold text-blue-800 mb-1">Action Required</h3>
-              <p className="text-sm text-blue-700 mb-2">
-                Please confirm to proceed with the simulation.
-              </p>
-              <div className="bg-white px-3 py-2 rounded border border-blue-200">
-                <p className="text-xs text-slate-600 mb-1">Open chat below and type:</p>
-                <p className="text-base font-bold text-blue-800 font-mono">YES</p>
+        <div className="mb-6">
+          <div className="p-4 bg-blue-50 border-2 border-blue-300 rounded-lg mb-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">📊</span>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-blue-800 mb-1">Ready to Start Analysis</h3>
+                <p className="text-sm text-blue-700">
+                  The simulator will analyze mailbox decommissioning impact across 16 consumer systems and business scenarios.
+                </p>
               </div>
             </div>
           </div>
+          
+          <button
+            onClick={() => dispatch({ type: 'CONFIRM_YES' })}
+            className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-bold shadow-md flex items-center justify-center gap-2"
+          >
+            <span>▶️</span>
+            <span>Start Analysis</span>
+          </button>
         </div>
       )}
       

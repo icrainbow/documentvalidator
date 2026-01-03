@@ -41,7 +41,8 @@ export function parseImpactChat(input: string, state: SimulatorState): ParseResu
     }
     
     case 'await_confirm': {
-      if (trimmed === 'YES' || trimmed === 'Y') {
+      // Support multiple confirmation keywords
+      if (trimmed === 'YES' || trimmed === 'Y' || trimmed === 'NEXT' || trimmed === 'CONTINUE' || trimmed === 'START') {
         return {
           action: { type: 'CONFIRM_YES' },
           message: null
@@ -50,7 +51,7 @@ export function parseImpactChat(input: string, state: SimulatorState): ParseResu
       
       return {
         action: null,
-        message: '❌ Invalid input. Please type "YES" or "Y" to confirm, or "EXIT" to cancel.'
+        message: '❌ Invalid input. Please type "NEXT" to continue, or "EXIT" to cancel.'
       };
     }
     

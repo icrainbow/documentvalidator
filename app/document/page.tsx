@@ -270,10 +270,7 @@ function DocumentPageContent() {
       agent: 'System',
       content: isFlow2 
         ? '👋 Welcome to Agentic Review Process!\n\n' +
-          '**Please choose your chat mode:**\n\n' +
-          '1️⃣ **Process Review Chat** - For KYC/Compliance review workflows\n' +
-          '2️⃣ **IT Impact Chat** - For mailbox decommissioning impact analysis\n\n' +
-          '💬 Reply with **"1"** for Process Review or **"2"** for IT Impact, or type your question directly.'
+          'Please choose your chat mode using the buttons below:'
         : 'Document loaded. Sections are ready for review. Click "Run Full Review" to analyze a section with the orchestrator.'
     }
   ]);
@@ -4305,10 +4302,7 @@ function DocumentPageContent() {
       role: 'agent',
       agent: 'System',
       content: '🔄 Workspace cleared. Ready for a new review.\n\n' +
-               '**Please choose your chat mode:**\n\n' +
-               '1️⃣ **Process Review Chat** - For KYC/Compliance review workflows\n' +
-               '2️⃣ **IT Impact Chat** - For mailbox decommissioning impact analysis\n\n' +
-               '💬 Reply with **"1"** for Process Review or **"2"** for IT Impact.'
+               'Please choose your chat mode using the buttons below:'
     }]);
     
     console.log('[Flow2] ✓ Workspace reset complete');
@@ -4349,10 +4343,7 @@ function DocumentPageContent() {
       role: 'agent',
       agent: 'System',
       content: '👋 Impact Simulator exited.\n\n' +
-               '**Choose your next action:**\n\n' +
-               '1️⃣ **Process Review Chat** - For KYC/Compliance review workflows\n' +
-               '2️⃣ **IT Impact Chat** - Continue with IT impact analysis\n\n' +
-               '💬 Reply with **"1"** or **"2"**.'
+               'Please choose your next action using the buttons below:'
     }]);
     
     // Reset chat mode so user must re-select
@@ -5750,6 +5741,66 @@ function DocumentPageContent() {
                 
                 {/* Input Bar (always visible) */}
                 <div className="flex flex-col">
+                  {/* Quick Action Buttons - Mode Selection */}
+                  {isChatExpanded && chatMode === 'unselected' && !impactSimulatorActive && (
+                    <div className="mb-3 px-3 py-3 bg-slate-50 border border-slate-200 rounded-lg">
+                      <p className="text-xs font-semibold text-slate-600 mb-2">Choose Chat Mode:</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => {
+                            setChatMode('process_review');
+                            setMessages(prev => [...prev, 
+                              {
+                                role: 'user',
+                                content: '1'
+                              },
+                              {
+                                role: 'agent',
+                                agent: 'System',
+                                content: '✅ **Process Review Chat Mode** activated.\n\n' +
+                                         'You can now:\n' +
+                                         '• Ask about CS Integration Exception reviews\n' +
+                                         '• Trigger Case 2 workflows\n' +
+                                         '• Upload documents for compliance review\n\n' +
+                                         '💬 Type your question or trigger phrase to begin.'
+                              }
+                            ]);
+                            setHasNewChatMessage(true);
+                          }}
+                          className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-semibold text-sm shadow-md flex items-center justify-center gap-2"
+                        >
+                          <span>🤖</span>
+                          <span>Process Review</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setChatMode('it_impact');
+                            setMessages(prev => [...prev,
+                              {
+                                role: 'user',
+                                content: '2'
+                              },
+                              {
+                                role: 'agent',
+                                agent: 'System',
+                                content: '✅ **IT Impact Chat Mode** activated.\n\n' +
+                                         'Ready to analyze mailbox decommissioning impact.\n\n' +
+                                         '💬 **To start the Impact Simulator, type:**\n' +
+                                         '👉 `"What is the impact of mailbox decommissioning?"`\n\n' +
+                                         'Or click the **🧩 Run Impact Simulator** button on the right.'
+                              }
+                            ]);
+                            setHasNewChatMessage(true);
+                          }}
+                          className="px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all font-semibold text-sm shadow-md flex items-center justify-center gap-2"
+                        >
+                          <span>📊</span>
+                          <span>IT Impact</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
                   {/* Impact Simulator Mode Indicator (ONLY show when expanded) */}
                   {impactSimulatorActive && isChatExpanded && (
                     <div className="mb-2 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
@@ -5777,14 +5828,19 @@ function DocumentPageContent() {
                     </button>
                     
                     {/* Collapsed State Helper Text */}
+                    {!isChatExpanded && chatMode === 'unselected' && !impactSimulatorActive && (
+                      <div className="flex-1 flex items-center justify-center gap-2">
+                        <span className="text-sm font-semibold text-slate-600">👆 Open chat to choose mode</span>
+                      </div>
+                    )}
                     {!isChatExpanded && impactSimulatorActive && impactSimulatorState.phase === 'await_confirm' && (
-                      <div className="flex-1 flex items-center justify-center gap-2 animate-pulse">
-                        <span className="text-sm font-bold text-blue-600">👆 Open chat and type "YES" to continue</span>
+                      <div className="flex-1 flex items-center justify-center gap-2">
+                        <span className="text-sm font-semibold text-blue-600">👆 Open chat - Simulator ready to start</span>
                       </div>
                     )}
                     {!isChatExpanded && impactSimulatorActive && impactSimulatorState.phase === 'await_choice' && (
-                      <div className="flex-1 flex items-center justify-center gap-2 animate-pulse">
-                        <span className="text-sm font-bold text-purple-600">👆 Open chat and select scenario (1-4)</span>
+                      <div className="flex-1 flex items-center justify-center gap-2">
+                        <span className="text-sm font-semibold text-purple-600">👆 Open chat to select scenario</span>
                       </div>
                     )}
                     
