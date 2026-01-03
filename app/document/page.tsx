@@ -4179,9 +4179,10 @@ function DocumentPageContent() {
                 <Case2ProcessBanner
                   state={case2State}
                   data={case2Data}
-                  uploadedFiles={case2UploadedFiles}
+                  collapsed={false}
+                  onToggleCollapse={() => {}}
                   onAccept={handleCase2Accept}
-                  onFileUpload={handleCase2FileUpload}
+                  isAcceptLoading={false}
                   onStart={handleCase2Start}
                   onTraceComplete={() => setCase2State('synthesized')}
                 />

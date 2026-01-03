@@ -8,12 +8,12 @@
  * State-driven rendering:
  * - triggered/tracing: Show thinking trace panel
  * - synthesized: Show graph + assistant text + Accept button
- * - accepted: Show file upload section
- * - files_ready: Enable Start button
+ * - accepted: (upload removed - unified with top-level control)
+ * - files_ready: (deprecated - state remains in union but unused)
  * - started: Show success message
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Case2DemoData } from '@/app/lib/case2/demoCase2Data';
 import Case2ThinkingTracePanel from './Case2ThinkingTracePanel';
 import Case2SuggestedPathGraph from './Case2SuggestedPathGraph';
@@ -23,9 +23,10 @@ export type Case2State = 'idle' | 'triggered' | 'tracing' | 'synthesized' | 'acc
 interface Case2ProcessBannerProps {
   state: Case2State;
   data: Case2DemoData;
-  uploadedFiles: File[];
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onAccept: () => void;
-  onFileUpload: (files: File[]) => void;
+  isAcceptLoading?: boolean;
   onStart: () => void;
   onTraceComplete: () => void;
 }
@@ -33,13 +34,13 @@ interface Case2ProcessBannerProps {
 export default function Case2ProcessBanner({
   state,
   data,
-  uploadedFiles,
+  collapsed,
+  onToggleCollapse,
   onAccept,
-  onFileUpload,
+  isAcceptLoading = false,
   onStart,
   onTraceComplete
 }: Case2ProcessBannerProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const bannerRef = useRef<HTMLDivElement>(null);
   const hasScrolledRef = useRef(false);
   
@@ -53,51 +54,18 @@ export default function Case2ProcessBanner({
     }
   }, [state]);
   
-  // Map uploaded files to required documents
-  const mapFileToDocType = (filename: string): string | null => {
-    const lower = filename.toLowerCase();
-    
-    if (lower.includes('legacy') || lower.includes('profile') || lower.includes('cs'))
-      return data.required_documents[0].name;
-    
-    if (lower.includes('waiver') || lower.includes('strategic'))
-      return data.required_documents[1].name;
-    
-    if (lower.includes('escalation') || lower.includes('committee') || lower.includes('memo'))
-      return data.required_documents[2].name;
-    
-    return null;
-  };
-  
-  // Check if all required documents are covered
-  const coveredDocs = new Set<string>();
-  uploadedFiles.forEach(file => {
-    const docType = mapFileToDocType(file.name);
-    if (docType) coveredDocs.add(docType);
-  });
-  
-  const allDocsUploaded = data.required_documents.every(doc => coveredDocs.has(doc.name));
-  const canStart = state === 'files_ready' && allDocsUploaded;
-  
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const filesArray = Array.from(e.target.files);
-      onFileUpload(filesArray);
-    }
-  };
-  
   if (state === 'idle') return null;
   
   return (
     <div ref={bannerRef} className="mb-6 bg-blue-50 border-2 border-blue-400 rounded-xl overflow-hidden">
       {/* Collapsible Header */}
       <button
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        onClick={onToggleCollapse}
         className="w-full p-4 flex items-center justify-between hover:bg-blue-100 transition-colors"
       >
         <div className="flex items-center gap-3">
           <span className="text-blue-700 font-bold text-xl">
-            {isCollapsed ? '▶' : '▼'}
+            {collapsed ? '▶' : '▼'}
           </span>
           <div className="text-left">
             <h2 className="text-lg font-bold text-blue-900">
@@ -114,7 +82,7 @@ export default function Case2ProcessBanner({
       </button>
       
       {/* Collapsible Content */}
-      {!isCollapsed && (
+      {!collapsed && (
         <div className="p-6 pt-0">
           {/* Thinking Trace Panel (triggered/tracing) */}
           {(state === 'triggered' || state === 'tracing') && (
@@ -126,7 +94,7 @@ export default function Case2ProcessBanner({
           )}
           
           {/* Graph + Assistant Text (synthesized and beyond) */}
-          {(state === 'synthesized' || state === 'accepted' || state === 'files_ready' || state === 'started') && (
+          {(state === 'synthesized' || state === 'accepted' || state === 'started') && (
             <>
               <Case2SuggestedPathGraph steps={data.path_steps} />
               
@@ -148,102 +116,20 @@ export default function Case2ProcessBanner({
             <div className="mb-6">
               <button
                 onClick={onAccept}
-                className="w-full px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold text-lg shadow-md"
-              >
-                ✓ Accept Process
-              </button>
-              <p className="text-xs text-slate-600 text-center mt-2">
-                Click to proceed with document uploads and approval initiation
-              </p>
-            </div>
-          )}
-          
-          {/* File Upload Section (accepted and beyond) */}
-          {(state === 'accepted' || state === 'files_ready') && (
-            <div className="mb-6 bg-white border-2 border-slate-300 rounded-xl p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-2xl">📎</span>
-                <h3 className="text-lg font-bold text-slate-800">Required Documents</h3>
-              </div>
-              
-              {/* Checklist */}
-              <div className="mb-4 space-y-2">
-                {data.required_documents.map((doc, idx) => {
-                  const isUploaded = coveredDocs.has(doc.name);
-                  
-                  return (
-                    <div
-                      key={idx}
-                      className={`border-2 rounded-lg p-3 ${
-                        isUploaded ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="text-lg mt-0.5">
-                          {isUploaded ? '✅' : '⬜'}
-                        </span>
-                        <div className="flex-1">
-                          <h4 className="font-bold text-sm text-slate-800">{doc.name}</h4>
-                          <p className="text-xs text-slate-600 mt-1">{doc.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              
-              {/* File Input */}
-              <div className="mb-4">
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Upload Files (3 required)
-                </label>
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleFileChange}
-                  className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              
-              {/* Uploaded Files List */}
-              {uploadedFiles.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-sm font-bold text-slate-700 mb-2">
-                    Uploaded Files ({uploadedFiles.length}/3)
-                  </p>
-                  <div className="space-y-1">
-                    {uploadedFiles.map((file, idx) => {
-                      const mappedDoc = mapFileToDocType(file.name);
-                      return (
-                        <div key={idx} className="flex items-center gap-2 text-xs text-slate-600">
-                          <span className="text-green-600">✓</span>
-                          <span className="font-mono">{file.name}</span>
-                          {mappedDoc && (
-                            <span className="text-blue-600 italic">→ {mappedDoc}</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Start Button (files_ready) */}
-          {state === 'files_ready' && (
-            <div className="mb-6">
-              <button
-                onClick={onStart}
-                disabled={!canStart}
+                disabled={isAcceptLoading}
                 className={`w-full px-6 py-4 rounded-lg transition-colors font-bold text-lg shadow-md ${
-                  canStart
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  isAcceptLoading
+                    ? 'bg-blue-400 text-white cursor-wait'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
               >
-                {canStart ? '🚀 Start Approval Flow' : '⏳ Upload 3 Required Documents'}
+                {isAcceptLoading ? '🔄 Analyzing documents...' : '✓ Accept Recommended Process'}
               </button>
+              <p className="text-xs text-slate-600 text-center mt-2">
+                {isAcceptLoading 
+                  ? 'Generating AI analysis of uploaded documents...'
+                  : 'Click to proceed with AI analysis and show recommended approval stages'}
+              </p>
             </div>
           )}
           
