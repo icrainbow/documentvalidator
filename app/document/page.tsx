@@ -59,7 +59,7 @@ import Case2ProcessBanner, { type Case2State } from '../components/case2/Case2Pr
 import Case2RecommendedStagesPanel from '../components/case2/Case2RecommendedStagesPanel';
 import { CASE2_DEMO_DATA, type Case2DemoData } from '../lib/case2/demoCase2Data';
 import { detectCase2Trigger } from '../lib/case2/case2Trigger';
-import Case4Container from '../components/case4/Case4Container';
+import Case4Container from '../components/case4/Case4ContainerV2';
 import Case3GuardrailBanner from '../components/case3/Case3GuardrailBanner';
 import { detectGuardrailIssue } from '../lib/case3/detectGuardrailIssue';
 import type { GuardrailIssue } from '../lib/case3/types';
