@@ -67,7 +67,11 @@ export default function Flow2RightPanel({
 }: Flow2RightPanelProps) {
   
   const hasDocuments = flow2Documents.length > 0;
-  const canRunReview = hasDocuments && !isOrchestrating && !case3Active;
+  
+  // CASE 2: Button should be enabled after accepting process, even without docs
+  // The actual validation (docs >= 3) happens in the handler
+  const isCase2ProcessAccepted = case2CustomStages !== null && case2CustomStages !== undefined;
+  const canRunReview = (hasDocuments || isCase2ProcessAccepted) && !isOrchestrating && !case3Active;
   
   // NEW: Track if Phase 8 animation is complete (controls Evidence Dashboard visibility)
   const [isPhase8AnimationComplete, setIsPhase8AnimationComplete] = useState(false);
@@ -153,10 +157,12 @@ export default function Flow2RightPanel({
                     : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
                 }`}
                 title={
-                  !hasDocuments 
+                  !hasDocuments && !isCase2ProcessAccepted
                     ? 'Load documents first' 
                     : case3Active 
                     ? 'Review blocked - resolve guardrail alert first'
+                    : isCase2ProcessAccepted && !hasDocuments
+                    ? 'Click to start review (will require 3 documents)'
                     : ''
                 }
               >
