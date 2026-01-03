@@ -46,14 +46,11 @@ export function useCase4Timeline(
   // Guards & refs
   const hasStartedRef = useRef(false);
   const startTimeRef = useRef<number | null>(null);
-  const timerIdsRef = useRef<NodeJS.Timeout[]>([]);
   const rafIdRef = useRef<number | null>(null);
   
   // Restart function
   const restart = useCallback(() => {
-    // Clear existing timers
-    timerIdsRef.current.forEach(clearTimeout);
-    timerIdsRef.current = [];
+    // Clear existing RAF
     if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
@@ -80,37 +77,38 @@ export function useCase4Timeline(
     // Record start time
     startTimeRef.current = Date.now();
     
-    // Schedule all events
-    CASE4_TIMELINE_EVENTS.forEach(event => {
-      const timerId = setTimeout(() => {
-        console.log(`[Case4Timeline] Event at t=${event.atMs}ms:`, event.type, event.payload);
-        dispatch(event);
-      }, event.atMs);
-      
-      timerIdsRef.current.push(timerId);
-    });
+    // Track which events have been dispatched (by index)
+    const dispatchedEvents = new Set<number>();
     
-    // Update elapsed time via RAF for smooth UI
-    const updateElapsed = () => {
+    // Single RAF loop that checks elapsed time and dispatches events
+    const animate = () => {
       if (startTimeRef.current === null) return;
       
       const elapsed = Date.now() - startTimeRef.current;
       setElapsedMs(elapsed);
       
+      // Check and dispatch events that are due
+      CASE4_TIMELINE_EVENTS.forEach((event, index) => {
+        if (!dispatchedEvents.has(index) && elapsed >= event.atMs) {
+          console.log(`[Case4Timeline] Event at t=${event.atMs}ms:`, event.type, event.payload);
+          dispatch(event);
+          dispatchedEvents.add(index);
+        }
+      });
+      
       // Continue until briefings ready (6500ms + buffer)
       if (elapsed < 7000) {
-        rafIdRef.current = requestAnimationFrame(updateElapsed);
+        rafIdRef.current = requestAnimationFrame(animate);
+      } else {
+        console.log('[Case4Timeline] Animation complete');
       }
     };
     
-    rafIdRef.current = requestAnimationFrame(updateElapsed);
+    rafIdRef.current = requestAnimationFrame(animate);
     
     // Cleanup on unmount or when enabled changes
     return () => {
-      console.log('[Case4Timeline] Cleaning up timers');
-      
-      timerIdsRef.current.forEach(clearTimeout);
-      timerIdsRef.current = [];
+      console.log('[Case4Timeline] Cleaning up');
       
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
