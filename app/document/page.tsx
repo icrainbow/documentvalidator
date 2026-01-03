@@ -805,6 +805,15 @@ function DocumentPageContent() {
     }
   }, [isFlow2, searchParams]);
   
+  // Flow2: Reset Flow1 state when entering Flow2 mode
+  useEffect(() => {
+    if (isFlow2) {
+      // Clear Flow1-specific state to prevent showing Flow1 content
+      setIsSubmitted(false);
+      console.log('[Flow2] Cleared Flow1 state (isSubmitted reset)');
+    }
+  }, [isFlow2]);
+  
   // Flow2: Load checkpoint state when docKey is present (e.g., after approval/rejection)
   useEffect(() => {
     if (!isFlow2 || !docKey) return;
