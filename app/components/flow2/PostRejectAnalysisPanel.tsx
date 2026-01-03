@@ -247,6 +247,14 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete, onA
     // NEW: Skip animation if already played
     if (shouldSkipAnimation) {
       console.log('[PostRejectAnalysis] Animation already played, showing final state');
+      
+      // Initialize all skills as done (fix: prevent queued display on reload)
+      const finalSkillStates = new Map<number, SkillState>();
+      data.skills.forEach((_, idx) => {
+        finalSkillStates.set(idx, { status: 'done', progress: 100 });
+      });
+      setSkillStates(finalSkillStates);
+      
       setPhase('done');
       setAllowReplay(true);
       if (onAnimationComplete) {
