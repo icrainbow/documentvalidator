@@ -399,10 +399,13 @@ export default function Flow2MonitorPanel({
         <div className="mb-4">
           <div className="flex items-center justify-between">
             {visibleStages.map((stage, idx) => {
-              const currentStageIndex = getCurrentStageIndex(status, checkpointMetadata?.edd_stage);
-              const isCompleted = idx < currentStageIndex;
-              const isCurrent = idx === currentStageIndex - 1;
-              const isPending = idx >= currentStageIndex;
+              // CRITICAL FIX: Use customCurrentStageIndex when provided (Case2), otherwise calculate from status
+              const stageIndexForRendering = customCurrentStageIndex !== undefined 
+                ? customCurrentStageIndex 
+                : getCurrentStageIndex(status, checkpointMetadata?.edd_stage);
+              const isCompleted = idx < stageIndexForRendering;
+              const isCurrent = idx === stageIndexForRendering - 1;
+              const isPending = idx >= stageIndexForRendering;
               
               // Special case: Human Review (stage 4) rejected at stage 1
               const isRejectedAtHumanReview = status === 'rejected' && stage.id === 4 && !checkpointMetadata?.edd_stage;
