@@ -126,6 +126,9 @@ function getCheckpointPath(run_id: string): string {
 
 /**
  * Save checkpoint to file system
+ * 
+ * Uses atomic write pattern (write to temp, then rename) to prevent corruption.
+ * Handles token indexing for both stage1 and EDD tokens.
  */
 export async function saveCheckpoint(checkpoint: Flow2Checkpoint): Promise<void> {
   await ensureCheckpointDir();
@@ -133,9 +136,46 @@ export async function saveCheckpoint(checkpoint: Flow2Checkpoint): Promise<void>
   const filePath = getCheckpointPath(checkpoint.run_id);
   const tempPath = `${filePath}.tmp`;
   
-  // Atomic write: write to temp file, then rename
-  await fs.writeFile(tempPath, JSON.stringify(checkpoint, null, 2), 'utf-8');
-  await fs.rename(tempPath, filePath);
+  try {
+    // Serialize checkpoint to JSON
+    const jsonContent = JSON.stringify(checkpoint, null, 2);
+    
+    // Validate JSON is parseable before writing
+    try {
+      JSON.parse(jsonContent);
+    } catch (validationError: any) {
+      console.error(`[CheckpointStore] JSON serialization produced invalid JSON for ${checkpoint.run_id}`);
+      throw new Error(`Invalid JSON generated: ${validationError.message}`);
+    }
+    
+    // Atomic write: write to temp file, then rename
+    // This prevents partial writes from corrupting the checkpoint
+    await fs.writeFile(tempPath, jsonContent, 'utf-8');
+    
+    // Verify temp file is valid before renaming
+    try {
+      const verifyContent = await fs.readFile(tempPath, 'utf-8');
+      JSON.parse(verifyContent);
+    } catch (verifyError: any) {
+      console.error(`[CheckpointStore] Temp file verification failed for ${checkpoint.run_id}`);
+      await fs.unlink(tempPath).catch(() => {}); // Clean up temp file
+      throw new Error(`Temp file corrupted: ${verifyError.message}`);
+    }
+    
+    // Atomic rename (overwrites existing file if present)
+    await fs.rename(tempPath, filePath);
+    
+    console.log(`[CheckpointStore] Saved checkpoint ${checkpoint.run_id} (${jsonContent.length} bytes)`);
+    
+  } catch (error: any) {
+    // Clean up temp file on error
+    try {
+      await fs.unlink(tempPath);
+    } catch (cleanupError) {
+      // Ignore cleanup errors
+    }
+    throw error;
+  }
   
   // Phase 1.5: Update token index if approval_token exists (stage 1)
   if (checkpoint.approval_token) {
@@ -169,7 +209,46 @@ export async function loadCheckpoint(run_id: string): Promise<Flow2Checkpoint | 
   try {
     const filePath = getCheckpointPath(run_id);
     const content = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(content) as Flow2Checkpoint;
+    
+    // Validate JSON before parsing
+    if (!content || content.trim().length === 0) {
+      console.error(`[CheckpointStore] Empty checkpoint file: ${run_id}`);
+      return null;
+    }
+    
+    try {
+      return JSON.parse(content) as Flow2Checkpoint;
+    } catch (parseError: any) {
+      // JSON parse error - log details for debugging
+      console.error(`[CheckpointStore] JSON parse error for checkpoint ${run_id}:`);
+      console.error(`  Error: ${parseError.message}`);
+      console.error(`  File path: ${filePath}`);
+      console.error(`  Content length: ${content.length} chars`);
+      console.error(`  First 200 chars: ${content.substring(0, 200)}`);
+      console.error(`  Last 200 chars: ${content.substring(Math.max(0, content.length - 200))}`);
+      
+      // Check for common issues
+      if (content.includes('}{')) {
+        console.error(`  Issue: Multiple JSON objects concatenated (no array wrapper)`);
+      }
+      if (content.match(/}\s*{/)) {
+        console.error(`  Issue: Multiple JSON objects with whitespace between`);
+      }
+      
+      // Try to auto-fix: if multiple writes happened, take only the first complete JSON
+      try {
+        const firstJsonEnd = content.indexOf('\n}');
+        if (firstJsonEnd > 0) {
+          const firstJson = content.substring(0, firstJsonEnd + 2); // Include closing }
+          console.log(`[CheckpointStore] Attempting recovery: using first ${firstJson.length} chars`);
+          return JSON.parse(firstJson) as Flow2Checkpoint;
+        }
+      } catch (recoveryError) {
+        console.error(`[CheckpointStore] Recovery attempt failed`);
+      }
+      
+      throw parseError; // Re-throw original error
+    }
   } catch (error: any) {
     if (error.code === 'ENOENT') {
       return null; // Checkpoint doesn't exist

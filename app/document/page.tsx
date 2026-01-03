@@ -3898,10 +3898,29 @@ function DocumentPageContent() {
   };
   
   // NEW: Phase 8 - Append findings to topic summaries when animation completes
-  const handlePhase8Complete = () => {
+  // Use ref to prevent duplicate calls
+  const phase8CompleteHandledRef = useRef(false);
+  const phase8SaveInProgressRef = useRef(false);
+  
+  const handlePhase8Complete = useCallback(async () => {
+    // GUARD: Prevent duplicate execution for same run
+    if (phase8CompleteHandledRef.current) {
+      console.log('[Phase8] Already handled for this run, skipping');
+      return;
+    }
+    
     if (!postRejectAnalysisData || !postRejectAnalysisData.findings) {
       return;
     }
+    
+    // GUARD: Prevent concurrent saves
+    if (phase8SaveInProgressRef.current) {
+      console.log('[Phase8] Save already in progress, skipping');
+      return;
+    }
+    
+    // Mark as handled immediately
+    phase8CompleteHandledRef.current = true;
     
     console.log('[Phase8] Appending', postRejectAnalysisData.findings.length, 'findings to topic summaries');
     
@@ -3954,22 +3973,38 @@ function DocumentPageContent() {
     // Update state
     setFlow2TopicSummaries(updatedSummaries);
     
-    // Save to checkpoint
-    if (flowMonitorRunId) {
-      fetch('/api/flow2/update-checkpoint-topics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          run_id: flowMonitorRunId,
-          topic_summaries: updatedSummaries,
-        }),
-      }).then(() => {
-        console.log('[Phase8] ✓ Saved updated summaries to checkpoint');
-      }).catch(error => {
-        console.error('[Phase8] Failed to save updated summaries:', error);
-      });
+    // Save to checkpoint with deduplication
+    if (flowMonitorRunId && !phase8SaveInProgressRef.current) {
+      phase8SaveInProgressRef.current = true;
+      
+      try {
+        const response = await fetch('/api/flow2/update-checkpoint-topics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            run_id: flowMonitorRunId,
+            topic_summaries: updatedSummaries,
+          }),
+        });
+        
+        if (response.ok) {
+          console.log('[Phase8] ✓ Saved updated summaries to checkpoint');
+        } else {
+          const error = await response.json();
+          console.error('[Phase8] Failed to save updated summaries:', error);
+        }
+      } catch (error: any) {
+        console.error('[Phase8] Failed to save updated summaries:', error.message);
+      } finally {
+        phase8SaveInProgressRef.current = false;
+      }
     }
-  };
+  }, [postRejectAnalysisData, flow2TopicSummaries, flowMonitorRunId]);
+  
+  // Reset phase8 handled flag when run_id changes
+  useEffect(() => {
+    phase8CompleteHandledRef.current = false;
+  }, [flowMonitorRunId]);
 
   const getSectionColor = (status: SectionStatus) => {
     switch (status) {
