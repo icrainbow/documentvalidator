@@ -36,6 +36,9 @@ interface Flow2RightPanelProps {
   riskData?: RiskData;
   // Workspace reset callback
   onStartNewReview?: () => void;
+  // STRATEGIC: Case2 custom stages (no flow pollution)
+  case2CustomStages?: Array<{ id: number; label: string; icon: string }> | null;
+  case2CurrentStageIndex?: number;
 }
 
 export default function Flow2RightPanel({
@@ -59,6 +62,8 @@ export default function Flow2RightPanel({
   case3Active = false,
   riskData,
   onStartNewReview,
+  case2CustomStages,
+  case2CurrentStageIndex,
 }: Flow2RightPanelProps) {
   
   const hasDocuments = flow2Documents.length > 0;
@@ -100,6 +105,8 @@ export default function Flow2RightPanel({
           onStatusChange={onFlowStatusChange}
           riskData={riskData}
           onStartNewReview={onStartNewReview}
+          customStages={case2CustomStages || undefined}
+          customCurrentStageIndex={case2CurrentStageIndex}
         />
         
         {/* PHASE 8: Post-Reject Analysis (tasks, skills, findings) */}

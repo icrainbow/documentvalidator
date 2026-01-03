@@ -670,6 +670,37 @@ function DocumentPageContent() {
     'pending',
   ]);
   
+  // STRATEGIC: Derive Case2 active state (single gating condition)
+  // True ONLY when: Flow2 mode + Case2 triggered + Case2 process accepted
+  const isCase2Active = isFlow2 && case2State !== 'idle' && case2ProcessAccepted;
+  
+  // STRATEGIC: Compute Case2 stages for Flow Monitor (derived, not stored)
+  const getCase2FlowMonitorStages = () => {
+    if (!isCase2Active || !case2Data) return null;
+    
+    // Map Case2 path_steps to Flow Monitor stage format
+    return case2Data.path_steps.map((step, idx) => ({
+      id: idx + 1,
+      label: step.label,
+      icon: ['📋', '✓', '👥', '✅'][idx] || '📋', // Simple icons for 4 stages
+    }));
+  };
+  
+  // STRATEGIC: Compute current stage index for Case2
+  const getCase2CurrentStageIndex = () => {
+    if (!isCase2Active) return 0;
+    
+    // If all stages completed, return last stage index
+    const allCompleted = case2RecommendedStageStatuses.every(s => s === 'completed');
+    if (allCompleted) {
+      return case2RecommendedStageStatuses.length;
+    }
+    
+    // Find first non-completed stage (0-indexed becomes 1-indexed for display)
+    const firstPendingIdx = case2RecommendedStageStatuses.findIndex(s => s === 'pending');
+    return firstPendingIdx === -1 ? case2RecommendedStageStatuses.length : firstPendingIdx;
+  };
+  
   // Case 4: IT Review state
   const [case4Active, setCase4Active] = useState(false);
   
@@ -1646,11 +1677,13 @@ function DocumentPageContent() {
    * 
    * STRICT: Uses flow2Documents ONLY, never reads sections in Flow2 mode.
    * Populates graphReviewTrace for UI visualization.
+   * 
+   * STRATEGIC: Branch to Case2 real review if Case2 is accepted
    */
   const handleGraphKycReview = async () => {
-    // PHASE 4: Branch to Case2 demo review if Case2 is accepted
-    if (case2ProcessAccepted) {
-      await handleCase2DemoProcessReview();
+    // STRATEGIC: Branch to Case2 real review if Case2 is accepted
+    if (isCase2Active) {
+      await handleCase2RealProcessReview();
       return;
     }
     
@@ -3750,37 +3783,61 @@ function DocumentPageContent() {
   };
 
   // Case 2 Handlers
-  // Case2: Accept recommended process (Phase 4 - unified upload + topic summaries)
+  // Case2: Accept recommended process (STRATEGIC: no docs, no LLM, just show stages)
   const handleCase2Accept = async () => {
     console.log('[Case2] Accept button clicked');
     console.log('[Case2] case2Id:', case2Id);
     console.log('[Case2] case2Data:', case2Data ? 'present' : 'null');
-    console.log('[Case2] flow2Documents.length:', flow2Documents.length);
     
     if (!case2Id || !case2Data) {
       console.warn('[Case2] Cannot accept: missing case2Id or case2Data');
       return;
     }
 
-    // Validate: user must have uploaded at least 3 documents via top-level Upload Documents control
+    // STRATEGIC: No document validation, no LLM calls
+    // Simply set acceptance flag and show stages in Flow Monitor
+    
+    // Update state
+    setCase2ProcessAccepted(true);
+    setCase2State('accepted');
+    setCase2BannerCollapsed(true); // Auto-collapse banner
+
+    // Success message
+    const successMsg: Message = {
+      role: 'agent',
+      agent: 'Case 2 Agent',
+      content: `✓ Recommended process accepted. The review stages are now visible in Flow Monitor.\n\nNext steps:\n1. Upload at least 3 documents\n2. Click "Run Process Review" to analyze documents and complete the review.`,
+    };
+    setMessages(prev => [...prev, successMsg]);
+    setHasNewChatMessage(true);
+    
+    console.log('[Case2] Process accepted - stages now visible in Flow Monitor');
+  };
+
+  // Case2: REAL process review (Phase 4 -真实 LLM 调用 + 硬编码自动通过)
+  const handleCase2RealProcessReview = async () => {
+    console.log('[Case2] Starting REAL process review');
+    
+    // 1. Validate documents (至少 3 个)
     if (flow2Documents.length < 3) {
       const errorMsg: Message = {
         role: 'agent',
         agent: 'Case 2 Agent',
-        content: '⚠️ Please upload at least 3 documents using the Upload Documents control at the top of the page before accepting the recommended process.',
+        content: '⚠️ Please upload at least 3 documents before running the process review.',
       };
       setMessages(prev => [...prev, errorMsg]);
       setHasNewChatMessage(true);
       return;
     }
-
-    // Set loading state
-    setIsLoadingCase2TopicSummaries(true);
-
+    
+    // 2. Set orchestrating state
+    setIsOrchestrating(true);
+    setFlowMonitorStatus('running');
+    
     try {
+      // 3. 真实调用 LLM - 生成 topic summaries
       console.log(`[Case2] Calling /api/case2/topic-summaries with ${flow2Documents.length} documents`);
-
-      // Call Case2 topic summaries API
+      
       const response = await fetch('/api/case2/topic-summaries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3796,35 +3853,54 @@ function DocumentPageContent() {
         throw new Error(data.error || 'Failed to generate topic summaries');
       }
 
-      console.log(`[Case2] Topic summaries generated: ${data.topic_summaries.length} topics`);
+      console.log(`[Case2] ✓ Topic summaries generated: ${data.topic_summaries.length} topics`);
 
-      // Store topics
+      // 4. 存储 topic summaries（会显示在左侧面板）
       setCase2TopicSummaries(data.topic_summaries);
-
-      // Update state
-      setCase2ProcessAccepted(true);
-      setCase2State('accepted');
-      setCase2BannerCollapsed(true); // Auto-collapse banner
-
-      // Success message
+      
+      // 5. 动画：逐个标记 stages 为 completed (每个延迟 1 秒)
+      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+      
+      for (let i = 0; i < case2RecommendedStageStatuses.length; i++) {
+        await sleep(1000);
+        setCase2RecommendedStageStatuses((prev: ('pending' | 'completed')[]) => {
+          const newStatuses = [...prev];
+          newStatuses[i] = 'completed';
+          return newStatuses;
+        });
+      }
+      
+      // 6. 设置最终状态
+      await sleep(500);
+      setFlowMonitorStatus('completed');
+      setCase2State('started'); // Use existing state value
+      
+      // 7. 成功消息
       const successMsg: Message = {
         role: 'agent',
         agent: 'Case 2 Agent',
-        content: `✓ Recommended process accepted. AI analysis complete (${data.topic_summaries.length} topics generated). You may now run the process review.`,
+        content: `✓ CS Integration Exception review complete!\n\n${data.topic_summaries.length} topics analyzed. All ${case2RecommendedStageStatuses.length} review stages approved.\n\nThis is a demo path - no backend orchestration, emails, or checkpoints were created.`,
       };
       setMessages(prev => [...prev, successMsg]);
       setHasNewChatMessage(true);
+      
+      console.log('[Case2] ✓ Real process review complete');
+      
     } catch (error: any) {
-      console.error('[Case2] Accept process failed:', error);
+      console.error('[Case2] Process review failed:', error);
+      
+      // Keep stages grey on error
+      setFlowMonitorStatus('error');
+      
       const errorMsg: Message = {
         role: 'agent',
         agent: 'Case 2 Agent',
-        content: `❌ Failed to generate topic analysis: ${error.message}`,
+        content: `❌ Process review failed: ${error.message}\n\nStages remain pending. Please try again.`,
       };
       setMessages(prev => [...prev, errorMsg]);
       setHasNewChatMessage(true);
     } finally {
-      setIsLoadingCase2TopicSummaries(false);
+      setIsOrchestrating(false);
     }
   };
 
@@ -3938,7 +4014,7 @@ function DocumentPageContent() {
     console.log('[Flow2] Marking animation as played for run:', flowMonitorRunId);
     
     // Update local state immediately
-    setPostRejectAnalysisData(prev => prev ? { ...prev, animation_played: true } : null);
+    setPostRejectAnalysisData((prev: any) => prev ? { ...prev, animation_played: true } : null);
     
     // Update checkpoint on server
     try {
@@ -4370,18 +4446,8 @@ function DocumentPageContent() {
                 />
               )}
               
-              {/* Phase 4: Case2 Recommended Stages Panel (Secondary List) */}
-              {isFlow2 && case2ProcessAccepted && case2Data && (
-                <Case2RecommendedStagesPanel
-                  stages={case2Data.path_steps.map((step, idx) => ({
-                    id: step.id,
-                    label: step.label,
-                    status: case2RecommendedStageStatuses[idx],
-                    detail: step.detail,
-                  }))}
-                  visible={true}
-                />
-              )}
+              {/* Phase 4: Case2 Recommended Stages - NOW INTEGRATED INTO FLOW MONITOR */}
+              {/* Case2 stages now appear in Flow Monitor (right panel) when case2ProcessAccepted=true */}
               
               {/* Flow1 ONLY: Render document sections */}
               {!isFlow2 && (
@@ -4553,6 +4619,8 @@ function DocumentPageContent() {
                     riskSignals: currentIssues.filter((i: any) => i.category === 'kyc_risk')
                   }}
                   onStartNewReview={handleStartNewReview}
+                  case2CustomStages={getCase2FlowMonitorStages()}
+                  case2CurrentStageIndex={getCase2CurrentStageIndex()}
                 />
               ) : (
                 // FLOW1: Original right panel with all features

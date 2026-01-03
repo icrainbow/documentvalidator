@@ -52,6 +52,9 @@ interface Flow2MonitorPanelProps {
   onStatusChange?: (status: FlowStatus) => void;
   riskData?: RiskData; // NEW: For stage coloring
   onStartNewReview?: () => void; // NEW: Callback to reset workspace
+  // STRATEGIC: Support custom stages for Case2 without breaking KYC
+  customStages?: Array<{ id: number; label: string; icon: string }>;
+  customCurrentStageIndex?: number;
 }
 
 // Business stages (NOT node-level)
@@ -114,27 +117,36 @@ export default function Flow2MonitorPanel({
   onStatusChange,
   riskData,
   onStartNewReview,
+  customStages,
+  customCurrentStageIndex,
 }: Flow2MonitorPanelProps) {
   const [status, setStatus] = useState<FlowStatus>(initialStatus);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
   const [reminderDisabled, setReminderDisabled] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
+  // STRATEGIC: Use custom stages if provided (Case2), otherwise use default KYC stages
+  const baseStages = customStages || BUSINESS_STAGES;
+  
   // CRITICAL: Determine which stages to show based on workflow path
   // If no EDD stage exists (direct approve), exclude Stage 5 (EDD Review) from display
   const shouldShowEddStage = !!checkpointMetadata?.edd_stage;
   
-  const visibleStages = shouldShowEddStage 
-    ? BUSINESS_STAGES 
-    : BUSINESS_STAGES.filter(stage => stage.id !== 5); // Remove EDD Review stage
+  const visibleStages = customStages 
+    ? customStages // Case2: show all custom stages
+    : (shouldShowEddStage 
+        ? BUSINESS_STAGES 
+        : BUSINESS_STAGES.filter(stage => stage.id !== 5)); // KYC: Remove EDD Review stage if not applicable
   
   // DEMO-ONLY: Detect if we should apply historical node status policy
   const shouldApplyDemoPolicy = checkpointMetadata ? isFlow2DemoMode(checkpointMetadata) : false;
   
   // NEW: Detect if workflow is fully completed
   // UNIVERSAL RULE: If current stage reached the LAST stage (Final Report), it's fully completed
-  const currentStageIndex = getCurrentStageIndex(status, checkpointMetadata?.edd_stage);
-  const isFullyCompleted = currentStageIndex === BUSINESS_STAGES.length;
+  const currentStageIndex = customCurrentStageIndex !== undefined 
+    ? customCurrentStageIndex 
+    : getCurrentStageIndex(status, checkpointMetadata?.edd_stage);
+  const isFullyCompleted = currentStageIndex === baseStages.length;
   
   // Helper: Get risk-based stage color
   const getRiskStageColor = (stageId: number): string => {
