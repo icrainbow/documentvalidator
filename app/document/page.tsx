@@ -3860,6 +3860,32 @@ function DocumentPageContent() {
     }
   };
 
+  // Phase 5: Exit Case2 Mode (return to Standard KYC Review)
+  const handleExitCase2Mode = () => {
+    console.log('[Case2] Exiting Case2 mode, returning to Standard KYC Review');
+    
+    // Reset ONLY Case2-specific state
+    setCase2ProcessAccepted(false);
+    setCase2State('idle');
+    setCase2BannerCollapsed(false);
+    setCase2TopicSummaries([]);
+    setCase2RecommendedStageStatuses(['pending', 'pending', 'pending', 'pending']);
+    setCase2Data(null);
+    setCase2Id(null);
+    
+    // CRITICAL: DO NOT clear flow2Documents (preserve uploaded files)
+    // CRITICAL: DO NOT alter flowMonitorStatus/RunId/Metadata (preserve KYC review state if exists)
+    
+    // Optional: Add confirmation message
+    const msg: Message = {
+      role: 'agent',
+      agent: 'System',
+      content: '✓ Exited Case2 mode. You can now run a standard KYC review with your uploaded documents.',
+    };
+    setMessages(prev => [...prev, msg]);
+    setHasNewChatMessage(true);
+  };
+
   const handleCase2Start = async () => {
     if (case2State !== 'files_ready' || !case2Id) return;
     
@@ -4610,19 +4636,31 @@ function DocumentPageContent() {
                     <div className="flex flex-col gap-2">
                       {/* Phase 4: 3-State Mode Indicator (Flow2 only) */}
                       {isFlow2 && (
-                        <div className="mb-1 text-center">
-                          {case2ProcessAccepted ? (
-                            <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
-                              ⚙️ Mode: CS Integration Exception Process
-                            </span>
-                          ) : case2State !== 'idle' && case2State !== 'started' ? (
-                            <span className="inline-block px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold italic">
-                              ⚠️ Mode: Case2 Triggered (Pending Acceptance)
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-500">
-                              ⚙️ Mode: Standard KYC Review
-                            </span>
+                        <div className="mb-1 flex flex-col items-center gap-1">
+                          <div className="text-center">
+                            {case2ProcessAccepted ? (
+                              <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
+                                ⚙️ Mode: CS Integration Exception Process
+                              </span>
+                            ) : case2State !== 'idle' && case2State !== 'started' ? (
+                              <span className="inline-block px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold italic">
+                                ⚠️ Mode: Case2 Triggered (Pending Acceptance)
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-500">
+                                ⚙️ Mode: Standard KYC Review
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Phase 5: Exit Case2 button (only show when Case2 is active) */}
+                          {(case2State !== 'idle' || case2ProcessAccepted) && (
+                            <button
+                              onClick={handleExitCase2Mode}
+                              className="text-xs text-slate-500 hover:text-slate-700 underline"
+                            >
+                              ← Exit Case2 / Switch to Standard Review
+                            </button>
                           )}
                         </div>
                       )}
