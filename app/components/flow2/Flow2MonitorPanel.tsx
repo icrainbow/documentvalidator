@@ -146,7 +146,10 @@ export default function Flow2MonitorPanel({
   const currentStageIndex = customCurrentStageIndex !== undefined 
     ? customCurrentStageIndex 
     : getCurrentStageIndex(status, checkpointMetadata?.edd_stage);
-  const isFullyCompleted = currentStageIndex === baseStages.length;
+  
+  // CASE 2: Compare against custom stages length when custom stages provided
+  const totalStages = customStages ? customStages.length : baseStages.length;
+  const isFullyCompleted = currentStageIndex === totalStages;
   
   // Helper: Get risk-based stage color
   const getRiskStageColor = (stageId: number): string => {
