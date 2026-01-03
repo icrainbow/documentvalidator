@@ -140,6 +140,29 @@ export async function saveCheckpoint(checkpoint: Flow2Checkpoint): Promise<void>
     // Serialize checkpoint to JSON
     const jsonContent = JSON.stringify(checkpoint, null, 2);
     
+    // Validate JSON size (prevent extremely large checkpoints)
+    const MAX_CHECKPOINT_SIZE = 10 * 1024 * 1024; // 10MB
+    if (jsonContent.length > MAX_CHECKPOINT_SIZE) {
+      console.warn(`[CheckpointStore] Checkpoint ${checkpoint.run_id} is very large: ${jsonContent.length} bytes`);
+      
+      // Truncate large fields if needed (preserve core data)
+      const truncatedCheckpoint = {
+        ...checkpoint,
+        graph_state: checkpoint.graph_state ? {
+          ...checkpoint.graph_state,
+          // Keep only essential fields, truncate large arrays
+          documents: checkpoint.graph_state.documents?.slice(0, 10), // Max 10 docs in state
+        } : checkpoint.graph_state,
+      };
+      
+      const truncatedJson = JSON.stringify(truncatedCheckpoint, null, 2);
+      console.log(`[CheckpointStore] Truncated checkpoint size: ${truncatedJson.length} bytes`);
+      
+      if (truncatedJson.length > MAX_CHECKPOINT_SIZE) {
+        throw new Error(`Checkpoint too large even after truncation: ${truncatedJson.length} bytes`);
+      }
+    }
+    
     // Validate JSON is parseable before writing
     try {
       JSON.parse(jsonContent);
@@ -155,9 +178,15 @@ export async function saveCheckpoint(checkpoint: Flow2Checkpoint): Promise<void>
     // Verify temp file is valid before renaming
     try {
       const verifyContent = await fs.readFile(tempPath, 'utf-8');
-      JSON.parse(verifyContent);
+      const parsed = JSON.parse(verifyContent);
+      
+      // Sanity check: verify run_id matches
+      if (parsed.run_id !== checkpoint.run_id) {
+        throw new Error(`Run ID mismatch: expected ${checkpoint.run_id}, got ${parsed.run_id}`);
+      }
     } catch (verifyError: any) {
       console.error(`[CheckpointStore] Temp file verification failed for ${checkpoint.run_id}`);
+      console.error(`  Verification error: ${verifyError.message}`);
       await fs.unlink(tempPath).catch(() => {}); // Clean up temp file
       throw new Error(`Temp file corrupted: ${verifyError.message}`);
     }
@@ -165,7 +194,7 @@ export async function saveCheckpoint(checkpoint: Flow2Checkpoint): Promise<void>
     // Atomic rename (overwrites existing file if present)
     await fs.rename(tempPath, filePath);
     
-    console.log(`[CheckpointStore] Saved checkpoint ${checkpoint.run_id} (${jsonContent.length} bytes)`);
+    console.log(`[CheckpointStore] ✓ Saved checkpoint ${checkpoint.run_id} (${jsonContent.length} bytes)`);
     
   } catch (error: any) {
     // Clean up temp file on error
@@ -235,19 +264,56 @@ export async function loadCheckpoint(run_id: string): Promise<Flow2Checkpoint | 
         console.error(`  Issue: Multiple JSON objects with whitespace between`);
       }
       
-      // Try to auto-fix: if multiple writes happened, take only the first complete JSON
+      // IMPROVED: Try to auto-fix by finding the last complete closing brace
       try {
-        const firstJsonEnd = content.indexOf('\n}');
-        if (firstJsonEnd > 0) {
-          const firstJson = content.substring(0, firstJsonEnd + 2); // Include closing }
-          console.log(`[CheckpointStore] Attempting recovery: using first ${firstJson.length} chars`);
-          return JSON.parse(firstJson) as Flow2Checkpoint;
+        // Strategy 1: Find the last valid closing brace for the root object
+        let depth = 0;
+        let lastValidPos = -1;
+        
+        for (let i = 0; i < content.length; i++) {
+          const char = content[i];
+          if (char === '{') depth++;
+          else if (char === '}') {
+            depth--;
+            if (depth === 0) {
+              lastValidPos = i + 1; // Include the closing brace
+              break; // Found the end of first complete JSON object
+            }
+          }
         }
-      } catch (recoveryError) {
-        console.error(`[CheckpointStore] Recovery attempt failed`);
+        
+        if (lastValidPos > 0) {
+          const recoveredJson = content.substring(0, lastValidPos);
+          console.log(`[CheckpointStore] Attempting recovery: using first ${recoveredJson.length} chars (depth-based)`);
+          const recovered = JSON.parse(recoveredJson) as Flow2Checkpoint;
+          
+          // Successfully recovered - save the corrected version
+          console.log(`[CheckpointStore] ✓ Successfully recovered checkpoint ${run_id}`);
+          console.log(`[CheckpointStore] Saving corrected version to disk...`);
+          
+          // Save corrected checkpoint asynchronously (don't block read)
+          saveCheckpoint(recovered).catch(err => {
+            console.error(`[CheckpointStore] Failed to save corrected checkpoint:`, err.message);
+          });
+          
+          return recovered;
+        }
+      } catch (recoveryError: any) {
+        console.error(`[CheckpointStore] Recovery attempt failed: ${recoveryError.message}`);
       }
       
-      throw parseError; // Re-throw original error
+      // Recovery failed - checkpoint is unrecoverable
+      console.error(`[CheckpointStore] ❌ Checkpoint ${run_id} is unrecoverable, deleting corrupted file`);
+      
+      // Delete corrupted file to prevent infinite retry loops
+      try {
+        await fs.unlink(filePath);
+        console.log(`[CheckpointStore] Deleted corrupted checkpoint file: ${run_id}`);
+      } catch (unlinkError) {
+        console.error(`[CheckpointStore] Failed to delete corrupted file:`, unlinkError);
+      }
+      
+      return null; // Return null instead of throwing
     }
   } catch (error: any) {
     if (error.code === 'ENOENT') {
