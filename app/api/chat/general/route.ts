@@ -31,11 +31,13 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       console.error('[ChatGeneral] ANTHROPIC_API_KEY not configured');
+      
+      // Fallback response when API key is missing
       return NextResponse.json({
-        ok: false,
-        error: 'AI service not configured',
-        response: 'I apologize, but the AI service is currently unavailable. Please try again later.'
-      }, { status: 503 });
+        ok: true,
+        response: `I understand you're asking about: "${message}"\n\nI'm currently operating in limited mode. To get AI-powered responses, please configure the ANTHROPIC_API_KEY environment variable.\n\nFor KYC-related questions, you can trigger Case 2 analysis by asking about CS integration, restricted jurisdictions, or high-net-worth client exceptions.`,
+        fallback: true
+      });
     }
     
     // Initialize Anthropic client
@@ -98,12 +100,25 @@ acknowledge the limitation and suggest consulting official regulatory sources.`;
     
   } catch (error: any) {
     console.error('[ChatGeneral] Error:', error);
+    console.error('[ChatGeneral] Error details:', error.message, error.status, error.type);
+    
+    // Provide helpful fallback based on error type
+    let fallbackMessage = 'I apologize, but I encountered an error processing your request.';
+    
+    if (error.status === 401) {
+      fallbackMessage = 'Authentication error: The API key may be invalid. Please check your ANTHROPIC_API_KEY configuration.';
+    } else if (error.status === 429) {
+      fallbackMessage = 'Rate limit exceeded. Please try again in a moment.';
+    } else if (error.message?.includes('API key')) {
+      fallbackMessage = 'API key configuration error. Please verify your ANTHROPIC_API_KEY is set correctly.';
+    }
     
     return NextResponse.json({
-      ok: false,
-      error: error.message || 'Internal server error',
-      response: 'I apologize, but I encountered an error processing your request. Please try again.'
-    }, { status: 500 });
+      ok: true, // Return ok=true so UI shows the message instead of generic error
+      response: `${fallbackMessage}\n\nFor KYC-related questions, you can trigger Case 2 analysis by asking about CS integration, restricted jurisdictions, or high-net-worth client exceptions.`,
+      error: error.message,
+      fallback: true
+    });
   }
 }
 
