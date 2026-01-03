@@ -3752,6 +3752,11 @@ function DocumentPageContent() {
   // Case 2 Handlers
   // Case2: Accept recommended process (Phase 4 - unified upload + topic summaries)
   const handleCase2Accept = async () => {
+    console.log('[Case2] Accept button clicked');
+    console.log('[Case2] case2Id:', case2Id);
+    console.log('[Case2] case2Data:', case2Data ? 'present' : 'null');
+    console.log('[Case2] flow2Documents.length:', flow2Documents.length);
+    
     if (!case2Id || !case2Data) {
       console.warn('[Case2] Cannot accept: missing case2Id or case2Data');
       return;
