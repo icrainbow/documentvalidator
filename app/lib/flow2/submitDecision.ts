@@ -165,6 +165,21 @@ export async function finalizeDecision(
     token_hint: metadata.token_hint,
   };
   
+  // CRITICAL: Set final_decision based on decision
+  if (decision === 'approve') {
+    // Stage 1 approve -> workflow complete, no EDD
+    updates.final_decision = 'approved';
+    updates.status = 'completed';
+    
+    // PHASE 2: Set COMPLETE status
+    if (!checkpoint.checkpoint_metadata) {
+      (checkpoint as any).checkpoint_metadata = {};
+    }
+    (checkpoint as any).checkpoint_metadata.reviewProcessStatus = 'COMPLETE';
+    
+    console.log('[SubmitDecision] Stage 1 approved -> workflow COMPLETE (no EDD)');
+  }
+  
   if (decision === 'reject' && reason) {
     updates.decision_comment = reason.trim();
     

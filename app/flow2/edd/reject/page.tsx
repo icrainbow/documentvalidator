@@ -54,8 +54,9 @@ export default function EddRejectPage() {
         setStatus('success');
         
         // Redirect to document page after 2 seconds (with flow=2 to ensure Flow2 UI)
+        // Add status=failed as UX hint (actual state comes from checkpoint metadata)
         setTimeout(() => {
-          router.push(`/document?flow=2&docKey=${data.run_id}`);
+          router.push(`/document?flow=2&docKey=${data.run_id}&status=failed`);
         }, 2000);
       } else {
         setStatus('error');

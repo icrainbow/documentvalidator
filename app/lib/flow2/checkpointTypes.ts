@@ -128,6 +128,13 @@ export interface CheckpointMetadata {
   
   // Graph State (for historical status policy)
   graph_state?: GraphState; // For node status policy
+  
+  // ========== GLOBAL REVIEW PROCESS STATUS (PHASE 2) ==========
+  // Single source of truth for overall review outcome (survives page reloads)
+  reviewProcessStatus?: 'RUNNING' | 'COMPLETE' | 'FAILED';
+  failureReason?: string;  // Human-readable reason when FAILED
+  failedAt?: string;       // ISO timestamp of failure
+  failedStage?: 'human_review' | 'edd_review';  // Which stage failed
 }
 
 export interface HumanDecision {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { applyFlow2DemoNodeStatusPolicy, isFlow2DemoMode } from '@/app/lib/flow2/demoNodeStatusPolicy';
+import { downloadApprovalPackage } from '@/app/lib/flow2/packageApprovalData';
 
 export type FlowStatus = 'idle' | 'running' | 'waiting_human' | 'resuming' | 'completed' | 'rejected' | 'error';
 
@@ -29,6 +30,11 @@ export interface CheckpointMetadata {
     decided_by?: string;
   };
   final_decision?: string;
+  // PHASE 3: Review process status
+  reviewProcessStatus?: 'RUNNING' | 'COMPLETE' | 'FAILED';
+  failureReason?: string;
+  failedAt?: string;
+  failedStage?: 'human_review' | 'edd_review';
 }
 
 // NEW: Risk data for stage coloring
@@ -70,11 +76,13 @@ function getCurrentStageIndex(status: FlowStatus, eddStage?: { status: string; d
       return 4; // Stage 1 waiting
     case 'resuming': return eddStage ? 5 : 4;
     case 'completed': 
-      // UNIVERSAL: If EDD approved, workflow is fully complete (stage 6)
+      // CRITICAL FIX: Only show EDD stage if eddStage actually exists
+      // If no EDD stage, human approved directly -> stage 6 complete
       if (eddStage && eddStage.decision === 'approve') {
-        return 6;
+        return 6; // EDD approved -> fully complete
       }
-      return 6; // All done
+      // No EDD stage means direct approve -> stage 6 complete
+      return 6;
     case 'rejected':
       // UNIVERSAL: If EDD approved, workflow is fully complete (stage 6), not rejected
       if (eddStage && eddStage.decision === 'approve') {
@@ -111,6 +119,14 @@ export default function Flow2MonitorPanel({
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
   const [reminderDisabled, setReminderDisabled] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // CRITICAL: Determine which stages to show based on workflow path
+  // If no EDD stage exists (direct approve), exclude Stage 5 (EDD Review) from display
+  const shouldShowEddStage = !!checkpointMetadata?.edd_stage;
+  
+  const visibleStages = shouldShowEddStage 
+    ? BUSINESS_STAGES 
+    : BUSINESS_STAGES.filter(stage => stage.id !== 5); // Remove EDD Review stage
   
   // DEMO-ONLY: Detect if we should apply historical node status policy
   const shouldApplyDemoPolicy = checkpointMetadata ? isFlow2DemoMode(checkpointMetadata) : false;
@@ -264,6 +280,30 @@ export default function Flow2MonitorPanel({
     setTimeout(() => setToastMessage(null), 5000);
   };
 
+  // PHASE 3: Handle Finish button (download package + reset workspace)
+  const handleFinish = useCallback(async () => {
+    if (!runId || !checkpointMetadata) return;
+    
+    console.log('[Flow2Monitor] Finish clicked - packaging and resetting');
+    
+    // Step 1: Trigger package download
+    try {
+      downloadApprovalPackage(runId, checkpointMetadata);
+      showToast('✅ Approval package downloaded');
+    } catch (error: any) {
+      console.error('[Flow2Monitor] Package download failed:', error);
+      showToast('⚠️ Download failed, but resetting workspace');
+      // Continue with reset even if download fails
+    }
+    
+    // Step 2: Reset workspace (call parent callback)
+    if (onStartNewReview) {
+      setTimeout(() => {
+        onStartNewReview();
+      }, 500); // Small delay to ensure download starts
+    }
+  }, [runId, checkpointMetadata, onStartNewReview]);
+
   // Check if reminder was sent recently (client-side cooldown)
   const isReminderRecentlySent = checkpointMetadata?.reminder_sent_at
     ? (Date.now() - new Date(checkpointMetadata.reminder_sent_at).getTime()) < 300000
@@ -305,23 +345,48 @@ export default function Flow2MonitorPanel({
             <span className="animate-pulse">🔄</span> IN PROGRESS
           </div>
         )}
-        {isFullyCompleted && (
+        {/* PHASE 3: FAILED status badge (highest priority) */}
+        {checkpointMetadata?.reviewProcessStatus === 'FAILED' && (
+          <div className="px-3 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-semibold flex items-center gap-2">
+            ❌ REVIEW PROCESS FAILED
+          </div>
+        )}
+        {isFullyCompleted && checkpointMetadata?.reviewProcessStatus !== 'FAILED' && (
           <div className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             ✅ APPROVED & COMPLETED
           </div>
         )}
-        {!isFullyCompleted && (status === 'completed' || status === 'rejected' || status === 'error') && (
+        {!isFullyCompleted && (status === 'completed' || status === 'rejected' || status === 'error') && checkpointMetadata?.reviewProcessStatus !== 'FAILED' && (
           <div className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             <span className="animate-pulse">🔄</span> IN PROGRESS
           </div>
         )}
       </div>
 
+      {/* PHASE 3: Failure Details Box */}
+      {checkpointMetadata?.reviewProcessStatus === 'FAILED' && checkpointMetadata?.failureReason && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-800">
+            <strong>Reason:</strong> {checkpointMetadata.failureReason}
+          </p>
+          {checkpointMetadata.failedAt && (
+            <p className="text-xs text-red-600 mt-2">
+              Failed at: {new Date(checkpointMetadata.failedAt).toLocaleString()}
+            </p>
+          )}
+          {checkpointMetadata.failedStage && (
+            <p className="text-xs text-red-600 mt-1">
+              Stage: {checkpointMetadata.failedStage.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Business Stage Stepper */}
       {status !== 'idle' && (
         <div className="mb-4">
           <div className="flex items-center justify-between">
-            {BUSINESS_STAGES.map((stage, idx) => {
+            {visibleStages.map((stage, idx) => {
               const currentStageIndex = getCurrentStageIndex(status, checkpointMetadata?.edd_stage);
               const isCompleted = idx < currentStageIndex;
               const isCurrent = idx === currentStageIndex - 1;
@@ -356,9 +421,13 @@ export default function Flow2MonitorPanel({
               const finalReportCompleted = isFinalReport && isFullyCompleted;
               
               // Special case: EDD Review (stage 5) states
+              // Note: Stage 5 only appears in visibleStages if edd_stage exists
               let eddStepColor = '';
               let eddStepIcon = stage.icon;
-              if (stage.id === 5 && checkpointMetadata?.edd_stage) {
+              const isEddStage = stage.id === 5;
+              
+              if (isEddStage && checkpointMetadata?.edd_stage) {
+                // EDD stage exists and is being displayed
                 const eddStatus = checkpointMetadata.edd_stage.status;
                 if (eddStatus === 'waiting_edd_approval') {
                   eddStepColor = 'bg-orange-500 text-white ring-4 ring-orange-200'; // Waiting (current)
@@ -407,7 +476,7 @@ export default function Flow2MonitorPanel({
                       {stage.label}
                     </div>
                   </div>
-                  {idx < BUSINESS_STAGES.length - 1 && (
+                  {idx < visibleStages.length - 1 && (
                     <div
                       className={`flex-1 h-1 mx-2 transition-all ${
                         isCompleted ? 'bg-green-500' : 'bg-slate-200'
@@ -568,18 +637,18 @@ export default function Flow2MonitorPanel({
         </div>
       )}
       
-      {/* NEW: Start New Review Button (only when fully completed) */}
-      {isFullyCompleted && onStartNewReview && (
+      {/* NEW: Finish & Download Package Button (shown when workflow complete OR failed) */}
+      {((isFullyCompleted || checkpointMetadata?.reviewProcessStatus === 'FAILED') && onStartNewReview) && (
         <div className="mt-6 pt-6 border-t border-slate-200">
           <button
-            onClick={onStartNewReview}
-            className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold text-sm hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            onClick={handleFinish}
+            className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold text-sm hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
           >
-            <span className="text-lg">🔄</span>
-            <span>Start New Review</span>
+            <span className="text-lg">✓</span>
+            <span>Finish & Download Package</span>
           </button>
           <p className="text-xs text-slate-500 text-center mt-2">
-            Clear workspace and begin a fresh KYC review
+            Download approval package and reset workspace
           </p>
         </div>
       )}

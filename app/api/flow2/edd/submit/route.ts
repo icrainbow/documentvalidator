@@ -115,6 +115,13 @@ export async function GET(request: NextRequest) {
   checkpoint.edd_stage.decided_by = 'email_link';
   checkpoint.final_decision = 'approved_with_edd';
   checkpoint.status = 'completed';
+  
+  // ========== PHASE 2: Set COMPLETE status ==========
+  if (!checkpoint.checkpoint_metadata) {
+    checkpoint.checkpoint_metadata = {} as any;
+  }
+  checkpoint.checkpoint_metadata.reviewProcessStatus = 'COMPLETE';
+  
   checkpoint.event_log = [
     ...(checkpoint.event_log || []),
     {
@@ -244,6 +251,16 @@ export async function POST(request: NextRequest) {
   checkpoint.edd_stage.decided_at = now;
   checkpoint.edd_stage.decided_by = 'web_form';
   checkpoint.final_decision = 'rejected';
+  
+  // ========== PHASE 2: Set FAILED status ==========
+  if (!checkpoint.checkpoint_metadata) {
+    checkpoint.checkpoint_metadata = {} as any;
+  }
+  checkpoint.checkpoint_metadata.reviewProcessStatus = 'FAILED';
+  checkpoint.checkpoint_metadata.failureReason = 'EDD review rejected by reviewer';
+  checkpoint.checkpoint_metadata.failedAt = now;
+  checkpoint.checkpoint_metadata.failedStage = 'edd_review';
+  
   checkpoint.event_log = [
     ...(checkpoint.event_log || []),
     {

@@ -26,7 +26,7 @@ export default function ApproveActionPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             token,
-            decision: 'approve',
+            action: 'approve',
             signer: 'Email Approval',
           }),
         });

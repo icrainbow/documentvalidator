@@ -80,6 +80,11 @@ export async function GET(request: Request) {
         // NEW: Include EDD stage and final decision
         edd_stage: checkpoint.edd_stage,
         final_decision: checkpoint.final_decision,
+        // PHASE 2: Include review process status
+        reviewProcessStatus: checkpoint.checkpoint_metadata?.reviewProcessStatus,
+        failureReason: checkpoint.checkpoint_metadata?.failureReason,
+        failedAt: checkpoint.checkpoint_metadata?.failedAt,
+        failedStage: checkpoint.checkpoint_metadata?.failedStage,
         // Demo fields (optional)
         ...(((checkpoint as any).demo_mode) && {
           demo_mode: (checkpoint as any).demo_mode,
