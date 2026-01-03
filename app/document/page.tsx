@@ -3856,6 +3856,10 @@ function DocumentPageContent() {
     setCase2ProcessAccepted(true);
     setCase2State('accepted');
     setCase2BannerCollapsed(true); // Auto-collapse banner
+    
+    // CRITICAL FIX: Set Flow Monitor to 'waiting_human' so stages become visible
+    // This is needed because Flow Monitor only shows stages when status !== 'idle'
+    setFlowMonitorStatus('waiting_human');
 
     // Success message
     const successMsg: Message = {
