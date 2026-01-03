@@ -110,7 +110,11 @@ export default function Case2ThinkingTracePanel({
       timers.forEach(clearTimeout);
       timersRef.current = [];
     };
-  }, [isAnimating, onComplete]);
+    
+    // NOTE: onComplete is intentionally excluded from deps
+    // - It's a callback from parent that shouldn't trigger animation restart
+    // - Only re-run when isAnimating changes (animation start condition)
+  }, [isAnimating]);
   
   const getStatusBadge = (status: SourceStatus) => {
     switch (status) {
