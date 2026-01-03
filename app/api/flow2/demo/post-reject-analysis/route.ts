@@ -56,26 +56,47 @@ export async function GET(request: Request) {
   // PHASE 8 DETERMINISTIC OUTPUT
   // ========================================
   
-  const tasks = [
+  // Demo: Initialize artifacts in checkpoint with at least one 'running' task
+  // This ensures UI animates on first load (no all-QUEUED snapshot)
+  const existingArtifact = checkpoint.artifacts?.post_reject_tasks;
+  const isFirstLoad = !existingArtifact || existingArtifact.run_id !== run_id;
+  
+  const tasks = isFirstLoad ? [
     { 
       id: 'A', 
       title: 'De-obfuscate current SOF disclosure', 
-      status: 'done' as const,
+      status: 'running' as const,  // First load: at least one running
       detail: 'Extracted: Client stated $5M from business sale (Q3 2024)'
     },
     { 
       id: 'B', 
       title: 'Cross-check Wealth division 2024 annual report', 
-      status: 'done' as const,
+      status: 'pending' as const,
       detail: 'Retrieved: Q4 2024 Wealth report shows $50M AUM for same client'
     },
     { 
       id: 'C', 
       title: 'Validate UBO offshore holding chain', 
-      status: 'done' as const,
+      status: 'pending' as const,
       detail: 'Mapped: 3-layer structure (BVI → Cayman → Swiss trust)'
     },
-  ];
+  ] : (existingArtifact?.tasks || []);
+  
+  // If first load, persist the initial artifact to checkpoint
+  if (isFirstLoad) {
+    const { updateCheckpointStatus } = await import('@/app/lib/flow2/checkpointStore');
+    await updateCheckpointStatus(run_id, checkpoint.status, {
+      artifacts: {
+        ...checkpoint.artifacts,
+        post_reject_tasks: {
+          run_id,
+          status: 'running',
+          tasks
+        }
+      }
+    } as any);
+    console.log(`[Flow2/PostRejectAnalysis] ✅ Initialized artifact with running tasks for run ${run_id}`);
+  }
   
   const skills = [
     { 
@@ -189,6 +210,12 @@ export async function GET(request: Request) {
     // Metadata
     generated_at: new Date().toISOString(),
     demo_mode: 'phase_8_edd',
+    // Demo orchestration artifact (for UI SSOT)
+    artifact: {
+      run_id,
+      status: isFirstLoad ? 'running' : 'done',
+      tasks
+    }
   });
 }
 

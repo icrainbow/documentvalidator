@@ -46,6 +46,11 @@ export interface PostRejectAnalysisData {
   graph_patch?: any;
   run_id?: string; // For cleanup key
   animation_played?: boolean; // NEW: Track if animation already played
+  artifact?: { // NEW: Demo orchestration artifact (SSOT for tasks)
+    run_id: string;
+    status: 'running' | 'done';
+    tasks: Task[];
+  };
 }
 
 interface PostRejectAnalysisPanelProps {
@@ -76,6 +81,9 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete, onA
   
   // Check if animation should be skipped (already played)
   const shouldSkipAnimation = data.animation_played === true;
+  
+  // Use artifact tasks if available (SSOT), otherwise fallback to data.tasks
+  const displayTasks = data.artifact?.tasks || data.tasks;
   
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -165,10 +173,32 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete, onA
       setPhase('done');
       setAllowReplay(true);
       cleanup(); // Clear intervals
+      
       // NEW: Notify parent that animation is complete
       if (onAnimationComplete) {
         onAnimationComplete(true);
         console.log('[PostRejectAnalysis] Animation complete, notifying parent');
+      }
+      
+      // NEW: Mark tasks as done in checkpoint artifact (demo orchestration)
+      const currentRunId = data.run_id;
+      if (currentRunId) {
+        fetch('/api/flow2/demo/post-reject-tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ run_id: currentRunId, complete: true })
+        })
+          .then(res => res.json())
+          .then(result => {
+            if (result.ok) {
+              console.log('[PostRejectAnalysis] ✅ Tasks marked as done in artifact');
+            } else {
+              console.warn('[PostRejectAnalysis] Failed to update artifact:', result.error);
+            }
+          })
+          .catch(err => {
+            console.error('[PostRejectAnalysis] Error updating artifact:', err);
+          });
       }
     }, 3601);
     timersRef.current.push(doneTimer);
@@ -340,10 +370,12 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete, onA
             <span className="text-purple-600">1.</span> De-obfuscation Tasks
           </h4>
           <div className="bg-white rounded-lg p-3 border border-purple-200 space-y-2">
-            {data.tasks.map((task) => (
+            {displayTasks.map((task) => (
               <div key={task.id} className="flex items-start gap-2 text-sm">
                 <span className={`font-mono font-bold text-xs px-1.5 py-0.5 rounded ${
-                  task.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                  task.status === 'done' ? 'bg-green-100 text-green-700' : 
+                  task.status === 'running' ? 'bg-blue-100 text-blue-700' :
+                  'bg-gray-100 text-gray-500'
                 }`}>
                   {getTaskStatusIcon(task.status)}
                 </span>

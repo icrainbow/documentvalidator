@@ -102,6 +102,22 @@ export interface Flow2Checkpoint {
     animation_played?: boolean;
     [key: string]: any;
   };
+  
+  // ========== DEMO-ONLY: POST-REJECT TASKS ARTIFACT ==========
+  // Single source of truth for post-reject tasks (demo orchestration)
+  // Tasks animate RUNNING → DONE within same run_id
+  artifacts?: {
+    post_reject_tasks?: {
+      run_id: string;
+      status: 'running' | 'done';
+      tasks: Array<{
+        id: string;
+        title: string;
+        status: 'pending' | 'running' | 'done';
+        detail?: string;
+      }>;
+    };
+  };
 }
 
 export interface CheckpointMetadata {
