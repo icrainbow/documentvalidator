@@ -3848,7 +3848,7 @@ function DocumentPageContent() {
   /**
    * NEW: Handle Start New Review (reset Flow2 workspace)
    */
-  const handleStartNewReview = () => {
+  const handleStartNewReview = useCallback(() => {
     if (!isFlow2) return; // GUARD
     
     console.log('[Flow2] Starting new review - resetting workspace');
@@ -3880,10 +3880,7 @@ function DocumentPageContent() {
     // Reset Post-Reject Analysis
     setPostRejectAnalysisData(null);
     
-    // Clear URL params (remove docKey) - use router.push to trigger re-render
-    router.push('/document?flow=2');
-    
-    // Reset messages
+    // Reset messages FIRST (so user sees immediate feedback)
     setMessages([{
       role: 'agent',
       agent: 'System',
@@ -3891,7 +3888,12 @@ function DocumentPageContent() {
     }]);
     
     console.log('[Flow2] ✓ Workspace reset complete');
-  };
+    
+    // CRITICAL FIX: Use window.location.href for hard navigation
+    // This forces a complete page reload, ensuring all state is truly reset
+    // router.push() doesn't work reliably when URL is already similar
+    window.location.href = '/document?flow=2';
+  }, [isFlow2, router]);
 
   const handleExitITReview = () => {
     setCase4Active(false);
