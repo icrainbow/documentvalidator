@@ -63,7 +63,12 @@ import Case4Container from '../components/case4/Case4ContainerV2';
 import Case3GuardrailBanner from '../components/case3/Case3GuardrailBanner';
 import { detectGuardrailIssue } from '../lib/case3/detectGuardrailIssue';
 import type { GuardrailIssue } from '../lib/case3/types';
-
+// Impact Simulator imports
+import { simulatorReducer, getInitialSimulatorState } from '../lib/impactSimulator/impactSimulatorReducer';
+import { parseImpactChat } from '../lib/impactSimulator/impactChat';
+import ImpactSimulatorPanel from '../components/impactSimulator/ImpactSimulatorPanel';
+import { useImpactSimulatorTimeline } from '../hooks/useImpactSimulatorTimeline';
+import { useReducer } from 'react';
 // Flow2: Input mode type (Phase 1.1)
 type Flow2InputMode = 'empty' | 'demo' | 'upload';
 
@@ -709,9 +714,32 @@ function DocumentPageContent() {
   const [case3BlockedDocId, setCase3BlockedDocId] = useState<string | null>(null);
   const [case3Issue, setCase3Issue] = useState<GuardrailIssue | null>(null);
   
+  // Impact Simulator state (fully isolated)
+  const [impactSimulatorActive, setImpactSimulatorActive] = useState(false);
+  const [impactSimulatorState, impactSimulatorDispatch] = useReducer(
+    simulatorReducer,
+    getInitialSimulatorState()
+  );
+  
   // Workspace limits
   const MAX_FLOW2_DOCUMENTS = 10;
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+  // Impact Simulator: Timeline engine hook (deterministic animation)
+  useImpactSimulatorTimeline({
+    active: impactSimulatorActive,
+    phase: impactSimulatorState.phase,
+    selectedScenarioId: impactSimulatorState.selectedScenarioId,
+    dispatch: impactSimulatorDispatch,
+    onComplete: (message) => {
+      // Add completion message to chat
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        agent: 'Impact Simulator',
+        content: message
+      }]);
+    }
+  });
 
   // Clear new message flag when chat is expanded
   useEffect(() => {
@@ -3701,6 +3729,49 @@ function DocumentPageContent() {
   const handleFlow2ChatSubmit = async (userInput: string, userMessage: Message) => {
     const lowerInput = userInput.toLowerCase();
 
+    // ========== PRIORITY 1: Impact Simulator Routing (GENERIC) ==========
+    if (impactSimulatorActive) {
+      console.log('[Chat] Routing to Impact Simulator');
+      
+      // Add user message
+      setMessages([...messages, userMessage]);
+      setInputValue('');
+      
+      // Parse command (parser decides what action to return)
+      const parseResult = parseImpactChat(userInput, impactSimulatorState);
+      
+      if (parseResult.action) {
+        // Valid action - dispatch it
+        impactSimulatorDispatch(parseResult.action);
+        
+        // Special case: EXIT action also updates page state
+        if (parseResult.action.type === 'EXIT') {
+          handleExitImpactSimulator();
+        }
+        // Special case: RESET action stays active
+        if (parseResult.action.type === 'RESET') {
+          setMessages(prev => [...prev, {
+            role: 'agent',
+            agent: 'Impact Simulator',
+            content: '🔄 Simulator reset.\n\n💬 Type **YES** to confirm and proceed.'
+          }]);
+        }
+      } else if (parseResult.message) {
+        // Invalid command - show help/error message (we know message is not null here)
+        const errorMessage: Message = {
+          role: 'agent',
+          agent: 'Impact Simulator',
+          content: parseResult.message
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+      
+      setHasNewChatMessage(true);
+      
+      // IMPORTANT: Return early, do NOT process other flows
+      return;
+    }
+
     // GUARD: Block all chat input if review is in progress
     if (isOrchestrating || flowMonitorStatus === 'running') {
       setMessages([...messages, userMessage]);
@@ -4153,6 +4224,35 @@ function DocumentPageContent() {
   const handleExitITReview = () => {
     setCase4Active(false);
   };
+
+  // Impact Simulator Handlers
+  const handleEnterImpactSimulator = useCallback(() => {
+    console.log('[ImpactSim] Entering simulator');
+    setImpactSimulatorActive(true);
+    impactSimulatorDispatch({ type: 'START' });
+    
+    // Add initial message
+    setMessages(prev => [...prev, {
+      role: 'agent',
+      agent: 'Impact Simulator',
+      content: '📡 **Impact Simulator Initialized**\n\n' +
+               'This is a deterministic mailbox decommissioning what-if analysis.\n\n' +
+               '💬 Type **YES** to confirm and proceed.'
+    }]);
+  }, []);
+
+  const handleExitImpactSimulator = useCallback(() => {
+    console.log('[ImpactSim] Exiting simulator');
+    setImpactSimulatorActive(false);
+    impactSimulatorDispatch({ type: 'EXIT' });
+    
+    // Add exit message
+    setMessages(prev => [...prev, {
+      role: 'agent',
+      agent: 'System',
+      content: '👋 Impact Simulator exited. Returning to normal Flow2 mode.'
+    }]);
+  }, []);
   
   // NEW: Phase 8 - Append findings to topic summaries when animation completes
   // Use ref to prevent duplicate calls
@@ -4663,37 +4763,52 @@ function DocumentPageContent() {
 
               {/* Right Column: Review Results Panel */}
               {isFlow2 ? (
-                // FLOW2: Clean, minimal right panel with Flow Monitor
-                <Flow2RightPanel
-                  flow2Documents={flow2Documents}
-                  isOrchestrating={isOrchestrating}
-                  orchestrationResult={orchestrationResult}
-                  isDegraded={isDegraded}
-                  degradedReason={degradedReason}
-                  onRunReview={handleGraphKycReview}
-                  onRetry={handleFlow2Retry}
-                  onOpenAgents={() => setShowAgentsDrawer(true)}
-                  agentParticipants={agentParticipants}
-                  onEnterITReview={handleEnterITReview}
-                  flowMonitorRunId={flowMonitorRunId}
-                  flowMonitorStatus={flowMonitorStatus}
-                  flowMonitorMetadata={flowMonitorMetadata}
-                  onFlowStatusChange={setFlowMonitorStatus}
-                  postRejectAnalysisData={postRejectAnalysisData}
-                  onPhase8Complete={handlePhase8Complete}
-                  onAnimationPlayed={handleAnimationPlayed}
-                  case3Active={case3Active}
-                  case4Active={case4Active}
-                  riskData={{
-                    riskLevel: computeRiskLevel(currentIssues, coverageGaps),
-                    hasHighRisk: currentIssues.some((i: any) => (i.severity === 'high' || i.severity === 'critical') && i.category === 'kyc_risk'),
-                    warningsCount: currentIssues.filter((i: any) => i.severity === 'medium').length,
-                    riskSignals: currentIssues.filter((i: any) => i.category === 'kyc_risk')
-                  }}
-                  onStartNewReview={handleStartNewReview}
-                  case2CustomStages={getCase2FlowMonitorStages()}
-                  case2CurrentStageIndex={getCase2CurrentStageIndex()}
-                />
+                impactSimulatorActive ? (
+                  // Impact Simulator Panel (replaces right panel when active)
+                  <div className="lg:col-span-1">
+                    <div className="sticky top-6">
+                      <ImpactSimulatorPanel
+                        state={impactSimulatorState}
+                        dispatch={impactSimulatorDispatch}
+                        onExit={handleExitImpactSimulator}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  // FLOW2: Clean, minimal right panel with Flow Monitor
+                  <Flow2RightPanel
+                    flow2Documents={flow2Documents}
+                    isOrchestrating={isOrchestrating}
+                    orchestrationResult={orchestrationResult}
+                    isDegraded={isDegraded}
+                    degradedReason={degradedReason}
+                    onRunReview={handleGraphKycReview}
+                    onRetry={handleFlow2Retry}
+                    onOpenAgents={() => setShowAgentsDrawer(true)}
+                    agentParticipants={agentParticipants}
+                    onEnterITReview={handleEnterITReview}
+                    flowMonitorRunId={flowMonitorRunId}
+                    flowMonitorStatus={flowMonitorStatus}
+                    flowMonitorMetadata={flowMonitorMetadata}
+                    onFlowStatusChange={setFlowMonitorStatus}
+                    postRejectAnalysisData={postRejectAnalysisData}
+                    onPhase8Complete={handlePhase8Complete}
+                    onAnimationPlayed={handleAnimationPlayed}
+                    case3Active={case3Active}
+                    case4Active={case4Active}
+                    riskData={{
+                      riskLevel: computeRiskLevel(currentIssues, coverageGaps),
+                      hasHighRisk: currentIssues.some((i: any) => (i.severity === 'high' || i.severity === 'critical') && i.category === 'kyc_risk'),
+                      warningsCount: currentIssues.filter((i: any) => i.severity === 'medium').length,
+                      riskSignals: currentIssues.filter((i: any) => i.category === 'kyc_risk')
+                    }}
+                    onStartNewReview={handleStartNewReview}
+                    case2CustomStages={getCase2FlowMonitorStages()}
+                    case2CurrentStageIndex={getCase2CurrentStageIndex()}
+                    onEnterImpactSimulator={handleEnterImpactSimulator}
+                    impactSimulatorActive={impactSimulatorActive}
+                  />
+                )
               ) : (
                 // FLOW1: Original right panel with all features
               <div className="sticky top-6 h-[calc(100vh-4rem)] overflow-y-auto">
@@ -5529,32 +5644,45 @@ function DocumentPageContent() {
                 )}
                 
                 {/* Input Bar (always visible) */}
-                <div className="flex items-center gap-2 py-2 bg-white border-t border-slate-200">
-                  {/* Toggle Button */}
-                  <button
-                    onClick={() => setIsChatExpanded(!isChatExpanded)}
-                    aria-label={isChatExpanded ? "Collapse chat" : "Expand chat"}
-                    aria-expanded={isChatExpanded}
-                    className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center text-slate-600 font-bold relative"
-                  >
-                    {isChatExpanded ? '▼' : '▲'}
-                    {!isChatExpanded && hasNewChatMessage && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-600 rounded-full animate-pulse"></span>
-                    )}
-                  </button>
+                <div className="flex flex-col">
+                  {/* Impact Simulator Mode Indicator */}
+                  {impactSimulatorActive && (
+                    <div className="mb-2 px-3 py-2 bg-purple-100 border border-purple-300 rounded-lg">
+                      <p className="text-xs font-bold text-purple-800">
+                        🧩 MODE: Impact Simulator Active
+                      </p>
+                      <p className="text-xs text-purple-600">
+                        Chat commands are routed to the simulator. Type <span className="font-mono font-semibold">EXIT</span> to return to normal mode.
+                      </p>
+                    </div>
+                  )}
                   
-                  {/* Input Field */}
-                  <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && !isAIProcessing && !isListening && handleSendMessage()}
-                    placeholder={isListening ? "Listening..." : "Type your message or ask a question..."}
-                    disabled={isAIProcessing || isListening}
-                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-slate-100"
-                  />
-                  
-                  {/* Talk Button */}
+                  <div className="flex items-center gap-2 py-2 bg-white border-t border-slate-200">
+                    {/* Toggle Button */}
+                    <button
+                      onClick={() => setIsChatExpanded(!isChatExpanded)}
+                      aria-label={isChatExpanded ? "Collapse chat" : "Expand chat"}
+                      aria-expanded={isChatExpanded}
+                      className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center text-slate-600 font-bold relative"
+                    >
+                      {isChatExpanded ? '▼' : '▲'}
+                      {!isChatExpanded && hasNewChatMessage && (
+                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-600 rounded-full animate-pulse"></span>
+                      )}
+                    </button>
+                    
+                    {/* Input Field */}
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && !isAIProcessing && !isListening && handleSendMessage()}
+                      placeholder={isListening ? "Listening..." : "Type your message or ask a question..."}
+                      disabled={isAIProcessing || isListening}
+                      className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-slate-100"
+                    />
+                    
+                    {/* Talk Button */}
                   {isRecognitionSupported && (
                     <button
                       onClick={() => {
@@ -5606,6 +5734,7 @@ function DocumentPageContent() {
                   >
                     {isAIProcessing ? 'AI...' : 'Send'}
                   </button>
+                </div>
                 </div>
                 
                 {isAIProcessing && (

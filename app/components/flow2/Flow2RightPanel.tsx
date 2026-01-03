@@ -39,6 +39,9 @@ interface Flow2RightPanelProps {
   // STRATEGIC: Case2 custom stages (no flow pollution)
   case2CustomStages?: Array<{ id: number; label: string; icon: string }> | null;
   case2CurrentStageIndex?: number;
+  // Impact Simulator props
+  onEnterImpactSimulator?: () => void;
+  impactSimulatorActive?: boolean;
 }
 
 export default function Flow2RightPanel({
@@ -52,6 +55,7 @@ export default function Flow2RightPanel({
   onOpenAgents,
   agentParticipants,
   onEnterITReview,
+  case4Active = false,
   flowMonitorRunId,
   flowMonitorStatus = 'idle',
   flowMonitorMetadata,
@@ -64,6 +68,8 @@ export default function Flow2RightPanel({
   onStartNewReview,
   case2CustomStages,
   case2CurrentStageIndex,
+  onEnterImpactSimulator,
+  impactSimulatorActive,
 }: Flow2RightPanelProps) {
   
   const hasDocuments = flow2Documents.length > 0;
@@ -191,6 +197,38 @@ export default function Flow2RightPanel({
                   }
                 >
                   🔧 Run IT Impact Review
+                </button>
+              )}
+
+              {/* Impact Simulator Button */}
+              {onEnterImpactSimulator && (
+                <button
+                  onClick={onEnterImpactSimulator}
+                  disabled={
+                    !hasDocuments || 
+                    case3Active || 
+                    case4Active || 
+                    isOrchestrating || 
+                    impactSimulatorActive
+                  }
+                  className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
+                    !hasDocuments || case3Active || case4Active || isOrchestrating || impactSimulatorActive
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
+                  }`}
+                  title={
+                    !hasDocuments 
+                      ? 'Upload at least 1 document to enable Impact Simulator' 
+                      : case3Active || case4Active
+                      ? 'Another simulation is active - please exit first'
+                      : isOrchestrating
+                      ? 'Review in progress - please wait'
+                      : impactSimulatorActive
+                      ? 'Impact Simulator already active'
+                      : 'Run mailbox decommissioning what-if analysis'
+                  }
+                >
+                  🧩 Run Impact Simulator
                 </button>
               )}
               
