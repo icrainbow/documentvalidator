@@ -173,9 +173,17 @@ export async function finalizeDecision(
     
     // PHASE 2: Set COMPLETE status
     if (!checkpoint.checkpoint_metadata) {
-      (checkpoint as any).checkpoint_metadata = {};
+      checkpoint.checkpoint_metadata = {
+        run_id: checkpoint.run_id,
+        status: 'completed',
+        paused_at_node_id: checkpoint.paused_at_node_id,
+        paused_reason: 'Review approved',
+        document_count: checkpoint.documents.length,
+        created_at: checkpoint.created_at,
+        paused_at: checkpoint.paused_at
+      };
     }
-    (checkpoint as any).checkpoint_metadata.reviewProcessStatus = 'COMPLETE';
+    checkpoint.checkpoint_metadata.reviewProcessStatus = 'COMPLETE';
     
     console.log('[SubmitDecision] Stage 1 approved -> workflow COMPLETE (no EDD)');
   }

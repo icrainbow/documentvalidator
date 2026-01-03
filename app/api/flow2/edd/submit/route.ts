@@ -118,7 +118,15 @@ export async function GET(request: NextRequest) {
   
   // ========== PHASE 2: Set COMPLETE status ==========
   if (!checkpoint.checkpoint_metadata) {
-    checkpoint.checkpoint_metadata = {} as any;
+    checkpoint.checkpoint_metadata = {
+      run_id: checkpoint.run_id,
+      status: checkpoint.status,
+      paused_at_node_id: checkpoint.paused_at_node_id,
+      paused_reason: 'EDD review approved',
+      document_count: checkpoint.documents.length,
+      created_at: checkpoint.created_at,
+      paused_at: checkpoint.paused_at
+    };
   }
   checkpoint.checkpoint_metadata.reviewProcessStatus = 'COMPLETE';
   
@@ -254,7 +262,15 @@ export async function POST(request: NextRequest) {
   
   // ========== PHASE 2: Set FAILED status ==========
   if (!checkpoint.checkpoint_metadata) {
-    checkpoint.checkpoint_metadata = {} as any;
+    checkpoint.checkpoint_metadata = {
+      run_id: checkpoint.run_id,
+      status: checkpoint.status,
+      paused_at_node_id: checkpoint.paused_at_node_id,
+      paused_reason: 'EDD review rejected',
+      document_count: checkpoint.documents.length,
+      created_at: checkpoint.created_at,
+      paused_at: checkpoint.paused_at
+    };
   }
   checkpoint.checkpoint_metadata.reviewProcessStatus = 'FAILED';
   checkpoint.checkpoint_metadata.failureReason = 'EDD review rejected by reviewer';

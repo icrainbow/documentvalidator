@@ -118,6 +118,10 @@ export interface Flow2Checkpoint {
       }>;
     };
   };
+  
+  // ========== CHECKPOINT METADATA (for review process status tracking) ==========
+  // Metadata fields for overall review outcome and animation control
+  checkpoint_metadata?: CheckpointMetadata;
 }
 
 export interface CheckpointMetadata {
