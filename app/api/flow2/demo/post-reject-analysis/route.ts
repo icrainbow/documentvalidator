@@ -197,6 +197,10 @@ export async function GET(request: Request) {
     ]
   };
   
+  // CRITICAL: Read animation_played from checkpoint to prevent animation on reload
+  // This flag should ONLY be set AFTER first animation completes (not on reject submission)
+  const animationPlayed = (checkpoint as any).checkpoint_metadata?.animation_played || false;
+  
   return NextResponse.json({
     ok: true,
     run_id,
@@ -215,7 +219,9 @@ export async function GET(request: Request) {
       run_id,
       status: isFirstLoad ? 'running' : 'done',
       tasks
-    }
+    },
+    // Animation control: true only AFTER first animation completes
+    animation_played: animationPlayed
   });
 }
 
