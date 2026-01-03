@@ -96,6 +96,25 @@ export default function ImpactSimulatorPanel({
         </div>
       </div>
       
+      {/* Awaiting Confirmation Prompt */}
+      {state.phase === 'await_confirm' && (
+        <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">💬</span>
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-blue-800 mb-1">Action Required</h3>
+              <p className="text-sm text-blue-700 mb-2">
+                Please confirm to proceed with the simulation.
+              </p>
+              <div className="bg-white px-3 py-2 rounded border border-blue-200">
+                <p className="text-xs text-slate-600 mb-1">Open chat below and type:</p>
+                <p className="text-base font-bold text-blue-800 font-mono">YES</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Scenario Selection (only show in await_choice phase) */}
       {state.phase === 'await_choice' && (
         <div className="mb-6">

@@ -5776,7 +5776,21 @@ function DocumentPageContent() {
                       )}
                     </button>
                     
-                    {/* Input Field */}
+                    {/* Collapsed State Helper Text */}
+                    {!isChatExpanded && impactSimulatorActive && impactSimulatorState.phase === 'await_confirm' && (
+                      <div className="flex-1 flex items-center justify-center gap-2 animate-pulse">
+                        <span className="text-sm font-bold text-blue-600">👆 Open chat and type "YES" to continue</span>
+                      </div>
+                    )}
+                    {!isChatExpanded && impactSimulatorActive && impactSimulatorState.phase === 'await_choice' && (
+                      <div className="flex-1 flex items-center justify-center gap-2 animate-pulse">
+                        <span className="text-sm font-bold text-purple-600">👆 Open chat and select scenario (1-4)</span>
+                      </div>
+                    )}
+                    
+                    {/* Input Field (only visible when expanded) */}
+                    {isChatExpanded && (
+                      <>
                     <input
                       type="text"
                       value={inputValue}
@@ -5839,6 +5853,8 @@ function DocumentPageContent() {
                   >
                     {isAIProcessing ? 'AI...' : 'Send'}
                   </button>
+                  </>
+                    )}
                 </div>
                 </div>
                 
