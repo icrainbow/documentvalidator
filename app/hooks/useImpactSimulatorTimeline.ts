@@ -98,6 +98,10 @@ export function useImpactSimulatorTimeline({
       clearInterval(intervalId);
     };
     
-  }, [active, phase, selectedScenarioId, dispatch, onComplete]);
+    // NOTE: dispatch and onComplete are intentionally excluded from deps
+    // - dispatch from useReducer has stable identity (never changes)
+    // - onComplete is a callback that shouldn't trigger interval restart
+    // Only re-run when the animation conditions change (active/phase/scenario)
+  }, [active, phase, selectedScenarioId]);
 }
 
