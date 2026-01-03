@@ -85,6 +85,9 @@ export function simulatorReducer(
   state: SimulatorState,
   action: SimulatorAction
 ): SimulatorState {
+  console.log('[Reducer] 📥 Action received:', action.type, action);
+  console.log('[Reducer] 📊 Current state:', { phase: state.phase, selectedScenarioId: state.selectedScenarioId });
+  
   switch (action.type) {
     case 'START': {
       return {
@@ -172,7 +175,9 @@ export function simulatorReducer(
     case 'TICK_TIMELINE_STEP': {
       const { stepId, status } = action.payload;
       
-      return {
+      console.log('[Reducer] ⏱️  Updating timeline step:', stepId, '→', status);
+      
+      const newState = {
         ...state,
         timelineSteps: state.timelineSteps.map(step =>
           step.id === stepId
@@ -180,6 +185,10 @@ export function simulatorReducer(
             : step
         )
       };
+      
+      console.log('[Reducer] ✅ Timeline steps after update:', newState.timelineSteps);
+      
+      return newState;
     }
     
     case 'SET_IMPACT_STATS': {

@@ -31,9 +31,13 @@ export interface TimelineAction {
  * @returns Array of timeline actions in deterministic order
  */
 export function buildTimelineActions(scenarioId: string): TimelineAction[] {
+  console.log('[Timeline] 🏗️  Building timeline for scenario:', scenarioId);
+  
   const actions: TimelineAction[] = [];
   
   // ========== TICK 1: Start Dependencies Step ==========
+  // NOTE: This is redundant as CHOOSE_SCENARIO already sets it to 'running'
+  // But kept for consistency and in case CHOOSE_SCENARIO logic changes
   actions.push({
     atTick: 1,
     action: {
@@ -42,6 +46,8 @@ export function buildTimelineActions(scenarioId: string): TimelineAction[] {
     },
     description: 'Start revealing consumer systems'
   });
+  
+  console.log('[Timeline] 📝 Adding tick 1: Start dependencies');
   
   // ========== TICKS 2-17: Reveal 16 Consumer Systems ==========
   CONSUMER_SYSTEMS.forEach((system, idx) => {
@@ -55,6 +61,9 @@ export function buildTimelineActions(scenarioId: string): TimelineAction[] {
     });
   });
   
+  console.log('[Timeline] 📝 Added ticks 2-17: Reveal', CONSUMER_SYSTEMS.length, 'systems');
+  console.log('[Timeline] 📝 Added ticks 2-17: Reveal', CONSUMER_SYSTEMS.length, 'systems');
+  
   // ========== TICK 18: Complete Dependencies, Start Business Scenarios ==========
   actions.push({
     atTick: 18,
@@ -65,6 +74,8 @@ export function buildTimelineActions(scenarioId: string): TimelineAction[] {
     description: 'Complete dependencies step'
   });
   
+  console.log('[Timeline] 📝 Adding tick 18: Complete dependencies');
+  
   actions.push({
     atTick: 18,
     action: {
@@ -73,6 +84,8 @@ export function buildTimelineActions(scenarioId: string): TimelineAction[] {
     },
     description: 'Start revealing business scenarios'
   });
+  
+  console.log('[Timeline] 📝 Adding tick 18: Start business scenarios');
   
   // ========== TICKS 19-34: Reveal 16 Business Scenarios ==========
   BUSINESS_SCENARIOS.forEach((biz, idx) => {
@@ -151,6 +164,9 @@ export function buildTimelineActions(scenarioId: string): TimelineAction[] {
     action: { type: 'COMPLETE' },
     description: '🎉 Simulation complete'
   });
+  
+  console.log('[Timeline] ✅ Timeline complete:', actions.length, 'actions built');
+  console.log('[Timeline] 📊 Tick range: 1 -', Math.max(...actions.map(a => a.atTick)));
   
   return actions;
 }
