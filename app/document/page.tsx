@@ -3938,8 +3938,9 @@ function DocumentPageContent() {
       'jurisdiction': 'geography_jurisdiction_risk',
     };
     
-    // Create a copy of current summaries
-    const updatedSummaries = [...flow2TopicSummaries];
+    // Create a copy of current summaries - read from state at call time
+    const currentSummaries = flow2TopicSummaries;
+    const updatedSummaries = [...currentSummaries];
     
     // For each finding, append to relevant topic
     postRejectAnalysisData.findings.forEach((finding: any) => {
@@ -3974,7 +3975,8 @@ function DocumentPageContent() {
     setFlow2TopicSummaries(updatedSummaries);
     
     // Save to checkpoint with deduplication
-    if (flowMonitorRunId && !phase8SaveInProgressRef.current) {
+    const currentRunId = flowMonitorRunId; // Capture at call time
+    if (currentRunId && !phase8SaveInProgressRef.current) {
       phase8SaveInProgressRef.current = true;
       
       try {
@@ -3982,7 +3984,7 @@ function DocumentPageContent() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            run_id: flowMonitorRunId,
+            run_id: currentRunId,
             topic_summaries: updatedSummaries,
           }),
         });
@@ -3990,7 +3992,7 @@ function DocumentPageContent() {
         if (response.ok) {
           console.log('[Phase8] ✓ Saved updated summaries to checkpoint');
         } else {
-          const error = await response.json();
+          const error = await response.json().catch(() => ({ error: 'Unknown error' }));
           console.error('[Phase8] Failed to save updated summaries:', error);
         }
       } catch (error: any) {
@@ -3999,7 +4001,7 @@ function DocumentPageContent() {
         phase8SaveInProgressRef.current = false;
       }
     }
-  }, [postRejectAnalysisData, flow2TopicSummaries, flowMonitorRunId]);
+  }, [postRejectAnalysisData, flowMonitorRunId]); // REMOVED flow2TopicSummaries from deps to prevent loop
   
   // Reset phase8 handled flag when run_id changes
   useEffect(() => {
