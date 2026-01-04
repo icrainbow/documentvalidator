@@ -4419,11 +4419,14 @@ function DocumentPageContent() {
     setCase3Active(false);
     setCase4Active(false);
     
-    // Reset Case2 state
+    // Reset Case2 state (COMPLETE)
     setCase2ProcessAccepted(false);
     setCase2State('idle');
     setCase2BannerCollapsed(false);
     setCase2TopicSummaries([]);
+    setCase2Data(null); // ✅ Added
+    setCase2Id(null); // ✅ Added
+    setCase2Query(''); // ✅ Added
     setIsLoadingCase2TopicSummaries(false); // Defensive: ensure loading is stopped
     setCase2RecommendedStageStatuses(['pending', 'pending', 'pending', 'pending', 'pending']);
     
@@ -4437,6 +4440,11 @@ function DocumentPageContent() {
     
     // Reset chat mode selection
     setChatMode('unselected');
+    
+    // Reset all loading states (defensive)
+    setIsLoadingTopicSummaries(false); // ✅ Added
+    setIsLoadingItTopicSummaries(false); // ✅ Added
+    setIsOrchestrating(false); // ✅ Added
     
     // Reset messages FIRST (so user sees immediate feedback) with mode selection prompt
     setMessages([{
