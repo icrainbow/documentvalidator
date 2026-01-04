@@ -108,6 +108,11 @@ interface Message {
   role: 'user' | 'agent';
   agent?: string;
   content: string;
+  actions?: Array<{
+    label: string;
+    onClick: () => void;
+    variant?: 'primary' | 'secondary';
+  }>;
 }
 
 // Phase 2-A: Issue Action Types
@@ -3955,11 +3960,33 @@ function DocumentPageContent() {
           role: 'agent',
           agent: 'System',
           content: '✅ **Process Review Chat Mode** activated.\n\n' +
-                   'You can now:\n' +
+                   'You can now:\n\n' +
                    '• Ask about CS Integration Exception reviews\n' +
                    '• Trigger Case 2 workflows\n' +
                    '• Upload documents for compliance review\n\n' +
-                   '💬 Type your question or trigger phrase to begin.'
+                   '💬 Type your question or trigger phrase below, or use quick actions:',
+          actions: [
+            {
+              label: '📋 Review CS Integration Exception',
+              onClick: () => {
+                setInputValue('Review CS Integration Exception process');
+                // Auto-submit
+                setTimeout(() => {
+                  const form = document.querySelector('form');
+                  if (form) form.requestSubmit();
+                }, 100);
+              },
+              variant: 'primary'
+            },
+            {
+              label: '📄 Upload Documents',
+              onClick: () => {
+                const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                if (fileInput) fileInput.click();
+              },
+              variant: 'secondary'
+            }
+          ]
         }]);
       } else if (trimmedInput === '2') {
         // IT Impact Chat mode selected
@@ -3969,7 +3996,7 @@ function DocumentPageContent() {
           agent: 'System',
           content: '✅ **IT Impact Chat Mode** activated.\n\n' +
                    'Ready to analyze mailbox decommissioning impact.\n\n' +
-                   '💬 **To start the Impact Simulator, type:**\n' +
+                   '💬 **To start the Impact Simulator, type:**\n\n' +
                    '👉 `"What is the impact of mailbox decommissioning?"`\n\n' +
                    'Or click the **🧩 Run Impact Simulator** button on the right.'
         }]);
@@ -6064,9 +6091,36 @@ function DocumentPageContent() {
                               )}
                             </div>
                           )}
-                          <p className={`text-sm ${
+                          <div className={`text-sm ${
                             msg.agent === 'Compliance Agent' ? 'text-red-800' : 'text-slate-700'
-                          }`}>{msg.content}</p>
+                          }`}>
+                            {/* Render message content with proper line breaks */}
+                            {msg.content.split('\n').map((line, lineIdx) => (
+                              <span key={lineIdx}>
+                                {line}
+                                {lineIdx < msg.content.split('\n').length - 1 && <br />}
+                              </span>
+                            ))}
+                            
+                            {/* Render action buttons if present */}
+                            {msg.actions && msg.actions.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                {msg.actions.map((action, actionIdx) => (
+                                  <button
+                                    key={actionIdx}
+                                    onClick={action.onClick}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                      action.variant === 'primary'
+                                        ? 'bg-purple-600 text-white hover:bg-purple-700'
+                                        : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                                    }`}
+                                  >
+                                    {action.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -6092,11 +6146,33 @@ function DocumentPageContent() {
                                 role: 'agent',
                                 agent: 'System',
                                 content: '✅ **Process Review Chat Mode** activated.\n\n' +
-                                         'You can now:\n' +
+                                         'You can now:\n\n' +
                                          '• Ask about CS Integration Exception reviews\n' +
                                          '• Trigger Case 2 workflows\n' +
                                          '• Upload documents for compliance review\n\n' +
-                                         '💬 Type your question or trigger phrase to begin.'
+                                         '💬 Type your question or trigger phrase below, or use quick actions:',
+                                actions: [
+                                  {
+                                    label: '📋 Review CS Integration Exception',
+                                    onClick: () => {
+                                      setInputValue('Review CS Integration Exception process');
+                                      // Auto-submit
+                                      setTimeout(() => {
+                                        const form = document.querySelector('form');
+                                        if (form) form.requestSubmit();
+                                      }, 100);
+                                    },
+                                    variant: 'primary'
+                                  },
+                                  {
+                                    label: '📄 Upload Documents',
+                                    onClick: () => {
+                                      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                                      if (fileInput) fileInput.click();
+                                    },
+                                    variant: 'secondary'
+                                  }
+                                ]
                               }
                             ]);
                             setHasNewChatMessage(true);
