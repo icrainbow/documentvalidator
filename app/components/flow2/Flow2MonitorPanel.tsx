@@ -147,6 +147,9 @@ export default function Flow2MonitorPanel({
     ? customCurrentStageIndex 
     : getCurrentStageIndex(status, checkpointMetadata?.edd_stage);
   
+  // DEBUG: Log status and calculated stage index
+  console.log('[Flow2Monitor] Current status:', status, '| Calculated stageIndex:', currentStageIndex, '| customStageIndex:', customCurrentStageIndex);
+  
   // CASE 2: Compare against custom stages length when custom stages provided
   const totalStages = customStages ? customStages.length : baseStages.length;
   const isFullyCompleted = currentStageIndex === totalStages;
@@ -405,6 +408,15 @@ export default function Flow2MonitorPanel({
       {/* Business Stage Stepper */}
       {status !== 'idle' && (
         <div className="mb-4">
+          {/* DEBUG PANEL */}
+          <div className="mb-3 p-2 bg-yellow-50 border border-yellow-300 rounded text-xs font-mono">
+            <div><strong>DEBUG:</strong></div>
+            <div>status: {status}</div>
+            <div>currentStageIndex: {currentStageIndex}</div>
+            <div>visibleStages.length: {visibleStages.length}</div>
+            <div>runId: {runId || 'null'}</div>
+          </div>
+          
           <div className="flex items-center justify-between">
             {visibleStages.map((stage, idx) => {
               // CRITICAL FIX: Use customCurrentStageIndex when provided (Case2), otherwise calculate from status
