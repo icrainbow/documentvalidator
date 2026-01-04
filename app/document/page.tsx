@@ -3922,18 +3922,49 @@ function DocumentPageContent() {
       return;
     }
 
-    // GUARD: Block all chat input if review is in progress
-    if (isOrchestrating || flowMonitorStatus === 'running') {
-      setMessages([...messages, userMessage]);
-      const blockMessage: Message = {
-        role: 'agent',
-        agent: 'System',
-        content: '⚠️ Review in process, please finish the current review process.'
-      };
-      setMessages(prev => [...prev, blockMessage]);
-      setInputValue('');
-      setHasNewChatMessage(true);
-      return;
+    // ✅ CRITICAL GUARD: Check if ANY review process is currently in progress
+    // This blocks ALL new case triggers (Case2, IT Impact, etc.)
+    const isReviewInProgress = 
+      flowMonitorStatus === 'running' || 
+      flowMonitorStatus === 'waiting_human' || 
+      flowMonitorStatus === 'resuming' ||
+      isOrchestrating;
+    
+    console.log('[Chat Guard] isReviewInProgress:', isReviewInProgress, {
+      flowMonitorStatus,
+      isOrchestrating
+    });
+    
+    // If review is in progress, block ALL chat triggers except general LLM chat
+    if (isReviewInProgress) {
+      // Check if this is a Case2 trigger or IT Impact trigger
+      const isCase2Trigger = chatMode === 'process_review' && detectCase2Trigger(userInput);
+      const isITImpactTrigger = chatMode === 'it_impact' && (
+        lowerInput.includes('impact of mailbox decommissioning') ||
+        lowerInput.includes('mailbox decom') ||
+        lowerInput.includes('impact of decommissioning')
+      );
+      
+      if (isCase2Trigger || isITImpactTrigger) {
+        setMessages([...messages, userMessage]);
+        const blockMessage: Message = {
+          role: 'agent',
+          agent: 'System',
+          content: '⚠️ **Review in Process**\n\n' +
+                   'A review is currently in progress. Please finish the current review process before starting a new case.\n\n' +
+                   'Current status: ' + flowMonitorStatus + '\n\n' +
+                   'Options:\n' +
+                   '• Wait for the review to complete\n' +
+                   '• Click "Finish & Download Reports" when ready\n' +
+                   '• Then start a new case'
+        };
+        setMessages(prev => [...prev, blockMessage]);
+        setInputValue('');
+        setHasNewChatMessage(true);
+        return;
+      }
+      
+      // If not a trigger, allow general LLM chat (handled below)
     }
 
     // ========== IT IMPACT CHAT MODE: Trigger Impact Simulator ==========
@@ -3970,7 +4001,7 @@ function DocumentPageContent() {
     // ========== PROCESS REVIEW CHAT MODE: Case 2 and other flows ==========
     // CASE 2: Check for CS Integration Exception trigger (Flow2 only)
     if (chatMode === 'process_review' && detectCase2Trigger(userInput)) {
-      // If Case 2 is already active, inform user and return
+      // ✅ GUARD: If Case 2 is already active (but not running), inform user
       if (case2State !== 'idle') {
         setMessages([...messages, userMessage]);
         const alreadyActiveMessage: Message = {
