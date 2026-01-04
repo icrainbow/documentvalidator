@@ -711,23 +711,33 @@ function DocumentPageContent() {
   
   // UNIFIED: Compute data extraction loading state and context
   const getDataExtractionState = (): { isExtracting: boolean; context: 'case2' | 'kyc' | 'it' } => {
+    // DEBUG: Log all loading states
+    console.log('[DataExtraction] isLoadingCase2TopicSummaries:', isLoadingCase2TopicSummaries);
+    console.log('[DataExtraction] isLoadingItTopicSummaries:', isLoadingItTopicSummaries);
+    console.log('[DataExtraction] isLoadingTopicSummaries:', isLoadingTopicSummaries);
+    
     // Priority 1: Case2 loading
     if (isLoadingCase2TopicSummaries) {
+      console.log('[DataExtraction] → Returning: case2');
       return { isExtracting: true, context: 'case2' };
     }
     // Priority 2: IT Review loading
     if (isLoadingItTopicSummaries) {
+      console.log('[DataExtraction] → Returning: it');
       return { isExtracting: true, context: 'it' };
     }
     // Priority 3: Standard KYC loading
     if (isLoadingTopicSummaries) {
+      console.log('[DataExtraction] → Returning: kyc');
       return { isExtracting: true, context: 'kyc' };
     }
     // Default: not extracting
+    console.log('[DataExtraction] → Returning: not extracting');
     return { isExtracting: false, context: 'kyc' };
   };
   
   const dataExtractionState = getDataExtractionState();
+  console.log('[DataExtraction] Final state:', dataExtractionState);
   
   // Case 4: IT Review state
   const [case4Active, setCase4Active] = useState(false);
