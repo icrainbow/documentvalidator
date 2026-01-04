@@ -1725,8 +1725,15 @@ function DocumentPageContent() {
    * STRATEGIC: Branch to Case2 real review if Case2 is accepted
    */
   const handleGraphKycReview = async () => {
+    // DEBUG: Log Case2 状态
+    console.log('[DEBUG handleGraphKycReview] isFlow2:', isFlow2);
+    console.log('[DEBUG handleGraphKycReview] case2State:', case2State);
+    console.log('[DEBUG handleGraphKycReview] case2ProcessAccepted:', case2ProcessAccepted);
+    console.log('[DEBUG handleGraphKycReview] isCase2Active:', isCase2Active);
+    
     // STRATEGIC: Branch to Case2 real review if Case2 is accepted
     if (isCase2Active) {
+      console.log('[DEBUG] Branching to handleCase2RealProcessReview');
       await handleCase2RealProcessReview();
       return;
     }
