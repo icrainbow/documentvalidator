@@ -502,10 +502,10 @@ export default function Flow2MonitorPanel({
                         (finalReportCompleted ? 'bg-green-500 text-white' : '') || // Final Report green when fully approved
                         (isRejectedAtHumanReview
                           ? 'bg-red-500 text-white'
+                          : isCurrent  // PRIORITY FIX: isCurrent (blue) MUST come before isCompleted (green)
+                          ? 'bg-blue-500 text-white ring-4 ring-blue-200'
                           : isCompleted
                           ? 'bg-green-500 text-white'
-                          : isCurrent
-                          ? 'bg-blue-500 text-white ring-4 ring-blue-200'
                           : 'bg-slate-200 text-slate-500')
                       } ${isRiskStage && isCompleted ? 'cursor-pointer hover:ring-4 hover:ring-blue-200' : 'cursor-default'}`}
                       title={isRiskStage && isCompleted ? 'Click to view risk details' : stage.label}
