@@ -68,14 +68,18 @@ const BUSINESS_STAGES = [
 ];
 
 function getCurrentStageIndex(status: FlowStatus, eddStage?: { status: string; decision?: string }): number {
+  console.log('[getCurrentStageIndex] Called with status:', status, '| eddStage:', eddStage);
+  
   switch (status) {
     case 'idle': return 0;
     case 'running': return 2; // In progress at stages 2-3
     case 'waiting_human':
       // If EDD stage exists and is waiting, show stage 5
       if (eddStage && eddStage.status === 'waiting_edd_approval') {
+        console.log('[getCurrentStageIndex] waiting_human + EDD → return 5');
         return 5;
       }
+      console.log('[getCurrentStageIndex] waiting_human (no EDD) → return 4');
       return 4; // Stage 1 waiting
     case 'resuming': return eddStage ? 5 : 4;
     case 'completed': 
@@ -149,6 +153,7 @@ export default function Flow2MonitorPanel({
   
   // DEBUG: Log status and calculated stage index
   console.log('[Flow2Monitor] Current status:', status, '| Calculated stageIndex:', currentStageIndex, '| customStageIndex:', customCurrentStageIndex);
+  console.log('[Flow2Monitor] customCurrentStageIndex !== undefined?', customCurrentStageIndex !== undefined, '| Will use custom?', customCurrentStageIndex !== undefined);
   
   // CASE 2: Compare against custom stages length when custom stages provided
   const totalStages = customStages ? customStages.length : baseStages.length;
