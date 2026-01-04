@@ -4416,19 +4416,25 @@ function DocumentPageContent() {
     setHumanGateData(null);
     setIsDegraded(false);
     setDegradedReason('');
+    
+    // ✅ Reset ALL case active flags (complete fresh state)
     setCase3Active(false);
     setCase4Active(false);
+    setImpactSimulatorActive(false); // ✅ Added: Impact Simulator
     
     // Reset Case2 state (COMPLETE)
     setCase2ProcessAccepted(false);
     setCase2State('idle');
     setCase2BannerCollapsed(false);
     setCase2TopicSummaries([]);
-    setCase2Data(null); // ✅ Added
-    setCase2Id(null); // ✅ Added
-    setCase2Query(''); // ✅ Added
-    setIsLoadingCase2TopicSummaries(false); // Defensive: ensure loading is stopped
+    setCase2Data(null);
+    setCase2Id(null);
+    setCase2Query('');
+    setIsLoadingCase2TopicSummaries(false);
     setCase2RecommendedStageStatuses(['pending', 'pending', 'pending', 'pending', 'pending']);
+    
+    // ✅ Reset Impact Simulator state (use RESET action)
+    impactSimulatorDispatch({ type: 'RESET' });
     
     // Reset Flow Monitor
     setFlowMonitorStatus('idle');
@@ -4442,9 +4448,9 @@ function DocumentPageContent() {
     setChatMode('unselected');
     
     // Reset all loading states (defensive)
-    setIsLoadingTopicSummaries(false); // ✅ Added
-    setIsLoadingItTopicSummaries(false); // ✅ Added
-    setIsOrchestrating(false); // ✅ Added
+    setIsLoadingTopicSummaries(false);
+    setIsLoadingItTopicSummaries(false);
+    setIsOrchestrating(false);
     
     // Reset messages FIRST (so user sees immediate feedback) with mode selection prompt
     setMessages([{
@@ -4454,7 +4460,7 @@ function DocumentPageContent() {
                'Please choose your chat mode using the buttons below:'
     }]);
     
-    console.log('[Flow2] ✓ Workspace reset complete');
+    console.log('[Flow2] ✓ Workspace reset complete - ALL case flags cleared');
     
     // CRITICAL FIX: Use window.location.href for hard navigation
     // This forces a complete page reload, ensuring all state is truly reset
