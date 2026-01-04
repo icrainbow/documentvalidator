@@ -87,7 +87,7 @@ export default function HomePage() {
             onClick={() => router.push('/document?flow=2')}
             className="px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all font-bold text-xl shadow-lg hover:shadow-xl transform hover:scale-105"
           >
-            Open Agentic Review Process
+            Start Agentic Review Process
           </button>
         </div>
 
