@@ -696,7 +696,7 @@ function DocumentPageContent() {
   
   // STRATEGIC: Compute current stage index for Case2
   const getCase2CurrentStageIndex = () => {
-    if (!isCase2Active) return 0;
+    if (!isCase2Active) return undefined; // Must return undefined for normal Flow2!
     
     // If all stages completed, return last stage index
     const allCompleted = case2RecommendedStageStatuses.every(s => s === 'completed');
