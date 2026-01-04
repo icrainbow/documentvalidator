@@ -739,6 +739,42 @@ function DocumentPageContent() {
   const dataExtractionState = getDataExtractionState();
   console.log('[DataExtraction] Final state:', dataExtractionState);
   
+  // ========== HELPER: Clear previous review state ==========
+  // Called when starting a new case to ensure clean UI
+  const clearPreviousReviewState = () => {
+    console.log('[ClearState] Clearing previous review state for new case');
+    
+    // Flow Monitor state
+    setFlowMonitorStatus('idle');
+    setFlowMonitorRunId(null);
+    setFlowMonitorMetadata(null);
+    
+    // Review results
+    setCurrentIssues([]);
+    setGraphReviewTrace(null);
+    setGraphTopics([]);
+    setConflicts([]);
+    setCoverageGaps([]);
+    
+    // Topic summaries
+    setFlow2TopicSummaries([]);
+    setTopicSummariesRunId(null);
+    
+    // Human gate
+    setHumanGateState(null);
+    
+    // Post-reject data
+    setPostRejectAnalysisData(null);
+    
+    // Loading states
+    setIsLoadingTopicSummaries(false);
+    setIsLoadingCase2TopicSummaries(false);
+    setIsLoadingItTopicSummaries(false);
+    setIsOrchestrating(false);
+    
+    console.log('[ClearState] ✓ Previous review state cleared');
+  };
+  
   // Case 4: IT Review state
   const [case4Active, setCase4Active] = useState(false);
   
@@ -1793,6 +1829,10 @@ function DocumentPageContent() {
       }]);
       return;
     }
+    
+    // ✅ CRITICAL: Clear previous review state before starting new Standard KYC review
+    // NOTE: This only clears review results, not documents
+    clearPreviousReviewState();
     
     setIsOrchestrating(true);
     setOrchestrationResult(null);
@@ -3935,6 +3975,9 @@ function DocumentPageContent() {
         return;
       }
       
+      // ✅ CRITICAL: Clear previous review state before starting new case
+      clearPreviousReviewState();
+      
       // Trigger Case 2 flow
       setMessages([...messages, userMessage]);
       setInputValue('');
@@ -4284,6 +4327,9 @@ function DocumentPageContent() {
 
   // Case 4 Handlers
   const handleEnterITReview = () => {
+    // ✅ CRITICAL: Clear previous review state before entering IT Review
+    clearPreviousReviewState();
+    
     setCase4Active(true);
     
     // Trigger IT topic summaries generation
@@ -4400,6 +4446,10 @@ function DocumentPageContent() {
   // Impact Simulator Handlers
   const handleEnterImpactSimulator = useCallback(() => {
     console.log('[ImpactSim] Entering simulator');
+    
+    // ✅ CRITICAL: Clear previous review state before starting Impact Simulator
+    clearPreviousReviewState();
+    
     setImpactSimulatorActive(true);
     impactSimulatorDispatch({ type: 'START' });
     
