@@ -200,31 +200,27 @@ export default function Flow2RightPanel({
                 </button>
               )}
 
-              {/* Impact Simulator Button */}
-              {onEnterImpactSimulator && (
+              {/* Impact Simulator Button - ONLY show when IT Review Mode (case4) is active */}
+              {onEnterImpactSimulator && case4Active && !impactSimulatorActive && (
                 <button
                   onClick={onEnterImpactSimulator}
                   disabled={
                     !hasDocuments || 
                     case3Active || 
-                    case4Active || 
-                    isOrchestrating || 
-                    impactSimulatorActive
+                    isOrchestrating
                   }
                   className={`w-full px-5 py-3 rounded-lg text-sm font-bold transition-all shadow-md ${
-                    !hasDocuments || case3Active || case4Active || isOrchestrating || impactSimulatorActive
+                    !hasDocuments || case3Active || isOrchestrating
                       ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                       : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
                   }`}
                   title={
                     !hasDocuments 
                       ? 'Upload at least 1 document to enable Impact Simulator' 
-                      : case3Active || case4Active
+                      : case3Active
                       ? 'Another simulation is active - please exit first'
                       : isOrchestrating
                       ? 'Review in progress - please wait'
-                      : impactSimulatorActive
-                      ? 'Impact Simulator already active'
                       : 'Run mailbox decommissioning what-if analysis'
                   }
                 >
