@@ -4201,6 +4201,24 @@ function DocumentPageContent() {
       console.log('[Case2] Topics extracted, now showing Flow Monitor stages');
       setFlowMonitorStatus('running');
       
+      // ✅ CRITICAL: Set runId and metadata for Case2 (needed for Finish button to work)
+      // Even though Case2 doesn't call /api/orchestrate, it needs these for UI consistency
+      const case2RunId = case2Id || `case2-${Date.now()}`;
+      setFlowMonitorRunId(case2RunId);
+      
+      const case2Metadata: any = {
+        run_id: case2RunId,
+        status: 'active' as const,
+        paused_at_node_id: '',
+        paused_reason: '',
+        document_count: flow2Documents.length,
+        created_at: new Date().toISOString(),
+        paused_at: new Date().toISOString(),
+        reviewProcessStatus: 'RUNNING' as const, // Will be updated to COMPLETE after animation
+      };
+      setFlowMonitorMetadata(case2Metadata);
+      console.log('[Case2] ✓ Flow Monitor runId and metadata set:', case2RunId);
+      
       // 5. 动画：逐个标记 stages 为 completed (每个延迟 1 秒)
       const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
       
@@ -4217,6 +4235,13 @@ function DocumentPageContent() {
       await sleep(500);
       setFlowMonitorStatus('completed');
       setCase2State('started'); // Use existing state value
+      
+      // ✅ Update metadata to COMPLETE (for Finish button and UI consistency)
+      setFlowMonitorMetadata(prev => prev ? {
+        ...prev,
+        reviewProcessStatus: 'COMPLETE',
+      } : null);
+      console.log('[Case2] ✓ Flow Monitor metadata updated to COMPLETE');
       
       // 7. 成功消息
       const successMsg: Message = {
