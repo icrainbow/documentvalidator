@@ -4051,9 +4051,11 @@ function DocumentPageContent() {
   // Case2: REAL process review (Phase 4 -真实 LLM 调用 + 硬编码自动通过)
   const handleCase2RealProcessReview = async () => {
     console.log('[Case2] Starting REAL process review');
+    console.log('[Case2] flow2Documents.length:', flow2Documents.length);
     
     // 1. Validate documents (至少 3 个)
     if (flow2Documents.length < 3) {
+      console.warn('[Case2] Insufficient documents - aborting');
       const errorMsg: Message = {
         role: 'agent',
         agent: 'Case 2 Agent',
@@ -4063,6 +4065,8 @@ function DocumentPageContent() {
       setHasNewChatMessage(true);
       return;
     }
+    
+    console.log('[Case2] ✓ Document validation passed, proceeding with review');
     
     // 2. Set orchestrating state
     setIsOrchestrating(true);
