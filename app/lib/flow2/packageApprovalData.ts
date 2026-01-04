@@ -1,10 +1,14 @@
 /**
  * Flow2: Approval Package Generation
  * 
- * Packages full review trace + evidence into downloadable JSON for failed reviews.
+ * Packages full review trace + evidence into downloadable files:
+ * 1. Human-readable Markdown report (Review_Status_Report_{runId}.md)
+ * 2. Machine-readable JSON data (Review_Data_Package_{runId}.json)
  * 
  * PHASE 3 implementation - client-side packaging from poll endpoint data.
  */
+
+import { generateMarkdownReport, downloadTextFile } from './generateHumanReadableReport';
 
 export interface ApprovalPackage {
   packageVersion: '1.0';
@@ -180,7 +184,7 @@ export function createApprovalPackage(
 }
 
 /**
- * Download approval package as JSON file
+ * Download approval package (both human-readable and machine-readable formats)
  */
 export function downloadApprovalPackage(
   runId: string,
@@ -189,33 +193,42 @@ export function downloadApprovalPackage(
   try {
     const pkg = createApprovalPackage(runId, checkpointMetadata);
     
-    // Serialize to JSON
-    const jsonString = JSON.stringify(pkg, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    
-    // Generate filename
+    // Generate short ID for filename
+    const shortId = runId.slice(0, 8);
     const timestamp = new Date().toISOString()
       .replace(/[:.]/g, '-')
       .replace('T', '_')
       .slice(0, 19); // YYYYMMDD_HHmmss
-    const filename = `approval-package_${runId.slice(0, 8)}_${timestamp}.json`;
     
-    // Trigger download
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
+    // 1. Download HUMAN-READABLE Markdown report
+    const markdownReport = generateMarkdownReport(pkg);
+    const markdownFilename = `Review_Status_Report_${shortId}.md`;
+    downloadTextFile(markdownReport, markdownFilename, 'text/markdown');
     
-    // Cleanup
+    // Small delay to avoid browser blocking multiple downloads
     setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
+      // 2. Download MACHINE-READABLE JSON package
+      const jsonString = JSON.stringify(pkg, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const jsonFilename = `Review_Data_Package_${shortId}_${timestamp}.json`;
+      
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = jsonFilename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+      
+      console.log(`[ApprovalPackage] Downloaded: ${markdownFilename} + ${jsonFilename}`);
+    }, 300);
     
-    console.log(`[ApprovalPackage] Downloaded: ${filename}`);
   } catch (error: any) {
     console.error('[ApprovalPackage] Download failed:', error.message);
     throw error;

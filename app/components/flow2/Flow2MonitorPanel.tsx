@@ -322,7 +322,7 @@ export default function Flow2MonitorPanel({
     // Step 1: Trigger package download
     try {
       downloadApprovalPackage(runId, checkpointMetadata);
-      showToast('✅ Approval package downloaded');
+      showToast('✅ Review reports downloaded (Markdown + JSON)');
     } catch (error: any) {
       console.error('[Flow2Monitor] Package download failed:', error);
       showToast('⚠️ Download failed, but resetting workspace');
@@ -695,10 +695,10 @@ export default function Flow2MonitorPanel({
             className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold text-sm hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
           >
             <span className="text-lg">✓</span>
-            <span>Finish & Download Package</span>
+            <span>Finish & Download Reports</span>
           </button>
           <p className="text-xs text-slate-500 text-center mt-2">
-            Download approval package and reset workspace
+            Download review status report (Markdown + JSON) and reset workspace
           </p>
         </div>
       )}
