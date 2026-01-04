@@ -69,6 +69,10 @@ import { parseImpactChat } from '../lib/impactSimulator/impactChat';
 import ImpactSimulatorPanel from '../components/impactSimulator/ImpactSimulatorPanel';
 import { useImpactSimulatorTimeline } from '../hooks/useImpactSimulatorTimeline';
 import { useReducer } from 'react';
+// NEW: Agentic review card and synthesis
+import ImpactAgenticReviewCard from '../components/impactSimulator/ImpactAgenticReviewCard';
+import { generateImpactSynthesis } from '../lib/impactSimulator/generateImpactSynthesis';
+import { CONSUMER_SYSTEMS, SCENARIOS } from '../lib/impactSimulator/demoImpactData';
 // Flow2: Input mode type (Phase 1.1)
 type Flow2InputMode = 'empty' | 'demo' | 'upload';
 
@@ -790,6 +794,9 @@ function DocumentPageContent() {
     getInitialSimulatorState()
   );
   
+  // NEW: Track if agentic synthesis has been posted (one-time flag)
+  const [hasPostedAgenticSummary, setHasPostedAgenticSummary] = useState(false);
+  
   // Chat mode selection (Flow2 only)
   type ChatMode = 'unselected' | 'process_review' | 'it_impact';
   const [chatMode, setChatMode] = useState<ChatMode>('unselected');
@@ -813,6 +820,65 @@ function DocumentPageContent() {
       }]);
     }
   });
+  
+  // NEW: Delayed natural language synthesis (Impact Simulator only, once per completion)
+  useEffect(() => {
+    // Gate 1: Only run for Flow2 + Impact Simulator active
+    if (!isFlow2 || !impactSimulatorActive) {
+      return;
+    }
+    
+    // Gate 2: Only run when analysis is complete
+    if (impactSimulatorState.phase !== 'done') {
+      return;
+    }
+    
+    // Gate 3: Only run once per completion
+    if (hasPostedAgenticSummary) {
+      return;
+    }
+    
+    console.log('[ImpactSynthesis] ✅ Analysis complete, scheduling delayed chat synthesis');
+    
+    const timeoutId = setTimeout(() => {
+      console.log('[ImpactSynthesis] 📝 Appending natural language synthesis to chat');
+      
+      const selectedScenario = impactSimulatorState.selectedScenarioId || 'FULL_DECOM';
+      const scenarioLabel = SCENARIOS.find(s => s.id === selectedScenario)?.label || 'Mailbox Decommissioning';
+      
+      const synthesisText = generateImpactSynthesis(
+        CONSUMER_SYSTEMS,
+        scenarioLabel,
+        selectedScenario
+      );
+      
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'agent',
+          agent: 'Agentic Review',
+          content: synthesisText,
+          timestamp: new Date().toISOString()
+        }
+      ]);
+      
+      setHasPostedAgenticSummary(true);
+    }, 1500); // 1.5 second delay after completion
+    
+    return () => {
+      console.log('[ImpactSynthesis] 🧹 Cleaning up synthesis timer');
+      clearTimeout(timeoutId);
+    };
+  }, [isFlow2, impactSimulatorActive, impactSimulatorState.phase, hasPostedAgenticSummary]);
+  
+  // NEW: Reset synthesis flag when user navigates back or starts new scenario
+  useEffect(() => {
+    // Reset flag when phase transitions away from 'done' (e.g., back to 'await_choice' or 'running')
+    if (impactSimulatorActive && impactSimulatorState.phase !== 'done' && hasPostedAgenticSummary) {
+      console.log('[ImpactSynthesis] 🔄 Phase changed away from done, resetting synthesis flag');
+      setHasPostedAgenticSummary(false);
+    }
+  }, [impactSimulatorActive, impactSimulatorState.phase, hasPostedAgenticSummary]);
 
   // Clear new message flag when chat is expanded
   useEffect(() => {
@@ -3851,6 +3917,7 @@ function DocumentPageContent() {
         }
         // Special case: RESET action stays active
         if (parseResult.action.type === 'RESET') {
+          setHasPostedAgenticSummary(false); // Reset flag for new simulation
           setMessages(prev => [...prev, {
             role: 'agent',
             agent: 'Impact Simulator',
@@ -3922,21 +3989,45 @@ function DocumentPageContent() {
       return;
     }
 
-    // ✅ CRITICAL GUARD: Check if ANY review process is currently in progress
-    // This blocks ALL new case triggers (Case2, IT Impact, etc.)
+    // ✅ CRITICAL GUARD: Check if new case triggers should be blocked
+    // Block conditions:
+    // 1. Review actively in progress (running/waiting/resuming)
+    // 2. Documents uploaded but review not started (about to start)
+    // Allow conditions:
+    // 1. Brand new page with no documents uploaded
+    // 2. Review fully finished (completed or rejected with final status)
+    
     const isReviewInProgress = 
       flowMonitorStatus === 'running' || 
       flowMonitorStatus === 'waiting_human' || 
       flowMonitorStatus === 'resuming' ||
       isOrchestrating;
     
-    console.log('[Chat Guard] isReviewInProgress:', isReviewInProgress, {
+    const hasDocumentsUploaded = flow2Documents.length > 0;
+    
+    // Review is "fully finished" if it reached a final state (completed/rejected)
+    // AND has metadata indicating the review actually ran
+    const isReviewFullyFinished = 
+      (flowMonitorStatus === 'completed' || flowMonitorStatus === 'rejected') &&
+      flowMonitorMetadata !== null;
+    
+    // Block case triggers if:
+    // - Review is actively in progress, OR
+    // - Documents uploaded but review not finished yet (includes idle state with docs)
+    const shouldBlockCaseTriggers = 
+      isReviewInProgress || 
+      (hasDocumentsUploaded && !isReviewFullyFinished);
+    
+    console.log('[Chat Guard] shouldBlockCaseTriggers:', shouldBlockCaseTriggers, {
       flowMonitorStatus,
-      isOrchestrating
+      isOrchestrating,
+      hasDocumentsUploaded,
+      isReviewFullyFinished,
+      flow2DocumentsCount: flow2Documents.length
     });
     
-    // If review is in progress, block ALL chat triggers except general LLM chat
-    if (isReviewInProgress) {
+    // If case triggers should be blocked, check if this is a case trigger
+    if (shouldBlockCaseTriggers) {
       // Check if this is a Case2 trigger or IT Impact trigger
       const isCase2Trigger = chatMode === 'process_review' && detectCase2Trigger(userInput);
       const isITImpactTrigger = chatMode === 'it_impact' && (
@@ -3947,16 +4038,28 @@ function DocumentPageContent() {
       
       if (isCase2Trigger || isITImpactTrigger) {
         setMessages([...messages, userMessage]);
+        
+        // Determine appropriate message based on state
+        let blockReason = '';
+        if (isReviewInProgress) {
+          blockReason = 'A review is currently in progress.';
+        } else if (hasDocumentsUploaded && flowMonitorStatus === 'idle') {
+          blockReason = 'Documents are uploaded and ready for review. Please start the current review first, or reset the workspace to start a new case.';
+        } else {
+          blockReason = 'A review workflow is active.';
+        }
+        
         const blockMessage: Message = {
           role: 'agent',
           agent: 'System',
-          content: '⚠️ **Review in Process**\n\n' +
-                   'A review is currently in progress. Please finish the current review process before starting a new case.\n\n' +
-                   'Current status: ' + flowMonitorStatus + '\n\n' +
+          content: '⚠️ **Cannot Start New Case**\n\n' +
+                   blockReason + '\n\n' +
+                   'Current status: ' + flowMonitorStatus + '\n' +
+                   'Documents uploaded: ' + flow2Documents.length + '\n\n' +
                    'Options:\n' +
-                   '• Wait for the review to complete\n' +
-                   '• Click "Finish & Download Reports" when ready\n' +
-                   '• Then start a new case'
+                   '• Complete the current review process\n' +
+                   '• Click "Finish & Download Reports" when done\n' +
+                   '• Then you can start a new case'
         };
         setMessages(prev => [...prev, blockMessage]);
         setInputValue('');
@@ -4536,6 +4639,7 @@ function DocumentPageContent() {
     clearPreviousReviewState();
     
     setImpactSimulatorActive(true);
+    setHasPostedAgenticSummary(false); // Reset flag for new simulation
     impactSimulatorDispatch({ type: 'START' });
     
     // Add initial message
@@ -4551,6 +4655,7 @@ function DocumentPageContent() {
   const handleExitImpactSimulator = useCallback(() => {
     console.log('[ImpactSim] Exiting simulator');
     setImpactSimulatorActive(false);
+    setHasPostedAgenticSummary(false); // Reset flag
     impactSimulatorDispatch({ type: 'EXIT' });
     
     // Add exit message - prompt for mode selection again
@@ -4914,6 +5019,18 @@ function DocumentPageContent() {
                       : (case4Active ? isLoadingItTopicSummaries : isLoadingTopicSummaries)
                   }
                   documents={flow2Documents}
+                />
+              )}
+              
+              {/* NEW: Impact Simulator Agentic Review Card (Flow2 + Impact complete only) */}
+              {isFlow2 && impactSimulatorActive && impactSimulatorState.phase === 'done' && (
+                <ImpactAgenticReviewCard
+                  systems={CONSUMER_SYSTEMS}
+                  scenarioTitle={
+                    impactSimulatorState.selectedScenarioId
+                      ? SCENARIOS.find(s => s.id === impactSimulatorState.selectedScenarioId)?.label || 'Mailbox Decommissioning'
+                      : 'Mailbox Decommissioning'
+                  }
                 />
               )}
               

@@ -55,15 +55,15 @@ export interface HeatmapNode {
 export const SCENARIOS: ImpactScenario[] = [
   {
     id: 'FULL_DECOM',
-    label: 'Full Decommission',
+    label: 'Full Decommission Immediately',
     description: 'Complete mailbox + SOAP API shutdown. All consumers must migrate to REST API or alternative channels.',
     impactMultiplier: 1.0,
     riskLevel: 'critical'
   },
   {
     id: 'DECOM_WITH_MIGRATION',
-    label: 'Decommission with 6-Month Migration Window',
-    description: 'Gradual shutdown with migration support. REST API provided, legacy clients given 6 months to transition.',
+    label: 'Decommission with 12-Month Migration Window',
+    description: 'Gradual shutdown with migration support. REST API provided, legacy clients given 12 months to transition.',
     impactMultiplier: 0.7,
     riskLevel: 'high'
   },
