@@ -415,6 +415,11 @@ export default function Flow2MonitorPanel({
               const isCurrent = idx === stageIndexForRendering - 1;
               const isPending = idx >= stageIndexForRendering;
               
+              // DEBUG: Log stage rendering details
+              if (runId) {
+                console.log(`[Flow2Monitor] Stage ${stage.id} (idx=${idx}): status=${status}, stageIndexForRendering=${stageIndexForRendering}, isCompleted=${isCompleted}, isCurrent=${isCurrent}`);
+              }
+              
               // Special case: Human Review (stage 4) rejected at stage 1
               const isRejectedAtHumanReview = status === 'rejected' && stage.id === 4 && !checkpointMetadata?.edd_stage;
               
