@@ -709,6 +709,26 @@ function DocumentPageContent() {
     return firstPendingIdx === -1 ? case2RecommendedStageStatuses.length : firstPendingIdx;
   };
   
+  // UNIFIED: Compute data extraction loading state and context
+  const getDataExtractionState = (): { isExtracting: boolean; context: 'case2' | 'kyc' | 'it' } => {
+    // Priority 1: Case2 loading
+    if (isLoadingCase2TopicSummaries) {
+      return { isExtracting: true, context: 'case2' };
+    }
+    // Priority 2: IT Review loading
+    if (isLoadingItTopicSummaries) {
+      return { isExtracting: true, context: 'it' };
+    }
+    // Priority 3: Standard KYC loading
+    if (isLoadingTopicSummaries) {
+      return { isExtracting: true, context: 'kyc' };
+    }
+    // Default: not extracting
+    return { isExtracting: false, context: 'kyc' };
+  };
+  
+  const dataExtractionState = getDataExtractionState();
+  
   // Case 4: IT Review state
   const [case4Active, setCase4Active] = useState(false);
   
@@ -4320,6 +4340,14 @@ function DocumentPageContent() {
     setCase3Active(false);
     setCase4Active(false);
     
+    // Reset Case2 state
+    setCase2ProcessAccepted(false);
+    setCase2State('idle');
+    setCase2BannerCollapsed(false);
+    setCase2TopicSummaries([]);
+    setIsLoadingCase2TopicSummaries(false); // Defensive: ensure loading is stopped
+    setCase2RecommendedStageStatuses(['pending', 'pending', 'pending', 'pending', 'pending']);
+    
     // Reset Flow Monitor
     setFlowMonitorStatus('idle');
     setFlowMonitorRunId(null);
@@ -4671,7 +4699,7 @@ function DocumentPageContent() {
                   collapsed={case2BannerCollapsed}
                   onToggleCollapse={() => setCase2BannerCollapsed(!case2BannerCollapsed)}
                   onAccept={handleCase2Accept}
-                  isAcceptLoading={isLoadingCase2TopicSummaries}
+                  isAcceptLoading={false}
                   onStart={handleCase2Start}
                   onTraceComplete={() => setCase2State('synthesized')}
                 />
@@ -4935,7 +4963,8 @@ function DocumentPageContent() {
                     onStartNewReview={handleStartNewReview}
                     case2CustomStages={getCase2FlowMonitorStages()}
                     case2CurrentStageIndex={getCase2CurrentStageIndex()}
-                    isCase2DataExtracting={isLoadingCase2TopicSummaries}
+                    isDataExtracting={dataExtractionState.isExtracting}
+                    dataExtractionContext={dataExtractionState.context}
                     onEnterImpactSimulator={handleEnterImpactSimulator}
                     impactSimulatorActive={impactSimulatorActive}
                   />

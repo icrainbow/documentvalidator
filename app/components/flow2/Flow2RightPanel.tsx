@@ -39,7 +39,9 @@ interface Flow2RightPanelProps {
   // STRATEGIC: Case2 custom stages (no flow pollution)
   case2CustomStages?: Array<{ id: number; label: string; icon: string }> | null;
   case2CurrentStageIndex?: number;
-  isCase2DataExtracting?: boolean; // NEW: For "Data Extraction In Progress" banner
+  // UNIFIED: Data extraction loading state
+  isDataExtracting?: boolean;
+  dataExtractionContext?: 'case2' | 'kyc' | 'it';
   // Impact Simulator props
   onEnterImpactSimulator?: () => void;
   impactSimulatorActive?: boolean;
@@ -69,7 +71,8 @@ export default function Flow2RightPanel({
   onStartNewReview,
   case2CustomStages,
   case2CurrentStageIndex,
-  isCase2DataExtracting = false, // NEW: Default to false
+  isDataExtracting = false,
+  dataExtractionContext = 'kyc',
   onEnterImpactSimulator,
   impactSimulatorActive,
 }: Flow2RightPanelProps) {
@@ -119,7 +122,8 @@ export default function Flow2RightPanel({
           onStartNewReview={onStartNewReview}
           customStages={case2CustomStages || undefined}
           customCurrentStageIndex={case2CurrentStageIndex}
-          isCase2DataExtracting={isCase2DataExtracting}
+          isDataExtracting={isDataExtracting}
+          dataExtractionContext={dataExtractionContext}
         />
         
         {/* PHASE 8: Post-Reject Analysis (tasks, skills, findings) */}
