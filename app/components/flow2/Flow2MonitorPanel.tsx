@@ -55,6 +55,8 @@ interface Flow2MonitorPanelProps {
   // STRATEGIC: Support custom stages for Case2 without breaking KYC
   customStages?: Array<{ id: number; label: string; icon: string }>;
   customCurrentStageIndex?: number;
+  // Case2: Data extraction loading state
+  isCase2DataExtracting?: boolean;
 }
 
 // Business stages (NOT node-level)
@@ -123,6 +125,7 @@ export default function Flow2MonitorPanel({
   onStartNewReview,
   customStages,
   customCurrentStageIndex,
+  isCase2DataExtracting = false, // NEW: Case2 data extraction loading
 }: Flow2MonitorPanelProps) {
   const [status, setStatus] = useState<FlowStatus>(initialStatus);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
@@ -358,38 +361,68 @@ export default function Flow2MonitorPanel({
 
       {/* Status Badge */}
       <div className="mb-4">
-        {status === 'idle' && (
+        {/* CASE2: Data Extraction Loading (HIGHEST PRIORITY) */}
+        {isCase2DataExtracting && (
+          <div className="px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg text-sm font-semibold shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                {/* Animated spinner */}
+                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🔄 Data Extraction In Progress</span>
+                </div>
+                <p className="text-xs text-blue-100 mt-1">
+                  Analyzing documents with LLM • This may take 30-60 seconds
+                </p>
+              </div>
+              {/* Pulsing indicator */}
+              <div className="flex gap-1">
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse" style={{animationDelay: '0ms'}}></div>
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse" style={{animationDelay: '200ms'}}></div>
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse" style={{animationDelay: '400ms'}}></div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Existing status badges (only show when NOT extracting data) */}
+        {!isCase2DataExtracting && status === 'idle' && (
           <div className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm">
             No active workflow
           </div>
         )}
-        {status === 'running' && (
+        {!isCase2DataExtracting && status === 'running' && (
           <div className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             <span className="animate-pulse">🔄</span> IN PROGRESS
           </div>
         )}
-        {status === 'waiting_human' && (
+        {!isCase2DataExtracting && status === 'waiting_human' && (
           <div className="px-3 py-2 bg-orange-100 text-orange-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             <span className="animate-pulse">⏳</span> AWAITING APPROVAL
           </div>
         )}
-        {status === 'resuming' && (
+        {!isCase2DataExtracting && status === 'resuming' && (
           <div className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             <span className="animate-pulse">🔄</span> IN PROGRESS
           </div>
         )}
-        {/* PHASE 3: FAILED status badge (highest priority) */}
-        {checkpointMetadata?.reviewProcessStatus === 'FAILED' && (
+        {/* PHASE 3: FAILED status badge (highest priority after data extraction) */}
+        {!isCase2DataExtracting && checkpointMetadata?.reviewProcessStatus === 'FAILED' && (
           <div className="px-3 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             ❌ REVIEW PROCESS FAILED
           </div>
         )}
-        {isFullyCompleted && checkpointMetadata?.reviewProcessStatus !== 'FAILED' && (
+        {!isCase2DataExtracting && isFullyCompleted && checkpointMetadata?.reviewProcessStatus !== 'FAILED' && (
           <div className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             ✅ APPROVED & COMPLETED
           </div>
         )}
-        {!isFullyCompleted && (status === 'completed' || status === 'rejected' || status === 'error') && checkpointMetadata?.reviewProcessStatus !== 'FAILED' && (
+        {!isCase2DataExtracting && !isFullyCompleted && (status === 'completed' || status === 'rejected' || status === 'error') && checkpointMetadata?.reviewProcessStatus !== 'FAILED' && (
           <div className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             <span className="animate-pulse">🔄</span> IN PROGRESS
           </div>

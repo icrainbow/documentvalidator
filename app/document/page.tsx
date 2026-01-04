@@ -4068,8 +4068,9 @@ function DocumentPageContent() {
     
     console.log('[Case2] ✓ Document validation passed, proceeding with review');
     
-    // 2. Set orchestrating state
+    // 2. Set orchestrating state + loading flag for UI
     setIsOrchestrating(true);
+    setIsLoadingCase2TopicSummaries(true); // NEW: Trigger "Data Extraction In Progress" banner
     setFlowMonitorStatus('running');
     
     try {
@@ -4102,6 +4103,7 @@ function DocumentPageContent() {
 
       // 4. 存储 topic summaries（会显示在左侧面板）
       setCase2TopicSummaries(data.topic_summaries);
+      setIsLoadingCase2TopicSummaries(false); // NEW: Stop loading banner
       
       // 5. 动画：逐个标记 stages 为 completed (每个延迟 1 秒)
       const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -4133,6 +4135,9 @@ function DocumentPageContent() {
       
     } catch (error: any) {
       console.error('[Case2] Process review failed:', error);
+      
+      // Stop loading banner
+      setIsLoadingCase2TopicSummaries(false);
       
       // Keep stages grey on error
       setFlowMonitorStatus('error');
@@ -4930,6 +4935,7 @@ function DocumentPageContent() {
                     onStartNewReview={handleStartNewReview}
                     case2CustomStages={getCase2FlowMonitorStages()}
                     case2CurrentStageIndex={getCase2CurrentStageIndex()}
+                    isCase2DataExtracting={isLoadingCase2TopicSummaries}
                     onEnterImpactSimulator={handleEnterImpactSimulator}
                     impactSimulatorActive={impactSimulatorActive}
                   />
