@@ -248,7 +248,12 @@ export default function Flow2MonitorPanel({
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [runId, status, checkpointMetadata?.edd_stage?.status, onStatusChange]);
+    
+    // NOTE: onStatusChange is intentionally excluded from deps
+    // - It's called inside the polling function (closure)
+    // - Including it would restart polling on every parent render
+    // - Only restart when runId, status, or edd_stage changes
+  }, [runId, status, checkpointMetadata?.edd_stage?.status]);
 
   const handleSendReminder = useCallback(async () => {
     if (!runId) return;

@@ -202,7 +202,11 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete, onA
       }
     }, 3601);
     timersRef.current.push(doneTimer);
-  }, [data.skills, cleanup, onAnimationComplete]);
+    
+    // NOTE: onAnimationComplete is intentionally excluded from deps
+    // - It's a callback from parent that shouldn't trigger animation restart
+    // - Only re-run when data.skills or cleanup changes
+  }, [data.skills, cleanup]);
   
   // Skip to final state
   const handleSkip = useCallback(() => {
@@ -223,7 +227,10 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete, onA
       onAnimationComplete(true);
       console.log('[PostRejectAnalysis] Animation skipped, notifying parent');
     }
-  }, [data.skills, cleanup, onAnimationComplete]);
+    
+    // NOTE: onAnimationComplete is intentionally excluded from deps
+    // - It's a callback that shouldn't trigger this callback to recreate
+  }, [data.skills, cleanup]);
   
   // Replay animation
   const handleReplay = useCallback(() => {
@@ -235,7 +242,11 @@ export default function PostRejectAnalysisPanel({ data, onAnimationComplete, onA
       console.log('[PostRejectAnalysis] Animation replaying, notifying parent (not complete)');
     }
     scheduleAnimation();
-  }, [scheduleAnimation, onAnimationComplete]);
+    
+    // NOTE: onAnimationComplete is intentionally excluded from deps
+    // - scheduleAnimation is stable (defined with useCallback)
+    // - onAnimationComplete is a callback that shouldn't trigger this callback to recreate
+  }, [scheduleAnimation]);
   
   // Auto-start on mount or when data changes
   useEffect(() => {
