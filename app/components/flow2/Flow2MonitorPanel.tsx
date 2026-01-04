@@ -165,9 +165,14 @@ export default function Flow2MonitorPanel({
     
     const { riskLevel, hasHighRisk, warningsCount = 0, riskSignals = [] } = riskData;
     
-    // Critical or high risk = RED
-    if (riskLevel === 'critical' || riskLevel === 'high' || hasHighRisk || riskSignals.some((s: any) => s.severity === 'high' || s.severity === 'critical')) {
+    // Critical risk = RED
+    if (riskLevel === 'critical' || riskSignals.some((s: any) => s.severity === 'critical')) {
       return 'bg-red-500 text-white';
+    }
+    
+    // High risk = ORANGE (consistent with Risk Details Panel)
+    if (riskLevel === 'high' || hasHighRisk || riskSignals.some((s: any) => s.severity === 'high')) {
+      return 'bg-orange-500 text-white';
     }
     
     // Medium risk or warnings = YELLOW
@@ -175,7 +180,7 @@ export default function Flow2MonitorPanel({
       return 'bg-yellow-500 text-white';
     }
     
-    // Otherwise GREEN (completed stage)
+    // Otherwise GREEN (low risk / completed stage)
     return 'bg-green-500 text-white';
   };
   
@@ -475,7 +480,7 @@ export default function Flow2MonitorPanel({
                 // EDD stage exists and is being displayed
                 const eddStatus = checkpointMetadata.edd_stage.status;
                 if (eddStatus === 'waiting_edd_approval') {
-                  eddStepColor = 'bg-orange-500 text-white ring-4 ring-orange-200'; // Waiting (current)
+                  eddStepColor = 'bg-blue-500 text-white ring-4 ring-blue-200'; // Waiting for approval (consistent with Human Review)
                   eddStepIcon = '⏳';
                 } else if (eddStatus === 'approved') {
                   eddStepColor = 'bg-green-500 text-white'; // Approved (completed)
@@ -484,7 +489,7 @@ export default function Flow2MonitorPanel({
                   eddStepColor = 'bg-red-500 text-white'; // Rejected
                   eddStepIcon = '✗';
                 } else if (eddStatus === 'running') {
-                  eddStepColor = 'bg-blue-500 text-white ring-4 ring-blue-200'; // Running
+                  eddStepColor = 'bg-blue-500 text-white ring-4 ring-blue-200'; // Running (analyzing)
                   eddStepIcon = '⚙️';
                 }
               }
