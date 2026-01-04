@@ -1956,16 +1956,19 @@ function DocumentPageContent() {
       }
       
       // Normal completion path
-      // Flow Monitor: Set to completed
-      setFlowMonitorStatus('completed');
-      setFlowMonitorRunId(data.run_id || data.graphReviewTrace?.summary?.runId || null);
+      // CRITICAL: Do NOT set flowMonitorStatus to 'completed' yet!
+      // Wait for topic summaries to complete first (Document Analysis includes topic extraction)
       
       // Update issues
       setCurrentIssues(data.issues || []);
       
-      // ✅ STEP 4: Call topic summaries endpoint (Flow2 only, non-blocking)
+      // ✅ STEP 4: Call topic summaries endpoint (Flow2 only, MUST await for Document Analysis)
+      // Keep status='running' until topics are extracted
+      console.log('[Flow2] Orchestration complete, now extracting topics for Document Analysis...');
       const runIdForTopics = data.run_id || data.graphReviewTrace?.summary?.runId || `run-${Date.now()}`;
-      callGenericTopicSummariesEndpoint(
+      
+      // AWAIT topic summaries - Document Analysis is not complete without topics!
+      await callGenericTopicSummariesEndpoint(
         '/api/flow2/topic-summaries',
         runIdForTopics,
         flow2Documents,
@@ -1975,6 +1978,11 @@ function DocumentPageContent() {
         setIsLoadingTopicSummaries,
         setTopicSummariesRunId
       );
+      
+      // NOW set to completed (after topics are extracted)
+      console.log('[Flow2] Topics extracted, Document Analysis complete');
+      setFlowMonitorStatus('completed');
+      setFlowMonitorRunId(data.run_id || data.graphReviewTrace?.summary?.runId || null);
       
       // Update graph trace
       setGraphReviewTrace(data.graphReviewTrace || null);
