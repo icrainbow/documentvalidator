@@ -1840,8 +1840,10 @@ function DocumentPageContent() {
     setIsDegraded(false); // MILESTONE C: Clear degraded state
     setDegradedReason('');
     
-    // Flow Monitor: Set to running
-    setFlowMonitorStatus('running');
+    // CRITICAL: Do NOT set flowMonitorStatus to 'running' here!
+    // Flow Monitor should only show progress AFTER topic summaries are complete.
+    // Keep it 'idle' until then.
+    console.log('[Flow2] Flow Monitor kept idle until topic summaries complete');
     
     console.log('[Flow2] Starting Graph KYC review with', flow2Documents.length, 'documents');
     
@@ -1894,17 +1896,17 @@ function DocumentPageContent() {
       if (data.status === 'waiting_human') {
         console.log('[Flow2/HITL] Workflow paused - awaiting human approval');
         
-        // Flow Monitor: Set to waiting_human with metadata
-        setFlowMonitorStatus('waiting_human');
-        setFlowMonitorRunId(data.run_id || null);
-        setFlowMonitorMetadata(data.checkpoint_metadata || null);
+        // CRITICAL: Do NOT set flowMonitorStatus yet!
+        // Must wait for topic summaries to complete first.
+        
+        // Store run metadata (but don't activate Flow Monitor yet)
+        const runIdForTopics = data.run_id || `run-${Date.now()}`;
         
         // Update UI state to show issues/trace (but NOT approval controls)
         setCurrentIssues(data.issues || []);
         
         // ✅ STEP 4 + DEMO EVIDENCE INJECTION: Call topic summaries endpoint (waiting_human path)
         // DEMO-ONLY: Check if post-reject analysis data should be injected
-        const runIdForTopics = data.run_id || `run-${Date.now()}`;
         
         // Determine if this is Flow2 demo with evidence to inject
         const isFlow2Demo = !!(data.checkpoint_metadata?.demo_mode || data.checkpoint_metadata?.demo_evidence);
@@ -1934,7 +1936,8 @@ function DocumentPageContent() {
         }
         
         // Call topic summaries with (potentially augmented) document set
-        // CRITICAL: Await this call for demo gating
+        // CRITICAL: Await this call - Flow Monitor should not show until this completes
+        console.log('[Flow2/HITL] Extracting topics before showing Flow Monitor...');
         const topicSuccess = await callGenericTopicSummariesEndpoint(
           '/api/flow2/topic-summaries',
           runIdForTopics,
@@ -1945,6 +1948,12 @@ function DocumentPageContent() {
           setIsLoadingTopicSummaries,
           setTopicSummariesRunId
         );
+        
+        // NOW set Flow Monitor status (after topics are extracted)
+        console.log('[Flow2/HITL] Topics extracted, now showing Flow Monitor in waiting_human state');
+        setFlowMonitorStatus('waiting_human');
+        setFlowMonitorRunId(data.run_id || null);
+        setFlowMonitorMetadata(data.checkpoint_metadata || null);
         
         // DEMO GATING: Block downstream EDD email/continuation if topic summary failed
         if (isFlow2Demo && !topicSuccess) {
@@ -4152,7 +4161,9 @@ function DocumentPageContent() {
     // 2. Set orchestrating state + loading flag for UI
     setIsOrchestrating(true);
     setIsLoadingCase2TopicSummaries(true); // NEW: Trigger "Data Extraction In Progress" banner
-    setFlowMonitorStatus('running');
+    // CRITICAL: Do NOT set flowMonitorStatus to 'running' yet!
+    // Must wait for topic summaries to complete first.
+    console.log('[Case2] Flow Monitor kept idle until topic summaries complete');
     
     try {
       // 3. 真实调用 LLM - 生成 topic summaries
@@ -4185,6 +4196,10 @@ function DocumentPageContent() {
       // 4. 存储 topic summaries（会显示在左侧面板）
       setCase2TopicSummaries(data.topic_summaries);
       setIsLoadingCase2TopicSummaries(false); // NEW: Stop loading banner
+      
+      // NOW set flowMonitorStatus to 'running' (after topics are extracted)
+      console.log('[Case2] Topics extracted, now showing Flow Monitor stages');
+      setFlowMonitorStatus('running');
       
       // 5. 动画：逐个标记 stages 为 completed (每个延迟 1 秒)
       const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
