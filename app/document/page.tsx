@@ -4076,6 +4076,10 @@ function DocumentPageContent() {
       // 3. 真实调用 LLM - 生成 topic summaries
       console.log(`[Case2] Calling /api/case2/topic-summaries with ${flow2Documents.length} documents`);
       
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s frontend timeout
+      
       const response = await fetch('/api/case2/topic-summaries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4083,7 +4087,10 @@ function DocumentPageContent() {
           case2_id: case2Id,
           documents: flow2Documents,
         }),
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -4130,10 +4137,21 @@ function DocumentPageContent() {
       // Keep stages grey on error
       setFlowMonitorStatus('error');
       
+      // Determine error message based on error type
+      let errorMessage = '⚠️ Process review failed.';
+      
+      if (error.name === 'AbortError' || error.message.includes('aborted') || error.message.includes('timeout')) {
+        errorMessage = '⚠️ Request timeout. The LLM is taking longer than expected.\n\nThis can happen when processing multiple large documents. Please try:\n1. Reducing document size\n2. Using fewer documents\n3. Trying again (the service may be experiencing high load)';
+      } else if (error.message.includes('ANTHROPIC_API_KEY')) {
+        errorMessage = '⚠️ LLM provider not configured.\n\nPlease set ANTHROPIC_API_KEY in your environment variables.';
+      } else if (error.message) {
+        errorMessage = `❌ Process review failed: ${error.message}\n\nStages remain pending. Please try again.`;
+      }
+      
       const errorMsg: Message = {
         role: 'agent',
         agent: 'Case 2 Agent',
-        content: `❌ Process review failed: ${error.message}\n\nStages remain pending. Please try again.`,
+        content: errorMessage,
       };
       setMessages(prev => [...prev, errorMsg]);
       setHasNewChatMessage(true);

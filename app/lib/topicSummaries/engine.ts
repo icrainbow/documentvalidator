@@ -118,7 +118,7 @@ export async function callTopicSummariesEngine(
       temperature: 0.3,
       messages: [{ role: 'user', content: prompt }],
     }),
-    signal: AbortSignal.timeout(30000), // 30s timeout
+    signal: AbortSignal.timeout(60000), // 60s timeout (increased from 30s for multi-document processing)
   });
 
   if (!llmResponse.ok) {
